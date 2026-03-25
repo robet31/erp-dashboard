@@ -216,11 +216,11 @@ export function useSellingData(): SellingData {
       setCustomers(mockCustomers);
     }
 
-    // Try to fetch Delivery Notes separately - don't block if it fails
+// Try to fetch Delivery Notes separately - don't block if it fails
     try {
       const dn = await apiGetList<DeliveryNote>('Delivery Note', {
         limit: 50,
-        fields: ['name','customer','customer_name','posting_date','status','total_qty','grand_total','against_sales_order'],
+        fields: ['name','customer','customer_name','posting_date','status','total_qty','grand_total'],
       });
       setDeliveryNotes(dn.map(d => ({ ...d, items: d.items || [] })));
     } catch (err) {

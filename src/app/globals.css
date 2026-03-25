@@ -30,6 +30,14 @@ html, body {
   to { transform: rotate(360deg); }
 }
 
+@keyframes slideInLeft {
+  from { transform: translateX(-100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+/* ========================
+   TABLE STYLES
+======================== */
 .erp-table { width: 100%; border-collapse: collapse; }
 .erp-table th { 
   padding: 10px 14px; 
@@ -41,6 +49,7 @@ html, body {
   color: #6a7282;
   background: #f8fafc;
   border-bottom: 1px solid #e5e7eb;
+  white-space: nowrap;
 }
 .erp-table td { 
   padding: 12px 14px; 
@@ -54,6 +63,9 @@ html, body {
 }
 .erp-table tbody tr:hover { background: #f8fafc; }
 
+/* ========================
+   FORM INPUT STYLES
+======================== */
 .erp-input {
   width: 100%;
   padding: 9px 12px;
@@ -71,7 +83,49 @@ html, body {
   box-shadow: 0 0 0 3px rgba(0, 102, 179, 0.1);
 }
 .erp-input::placeholder { color: #9ca3af; }
+.erp-input:disabled, .disabled-input { background: #f8f9fb; color: #6B7280; cursor: not-allowed; }
 
+.erp-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 6px;
+}
+
+.error-box {
+  background: #fee2e2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  padding: 10px 14px;
+  color: #991b1b;
+  font-size: 13px;
+}
+
+/* ========================
+   RESPONSIVE GRID
+======================== */
+.responsive-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.responsive-grid-3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 640px) {
+  .responsive-grid,
+  .responsive-grid-3 {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ========================
+   BUTTON STYLES
+======================== */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -92,7 +146,20 @@ html, body {
 .btn-primary:hover { background: #0080dc; }
 .btn-secondary { background: white; color: #364153; border: 1px solid #e5e7eb; }
 .btn-secondary:hover { background: #f8fafc; }
+.btn-sm { padding: 6px 12px; font-size: 12px; }
+.btn-lg { padding: 12px 24px; font-size: 15px; }
+.btn-danger { background: #ef4444; color: white; }
+.btn-danger:hover { background: #dc2626; }
 
+/* Mobile: buttons stack full-width */
+.mobile-btn { flex: 1; }
+@media (max-width: 480px) {
+  .mobile-btn { width: 100%; }
+}
+
+/* ========================
+   CARD STYLES
+======================== */
 .stat-card {
   background: white;
   border-radius: 12px;
@@ -112,6 +179,17 @@ html, body {
   padding: 20px;
 }
 
+.card-hover {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 102, 179, 0.12);
+}
+
+/* ========================
+   NAVIGATION
+======================== */
 .nav-item {
   display: flex;
   align-items: center;
@@ -128,14 +206,9 @@ html, body {
 .nav-item:hover { background: #f0f7ff; color: #0066B3; }
 .nav-item.active { background: #eff6ff; color: #0066B3; font-weight: 600; }
 
-.card-hover {
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-.card-hover:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0, 102, 179, 0.12);
-}
-
+/* ========================
+   PROGRESS BAR
+======================== */
 .progress-bar {
   height: 6px;
   background: #e5e7eb;
@@ -148,6 +221,9 @@ html, body {
   transition: width 0.5s ease;
 }
 
+/* ========================
+   BADGES
+======================== */
 .badge {
   display: inline-flex;
   align-items: center;
@@ -166,32 +242,9 @@ html, body {
 .badge-blue { background: #dbeafe; color: #1d4ed8; }
 .badge-orange { background: #fff7ed; color: #9a3412; }
 
-.btn-sm { padding: 6px 12px; font-size: 12px; }
-.btn-lg { padding: 12px 24px; font-size: 15px; }
-.btn-danger { background: #ef4444; color: white; }
-.btn-danger:hover { background: #dc2626; }
-
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(4px);
-  z-index: 100;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  animation: fadeIn 0.15s ease-out;
-}
-.modal-content {
-  background: white;
-  border-radius: 16px;
-  padding: 28px;
-  max-height: 90vh;
-  overflow-y: auto;
-  animation: fadeIn 0.2s ease-out;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
-}
-
+/* ========================
+   TAB & FILTER PILLS
+======================== */
 .tab-btn {
   padding: 8px 16px;
   border-radius: 8px;
@@ -222,6 +275,43 @@ html, body {
 .filter-pill.active { background: #0066B3; color: white; border-color: #0066B3; }
 .filter-pill:hover:not(.active) { border-color: #0066B3; color: #0066B3; }
 
+/* ========================
+   MODAL
+======================== */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(4px);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.15s ease-out;
+  padding: 16px;
+}
+.modal-content {
+  background: white;
+  border-radius: 16px;
+  padding: 28px;
+  max-height: 90vh;
+  overflow-y: auto;
+  animation: fadeIn 0.2s ease-out;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+  width: 100%;
+}
+
+@media (max-width: 640px) {
+  .modal-content {
+    padding: 20px 16px;
+    border-radius: 12px;
+    max-height: 95vh;
+  }
+}
+
+/* ========================
+   SKELETON LOADER
+======================== */
 .skeleton {
   background: linear-gradient(90deg, #f0f0f0 25%, #e8e8e8 50%, #f0f0f0 75%);
   background-size: 200% 100%;
@@ -231,4 +321,61 @@ html, body {
 @keyframes shimmer {
   0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }
+}
+
+/* ========================
+   SIDEBAR MOBILE
+======================== */
+.sidebar-mobile-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 89;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.hamburger-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: white;
+  border: 1px solid #e5e7eb;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+@media (max-width: 768px) {
+  .hamburger-btn {
+    display: flex;
+  }
+  
+  .sidebar-mobile-overlay.open {
+    display: block;
+  }
+  
+  .sidebar-desktop-hide {
+    display: none;
+  }
+  
+  /* Hide user name in topbar on mobile */
+  .topbar-username {
+    display: none;
+  }
+
+  /* Topbar search shrink */
+  .topbar-search-wrap {
+    max-width: 180px !important;
+  }
+}
+
+@media (min-width: 769px) {
+  .sidebar-mobile-slide {
+    transform: none !important;
+    position: sticky !important;
+    z-index: auto !important;
+  }
 }

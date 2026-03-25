@@ -14,8 +14,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="id">
-      <body style={{ fontFamily: "'Montserrat', sans-serif" }}>
+    /**
+     * suppressHydrationWarning ditambahkan pada html dan body 
+     * untuk mencegah error akibat ekstensi browser yang menyuntikkan 
+     * atribut tambahan (seperti cz-shortcut-listen).
+     */
+    <html lang="id" suppressHydrationWarning>
+      <body 
+        style={{ fontFamily: "'Montserrat', sans-serif" }} 
+        suppressHydrationWarning
+      >
         <Providers>
           {children}
         </Providers>

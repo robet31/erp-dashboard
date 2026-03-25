@@ -1,15 +1,17 @@
 'use client';
 
 import { useState } from 'react';
-import { Search, Bell, RefreshCw, ChevronDown } from 'lucide-react';
+import { Search, Bell, RefreshCw, ChevronDown, Menu } from 'lucide-react';
 import { useAuth } from '@/providers/auth-provider';
 import { ROLES, type UserRole } from '@/config/rbac';
 import { getInitials, getAvatarColor } from '@/lib/utils';
+import { useSidebar } from '@/app/dashboard/layout';
 
 export function Topbar() {
   const { user, switchRole } = useAuth();
   const [showRoleMenu, setShowRoleMenu] = useState(false);
   const [searchValue, setSearchValue] = useState('');
+  const { toggleSidebar } = useSidebar();
 
   if (!user) return null;
 
@@ -24,26 +26,36 @@ export function Topbar() {
       borderBottom: '1px solid #e5e7eb',
       display: 'flex',
       alignItems: 'center',
-      padding: '0 20px',
-      gap: '12px',
+      padding: '0 16px',
+      gap: '10px',
       position: 'sticky',
       top: 0,
       zIndex: 40,
       fontFamily: "'Montserrat', sans-serif",
+      flexShrink: 0,
     }}>
+      {/* Hamburger - Mobile Only */}
+      <button
+        className="hamburger-btn"
+        onClick={toggleSidebar}
+        aria-label="Buka menu"
+      >
+        <Menu size={18} color="#374151" />
+      </button>
+
       {/* Search */}
-      <div style={{ flex: 1, position: 'relative', maxWidth: '400px' }}>
-        <Search size={15} color="#9CA3AF" style={{
-          position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)'
+      <div className="topbar-search-wrap" style={{ flex: 1, position: 'relative', maxWidth: '360px' }}>
+        <Search size={14} color="#9CA3AF" style={{
+          position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)'
         }} />
         <input
           type="text"
-          placeholder="Cari doctype, item, customer..."
+          placeholder="Cari data..."
           value={searchValue}
           onChange={e => setSearchValue(e.target.value)}
           style={{
             width: '100%',
-            padding: '7px 12px 7px 34px',
+            padding: '7px 10px 7px 30px',
             border: '1px solid #e5e7eb',
             borderRadius: '8px',
             fontSize: '13px',
@@ -65,17 +77,15 @@ export function Topbar() {
           onClick={() => setShowRoleMenu(!showRoleMenu)}
           style={{
             display: 'flex', alignItems: 'center', gap: '6px',
-            padding: '5px 12px', borderRadius: '6px',
+            padding: '5px 10px', borderRadius: '6px',
             border: '1px solid #e5e7eb', background: 'white',
             color: '#374151', fontSize: '12px', fontWeight: 700,
             cursor: 'pointer', fontFamily: "'Montserrat', sans-serif",
+            whiteSpace: 'nowrap',
           }}
         >
-          <div style={{
-            width: '8px', height: '8px', borderRadius: '50%',
-            background: currentRole.color,
-          }} />
-          {currentRole.label}
+          <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: currentRole.color, flexShrink: 0 }} />
+          <span className="topbar-username">{currentRole.label}</span>
           <ChevronDown size={12} color="#6B7280" />
         </button>
 
@@ -107,11 +117,8 @@ export function Topbar() {
                 onMouseLeave={e => { if (user.role !== role.id) e.currentTarget.style.background = 'white'; }}
               >
                 <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: role.color, flexShrink: 0 }} />
-                <span>{role.label}</span>
-                <span style={{
-                  marginLeft: 'auto', background: `${role.color}15`, color: role.color,
-                  padding: '1px 6px', borderRadius: '3px', fontSize: '9px', fontWeight: 700,
-                }}>{role.badge}</span>
+                <span style={{ flex: 1, textAlign: 'left' }}>{role.label}</span>
+                <span style={{ background: `${role.color}15`, color: role.color, padding: '1px 6px', borderRadius: '3px', fontSize: '9px', fontWeight: 700 }}>{role.badge}</span>
               </button>
             ))}
           </div>
@@ -123,7 +130,7 @@ export function Topbar() {
         width: '36px', height: '36px', borderRadius: '8px',
         background: 'white', border: '1px solid #e5e7eb',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        cursor: 'pointer', position: 'relative',
+        cursor: 'pointer', position: 'relative', flexShrink: 0,
       }}>
         <Bell size={16} color="#374151" />
         <div style={{
@@ -140,24 +147,24 @@ export function Topbar() {
           width: '36px', height: '36px', borderRadius: '8px',
           background: 'white', border: '1px solid #e5e7eb',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          cursor: 'pointer',
+          cursor: 'pointer', flexShrink: 0,
         }}
       >
         <RefreshCw size={15} color="#374151" />
       </button>
 
       {/* User Avatar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
         <div style={{
-          width: '36px', height: '36px', borderRadius: '50%',
+          width: '34px', height: '34px', borderRadius: '50%',
           background: avatarColor, display: 'flex', alignItems: 'center',
-          justifyContent: 'center', color: 'white', fontSize: '13px', fontWeight: 700,
+          justifyContent: 'center', color: 'white', fontSize: '12px', fontWeight: 700,
           flexShrink: 0,
         }}>
           {initials}
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
-          <span style={{ fontSize: '13px', fontWeight: 700, color: '#111827' }}>{user.full_name}</span>
+        <div className="topbar-username" style={{ display: 'flex', flexDirection: 'column' }}>
+          <span style={{ fontSize: '12px', fontWeight: 700, color: '#111827' }}>{user.full_name}</span>
           <span style={{ fontSize: '10px', color: '#6B7280' }}>{currentRole.description}</span>
         </div>
       </div>
