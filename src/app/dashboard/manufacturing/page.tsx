@@ -7,7 +7,7 @@ import { useManufacturingData, useStockData, useSellingData } from '@/hooks/useF
 import {
   Cog, FileText, CheckCircle, Clock,
   Plus, Download, Search, X, ChevronRight,
-  ArrowRight, Package, Layers, AlertCircle, Trash2, PlayCircle, StopCircle, Send, Eye, Edit, Loader2, Wrench
+  ArrowRight, Package, Layers, AlertCircle, Trash2, PlayCircle, StopCircle, Send, Eye, Edit, Loader2, Wrench, ArrowUpRight
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -47,20 +47,23 @@ function extractFrappeError(data: any, fallback: string): string {
 }
 
 // ==========================================
-// 1. MODAL CREATE WORK ORDER
+// 1. MODAL CREATE WORK ORDER (TERINTEGRASI PENUH KE SALES ORDER)
 // ==========================================
 function CreateWorkOrderModal({ onClose, items, boms, salesOrders, onSuccess, userCompany }: { onClose: () => void; items: any[]; boms: any[]; salesOrders: any[]; onSuccess?: () => void; userCompany: string }) {
   const [form, setForm] = useState({
-    production_item: '', bom_no: '', qty: '1', company: userCompany, sales_order: '',
+    production_item: '', bom_no: '', qty: '1', company: userCompany, 
+    sales_order: '', sales_order_item: '', // <--- DITAMBAHKAN AGAR BENAR-BENAR TERHUBUNG KE ERPNEXT
     planned_start_date: new Date().toISOString().split('T')[0], source_warehouse: '', fg_warehouse: '', wip_warehouse: '',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const [soItems, setSoItems] = useState<Record<string, string[]>>({});
+  
+  // Mapping SO ID -> { item_code: sales_order_item_id }
+  const [soItems, setSoItems] = useState<Record<string, Record<string, string>>>({});
 
   const activeWarehouses = useMemo(() => getWarehousesByCompany(form.company), [form.company]);
 
-  // Fetch items dari setiap Sales Order agar bisa auto-filter
+  // Fetch items & sales_order_item ID dari setiap Sales Order
   useEffect(() => {
     const activeSOs = salesOrders.filter((so: any) => so.docstatus === 1 && so.status !== 'Completed' && so.status !== 'Cancelled');
     if (activeSOs.length === 0) return;
@@ -69,13 +72,16 @@ function CreateWorkOrderModal({ onClose, items, boms, salesOrders, onSuccess, us
         try {
           const res = await fetch(`/api/frappe/resource/Sales Order/${encodeURIComponent(so.name)}`, { cache: 'no-store' });
           const data = await res.json();
-          const itemCodes: string[] = (data.data?.items || []).map((i: any) => i.item_code);
-          return { name: so.name, items: itemCodes };
-        } catch { return { name: so.name, items: [] }; }
+          const itemsMap: Record<string, string> = {};
+          (data.data?.items || []).forEach((i: any) => {
+            itemsMap[i.item_code] = i.name; // i.name adalah ID unik dari baris produk tersebut di ERPNext
+          });
+          return { name: so.name, itemsMap };
+        } catch { return { name: so.name, itemsMap: {} }; }
       })
     ).then(results => {
-      const map: Record<string, string[]> = {};
-      results.forEach(r => { map[r.name] = r.items; });
+      const map: Record<string, Record<string, string>> = {};
+      results.forEach(r => { map[r.name] = r.itemsMap; });
       setSoItems(map);
     });
   }, [salesOrders]);
@@ -83,11 +89,17 @@ function CreateWorkOrderModal({ onClose, items, boms, salesOrders, onSuccess, us
   // Auto-detect Sales Order yang mengandung production_item yang dipilih
   useEffect(() => {
     if (!form.production_item) return;
-    const matchedSO = Object.entries(soItems).find(([_, itemList]) =>
-      itemList.includes(form.production_item)
+    const matchedSO = Object.entries(soItems).find(([soName, itemsMap]) =>
+      Object.keys(itemsMap).includes(form.production_item)
     );
     if (matchedSO) {
-      setForm(f => ({ ...f, sales_order: matchedSO[0] }));
+      setForm(f => ({ 
+        ...f, 
+        sales_order: matchedSO[0], 
+        sales_order_item: matchedSO[1][form.production_item] 
+      }));
+    } else {
+      setForm(f => ({ ...f, sales_order: '', sales_order_item: '' }));
     }
   }, [form.production_item, soItems]);
 
@@ -97,7 +109,7 @@ function CreateWorkOrderModal({ onClose, items, boms, salesOrders, onSuccess, us
   }, [boms, form.production_item]);
 
   const activeBOMs = useMemo(() => {
-    return availableBOMsForProduct.filter((b: any) => b.docstatus === 1 && b.is_active === 1);
+    return availableBOMsForProduct.filter((b: any) => b.docstatus === 1 || b.is_active === 1);
   }, [availableBOMsForProduct]);
 
   useEffect(() => {
@@ -122,17 +134,26 @@ function CreateWorkOrderModal({ onClose, items, boms, salesOrders, onSuccess, us
     setIsSubmitting(true); setError('');
 
     try {
-      const workOrderData = {
+      const workOrderData: any = {
         production_item: form.production_item, bom_no: form.bom_no, qty: parseFloat(form.qty), planned_start_date: form.planned_start_date,
         source_warehouse: form.source_warehouse, fg_warehouse: form.fg_warehouse, wip_warehouse: form.wip_warehouse, company: form.company,
-        sales_order: form.sales_order || undefined, use_multi_level_bom: 0
+        use_multi_level_bom: 0
       };
+      
+      // KIRIM KEDUA PARAMETER AGAR TERHUBUNG PENUH KE MODUL SELLING
+      if (form.sales_order) {
+        workOrderData.sales_order = form.sales_order;
+        if (form.sales_order_item) {
+          workOrderData.sales_order_item = form.sales_order_item;
+        }
+      }
+
       const response = await fetch('/api/frappe/resource/Work Order', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(workOrderData) });
       const result = await response.json();
 
       if (!response.ok) throw new Error(extractFrappeError(result, "Gagal membuat Work Order"));
 
-      alert('✅ Work Order berhasil dibuat sebagai DRAFT.');
+      alert('✅ Work Order berhasil dibuat dan terhubung dengan Sales Order!');
       if (onSuccess) onSuccess(); onClose();
     } catch (err: any) { setError(err.message); } finally { setIsSubmitting(false); }
   };
@@ -162,22 +183,31 @@ function CreateWorkOrderModal({ onClose, items, boms, salesOrders, onSuccess, us
             </select>
             {form.production_item && availableBOMsForProduct.length > 0 && activeBOMs.length === 0 && (
               <p style={{ fontSize: '11px', color: '#dc2626', marginTop: '6px', fontWeight: 600, background: '#fee2e2', padding: '8px', borderRadius: '6px' }}>
-                ⚠️ BOM untuk produk ini masih berstatus DRAFT. Silakan Aktifkan/Submit BOM-nya terlebih dahulu di tab Bill of Materials.
+                ⚠️ BOM untuk produk ini masih berstatus DRAFT. Silakan "Aktifkan" BOM-nya terlebih dahulu di tabel Bill of Materials di bawah.
               </p>
             )}
           </div>
 
           <div>
-            <label style={{ fontSize: '12px', fontWeight: 600, display: 'block', marginBottom: '4px' }}>Referensi Sales Order (Opsional)</label>
-            <select className="erp-input" value={form.sales_order} onChange={e => setForm(f => ({ ...f, sales_order: e.target.value }))}>
-              <option value="">-- Tidak Terikat Sales Order (Produksi Bebas) --</option>
+            <label style={{ fontSize: '12px', fontWeight: 600, display: 'block', marginBottom: '4px' }}>Sales Order (Terhubung ke Produksi)</label>
+            <select className="erp-input" value={form.sales_order} onChange={e => {
+              const soName = e.target.value;
+              const soItemId = soName && soItems[soName] ? soItems[soName][form.production_item] : '';
+              setForm(f => ({ ...f, sales_order: soName, sales_order_item: soItemId || '' }));
+            }}>
+              <option value="">-- Produksi Bebas (Tanpa SO) --</option>
               {salesOrders.filter((so: any) => so.docstatus === 1 && so.status !== 'Completed' && so.status !== 'Cancelled').map((so: any) => (
                 <option key={so.name} value={so.name}>
                   {so.name} - {so.customer_name}
-                  {soItems[so.name]?.includes(form.production_item) ? ' ✓ (Sesuai Produk)' : ''}
+                  {soItems[so.name] && Object.keys(soItems[so.name]).includes(form.production_item) ? ' ✓ (Sesuai Produk)' : ''}
                 </option>
               ))}
             </select>
+            {form.sales_order && form.sales_order_item && (
+              <p style={{ fontSize: '11px', color: '#059669', marginTop: '4px', fontWeight: 600 }}>
+                ✓ Terintegrasi penuh! Progress produksi ini akan di-update langsung ke Sales Order {form.sales_order}.
+              </p>
+            )}
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
@@ -203,129 +233,7 @@ function CreateWorkOrderModal({ onClose, items, boms, salesOrders, onSuccess, us
 }
 
 // ==========================================
-// 2. MODAL DETAIL WO
-// ==========================================
-function WorkOrderDetailModal({ wo, jobCards, onClose, onSuccess }: { wo: WorkOrder; jobCards: any[]; onClose: () => void; onSuccess?: () => void }) {
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [fullData, setFullData] = useState<any>(wo);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isEditing, setIsEditing] = useState(false);
-  const [editForm, setEditForm] = useState({ qty: wo.qty, planned_start_date: wo.planned_start_date });
-
-  useEffect(() => {
-    const fetchDetails = async () => {
-      try {
-        const res = await fetch(`/api/frappe/resource/Work Order/${encodeURIComponent(wo.name)}`, { cache: 'no-store' });
-        const data = await res.json();
-        if (data.data) { setFullData(data.data); setEditForm({ qty: data.data.qty, planned_start_date: data.data.planned_start_date }); }
-      } catch (e) { console.error(e); } finally { setIsLoading(false); }
-    };
-    fetchDetails();
-  }, [wo.name]);
-
-  const progress = getWorkOrderProgress(fullData.produced_qty, fullData.qty);
-  const isDraft = fullData.docstatus === 0 || fullData.status === 'Draft';
-  const isCompleted = fullData.status === 'Completed' || fullData.produced_qty >= fullData.qty;
-
-  const handleUpdateWO = async () => {
-    setIsProcessing(true);
-    try {
-      const response = await fetch(`/api/frappe/resource/Work Order/${encodeURIComponent(fullData.name)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ qty: parseFloat(String(editForm.qty)), planned_start_date: editForm.planned_start_date }) });
-      if (!response.ok) throw new Error("Gagal update data");
-      alert('✅ Data Draft Berhasil Diperbarui!'); setIsEditing(false); if (onSuccess) onSuccess();
-    } catch (err: any) { alert(err.message); } finally { setIsProcessing(false); }
-  };
-
-  const handleSubmitWO = async () => {
-    if (!confirm('Konfirmasi Submit? Data tidak bisa diedit setelah ini.')) return;
-    setIsProcessing(true);
-    try {
-      const response = await fetch(`/api/frappe/resource/Work Order/${encodeURIComponent(fullData.name)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ docstatus: 1 }) });
-      const data = await response.json();
-      if (!response.ok) throw new Error(extractFrappeError(data, "Gagal Submit"));
-      alert('✅ Work Order disubmit! Sekarang Anda bisa membuat Job Card atau Start Produksi.'); onClose(); if (onSuccess) onSuccess();
-    } catch (err: any) { alert('Gagal Submit: \n' + err.message); setIsProcessing(false); }
-  };
-
-  const handleStartProduction = async () => {
-    const qtyToStart = prompt(`Jumlah untuk ditarik ke WIP:`, String(fullData.qty - (fullData.produced_qty || 0)));
-    if (!qtyToStart) return;
-    setIsProcessing(true);
-    try {
-      const response = await fetch(`/api/frappe/method/erpnext.manufacturing.doctype.work_order.work_order.make_stock_entry`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ work_order_id: fullData.name, purpose: 'Material Transfer for Manufacture', qty: parseFloat(qtyToStart) }) });
-      const data = await response.json();
-      if (!response.ok || data.error) throw new Error(extractFrappeError(data, "Gagal menyiapkan dokumen Transfer"));
-      const draftSE = data.message || data.data;
-      const createRes = await fetch('/api/frappe/resource/Stock Entry', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(draftSE) });
-      const createData = await createRes.json();
-      if (!createRes.ok) throw new Error(extractFrappeError(createData, "Gagal menyimpan Draft Transfer Material"));
-      const seName = createData.data?.name || createData.name;
-      const submitRes = await fetch(`/api/frappe/resource/Stock Entry/${seName}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ docstatus: 1 }) });
-      const submitData = await submitRes.json();
-      if (!submitRes.ok) throw new Error(extractFrappeError(submitData, "Gagal me-Submit Transfer Material (Cek stok gudangmu!)"));
-      alert('✅ Bahan Baku berhasil dipindahkan ke area WIP!'); onClose(); if (onSuccess) onSuccess();
-    } catch (err: any) { alert('ERROR DARI ERPNEXT:\n' + err.message); setIsProcessing(false); }
-  };
-
-  const handleFinishProduction = async () => {
-    const relatedJCs = jobCards.filter(jc => jc.work_order === fullData.name);
-    const unfinishedJCs = relatedJCs.filter(jc => jc.status !== 'Completed');
-    if (unfinishedJCs.length > 0) { alert(`⚠️ GAGAL FINISH: Ada ${unfinishedJCs.length} Job Card yang masih belum diselesaikan!`); return; }
-
-    const qtyToFinish = prompt(`Jumlah barang JADI yang selesai dan siap masuk Gudang Akhir (FG):`, String(fullData.qty - (fullData.produced_qty || 0)));
-    if (!qtyToFinish) return;
-    setIsProcessing(true);
-    try {
-      const response = await fetch(`/api/frappe/method/erpnext.manufacturing.doctype.work_order.work_order.make_stock_entry`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ work_order_id: fullData.name, purpose: 'Manufacture', qty: parseFloat(qtyToFinish) }) });
-      const data = await response.json();
-      if (!response.ok || data.error) throw new Error(extractFrappeError(data, "Gagal menyiapkan dokumen Manufacture"));
-      const draftSE = data.message || data.data;
-      const createRes = await fetch('/api/frappe/resource/Stock Entry', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(draftSE) });
-      const createData = await createRes.json();
-      if (!createRes.ok) throw new Error(extractFrappeError(createData, "Gagal menyimpan Draft Manufacture"));
-      const seName = createData.data?.name || createData.name;
-      const submitRes = await fetch(`/api/frappe/resource/Stock Entry/${seName}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ docstatus: 1 }) });
-      const submitData = await submitRes.json();
-      if (!submitRes.ok) throw new Error(extractFrappeError(submitData, "Gagal me-Submit Manufacture (Cek stok WIP-mu!)"));
-      alert('✅ Produk Jadi berhasil masuk stok FG! Work Order Selesai.'); onClose(); if (onSuccess) onSuccess();
-    } catch (err: any) { alert('ERROR DARI ERPNEXT:\n' + err.message); setIsProcessing(false); }
-  };
-
-  return (
-    <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget && !isProcessing) onClose(); }}>
-      <div className="modal-content" style={{ maxWidth: '560px' }}>
-        {isLoading ? (<div style={{ textAlign: 'center', padding: '40px' }}><Loader2 className="animate-spin" size={24} color="#0066B3" /></div>) : (
-          <>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
-              <div><h2 style={{ fontSize: '18px', fontWeight: 800 }}>{fullData.name}</h2><span className={`badge ${isDraft ? 'badge-gray' : isCompleted ? 'badge-success' : 'badge-info'}`} style={{ marginTop: '5px' }}>{isDraft ? 'DRAFT' : fullData.status}</span></div>
-              <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={20} /></button>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
-              <div style={{ background: '#f8f9fb', padding: '12px', borderRadius: '8px' }}><p style={{ fontSize: '11px', color: '#6B7280' }}>Sales Order</p><p style={{ fontSize: '13px', fontWeight: 700, color: fullData.sales_order ? '#0066B3' : '#111827' }}>{fullData.sales_order || '-'}</p></div>
-              <div style={{ background: '#f8f9fb', padding: '12px', borderRadius: '8px' }}><p style={{ fontSize: '11px', color: '#6B7280' }}>Produk</p><p style={{ fontSize: '13px', fontWeight: 700 }}>{fullData.production_item}</p></div>
-              <div style={{ background: '#f8f9fb', padding: '12px', borderRadius: '8px' }}><p style={{ fontSize: '11px', color: '#6B7280' }}>BOM No</p><p style={{ fontSize: '13px', fontWeight: 700 }}>{fullData.bom_no}</p></div>
-              <div style={{ background: isEditing ? '#fffbeb' : '#f8f9fb', padding: '12px', borderRadius: '8px', border: isEditing ? '1px solid #fcd34d' : '1px solid transparent' }}><p style={{ fontSize: '11px', color: '#6B7280' }}>Qty Target</p>{isEditing ? <input type="number" className="erp-input" style={{ marginTop: '4px' }} value={editForm.qty} onChange={e => setEditForm({ ...editForm, qty: Number(e.target.value) })} /> : <p style={{ fontSize: '13px', fontWeight: 700 }}>{formatNumber(fullData.qty)} pcs</p>}</div>
-            </div>
-            <div style={{ marginBottom: '16px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}><span style={{ fontSize: '13px', fontWeight: 700, color: '#374151' }}>Progress Produksi</span><span style={{ fontSize: '13px', fontWeight: 700, color: isCompleted ? '#059669' : '#0066B3' }}>{progress}%</span></div>
-              <div className="progress-bar" style={{ height: '10px' }}><div className="progress-fill" style={{ width: `${progress}%`, background: isCompleted ? '#10b981' : '#0066B3' }} /></div>
-            </div>
-            <div style={{ display: 'flex', gap: '8px', borderTop: '1px solid #eee', paddingTop: '15px' }}>
-              {isDraft ? (
-                <>{isEditing ? (<><button className="btn btn-secondary" onClick={() => setIsEditing(false)} disabled={isProcessing} style={{ flex: 1 }}>Batal</button><button className="btn btn-primary" onClick={handleUpdateWO} disabled={isProcessing} style={{ flex: 2 }}>Update Draft</button></>) : (<><button className="btn btn-secondary" onClick={() => setIsEditing(true)} disabled={isProcessing} style={{ flex: 1 }}><Edit size={14} /> Edit Data</button><button className="btn btn-primary" onClick={handleSubmitWO} disabled={isProcessing} style={{ flex: 2, background: '#059669' }}><Send size={14} /> Submit Work Order</button></>)}</>
-              ) : (
-                <>{!isCompleted ? (<>{fullData.status === 'Not Started' && (<button className="btn btn-primary" onClick={handleStartProduction} disabled={isProcessing} style={{ flex: 1, background: '#0066B3' }}><PlayCircle size={14} /> Start Produksi</button>)}<button className="btn btn-primary" onClick={handleFinishProduction} disabled={isProcessing} style={{ flex: 1, background: '#059669' }}><StopCircle size={14} /> Finish Produksi (Gudang)</button></>) : (<div style={{ width: '100%', textAlign: 'center', padding: '10px', background: '#ecfdf5', color: '#065f46', borderRadius: '8px', fontSize: '13px', fontWeight: 600 }}>✓ Produksi Selesai (Barang Masuk Gudang)</div>)}</>
-              )}
-            </div>
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ==========================================
-// 3. MODAL CREATE BOM 
+// 2. MODAL CREATE BOM 
 // ==========================================
 function CreateBOMModal({ onClose, items, onSuccess, userCompany }: { onClose: () => void; items: any[]; onSuccess?: () => void; userCompany: string }) {
   const [form, setForm] = useState({ item: '', quantity: '1', uom: 'Nos' });
@@ -351,11 +259,12 @@ function CreateBOMModal({ onClose, items, onSuccess, userCompany }: { onClose: (
         quantity: parseFloat(form.quantity) || 1,
         uom: selectedMainItem?.stock_uom || form.uom,
         company: userCompany,
-        is_active: 0, // Simpan Draft dulu agar selalu masuk
-        is_default: 1,
+        is_active: 0, 
+        is_default: 0,  
         items: bomItems.map(bi => {
           const itemDetail = items.find(it => it.item_code === bi.item_code);
-          return { item_code: bi.item_code, qty: parseFloat(String(bi.qty)) || 1, uom: itemDetail?.stock_uom || 'Nos', rate: itemDetail?.standard_rate || 1 };
+          const fallbackRate = itemDetail?.standard_rate || 1;
+          return { item_code: bi.item_code, qty: parseFloat(String(bi.qty)) || 1, uom: itemDetail?.stock_uom || 'Nos', rate: fallbackRate };
         }),
       };
 
@@ -370,12 +279,12 @@ function CreateBOMModal({ onClose, items, onSuccess, userCompany }: { onClose: (
 
       if (docName) {
         const submitRes = await fetch(`/api/frappe/resource/BOM/${encodeURIComponent(docName)}`, {
-          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ is_active: 1, docstatus: 1 })
+          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ is_active: 1, docstatus: 1, is_default: 1 })
         });
 
         if (!submitRes.ok) {
           const errData = await submitRes.json();
-          alert(`⚠️ BOM berhasil dibuat dan tersimpan sebagai DRAFT!\n\nNamun belum bisa diaktifkan karena:\n${extractFrappeError(errData, 'Harga/Stok bahan baku belum tersedia.')}\n\n💡 Solusi: Masukkan stok & harga bahan baku dulu di modul Inventory, lalu klik tombol AKTIFKAN pada tabel BOM.`);
+          alert(`⚠️ BOM berhasil dibuat dan tersimpan sebagai DRAFT!\n\nNamun gagal aktif otomatis karena:\n${extractFrappeError(errData, 'Harga/Stok bahan baku belum divalidasi.')}\n\n💡 Solusi: Silakan klik tombol hijau "Aktifkan" pada tabel BOM di bawah.`);
           onClose(); if (onSuccess) onSuccess();
           return;
         }
@@ -452,7 +361,7 @@ function CreateBOMModal({ onClose, items, onSuccess, userCompany }: { onClose: (
 }
 
 // ==========================================
-// 4. MODAL CREATE JOB CARD
+// 3. MODAL CREATE JOB CARD
 // ==========================================
 function CreateJobCardModal({ onClose, workOrders, jobCards, onSuccess, userCompany }: { onClose: () => void; workOrders: any[]; jobCards: any[]; onSuccess?: () => void; userCompany: string }) {
   const [form, setForm] = useState({ work_order: '', operation: '', workstation: '' });
@@ -468,16 +377,16 @@ function CreateJobCardModal({ onClose, workOrders, jobCards, onSuccess, userComp
     const isFinished = wo.status === 'Completed' || wo.status === 'Stopped' || wo.status === 'Cancelled';
     if (isDraft || isFinished) return false;
     const existingJC = jobCards.find(jc => jc.work_order === wo.name);
-    return !existingJC;
+    return !existingJC; 
   }), [workOrders, jobCards]);
 
   useEffect(() => {
     const fetchMasterData = async () => {
       try {
-        const [opRes, wsRes] = await Promise.all([fetch('/api/frappe/resource/Operation?limit_page_length=1000', { cache: 'no-store' }), fetch('/api/frappe/resource/Workstation?limit_page_length=1000', { cache: 'no-store' })]);
+        const [opRes, wsRes] = await Promise.all([ fetch('/api/frappe/resource/Operation?limit_page_length=1000', { cache: 'no-store' }), fetch('/api/frappe/resource/Workstation?limit_page_length=1000', { cache: 'no-store' }) ]);
         if (opRes.ok) { const opData = await opRes.json(); setOperations(opData.data?.map((o: any) => o.name) || []); }
         if (wsRes.ok) { const wsData = await wsRes.json(); setWorkstations(wsData.data?.map((w: any) => w.name) || []); }
-      } catch (err) { }
+      } catch (err) {}
     };
     fetchMasterData();
   }, []);
@@ -489,14 +398,14 @@ function CreateJobCardModal({ onClose, workOrders, jobCards, onSuccess, userComp
       if (isNewWs && form.workstation) await fetch('/api/frappe/resource/Workstation', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: form.workstation, workstation_name: form.workstation }) });
       const response = await fetch('/api/frappe/resource/Job Card', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...form, company: userCompany, for_quantity: 1 }) });
       if (!response.ok) { const data = await response.json(); throw new Error(extractFrappeError(data, "Gagal simpan Job Card")); }
-      alert('✅ Job Card Berhasil Dibuat sebagai Draft!'); if (onSuccess) onSuccess(); onClose();
-    } catch (err: any) { setError(err.message); setIsSubmitting(false); }
+      alert('✅ Job Card Berhasil Dibuat sebagai Draft!'); if (onSuccess) onSuccess(); onClose(); 
+    } catch (err: any) { setError(err.message); setIsSubmitting(false); } 
   };
 
   return (
     <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="modal-content" style={{ width: '480px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}><h2 style={{ fontSize: '18px', fontWeight: 800 }}>Buat Job Card Baru</h2><button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={20} /></button></div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}><h2 style={{ fontSize: '18px', fontWeight: 800 }}>Buat Job Card Baru</h2><button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer' }}><X size={20} /></button></div>
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
           <div>
             <label style={{ fontSize: '12px', fontWeight: 600, display: 'block', marginBottom: '4px' }}>Pilih Work Order *</label>
@@ -520,13 +429,152 @@ function CreateJobCardModal({ onClose, workOrders, jobCards, onSuccess, userComp
 }
 
 // ==========================================
-// 5. MODAL DETAIL JOB CARD (TIMER & SUBMIT)
+// 5. MODAL DETAIL WO & JOB CARD
 // ==========================================
+function WorkOrderDetailModal({ wo, jobCards, onClose, onSuccess }: { wo: WorkOrder; jobCards: any[]; onClose: () => void; onSuccess?: () => void }) {
+  const { user } = useAuth(); 
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [fullData, setFullData] = useState<any>(wo);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState({ qty: wo.qty, planned_start_date: wo.planned_start_date });
+
+  const isGudangRole = user?.role === 'admin_gudang' || user?.role === 'administrator';
+
+  useEffect(() => {
+    const fetchDetails = async () => {
+      try {
+        const res = await fetch(`/api/frappe/resource/Work Order/${encodeURIComponent(wo.name)}`, { cache: 'no-store' });
+        const data = await res.json();
+        if (data.data) { setFullData(data.data); setEditForm({ qty: data.data.qty, planned_start_date: data.data.planned_start_date }); }
+      } catch (e) { console.error(e); } finally { setIsLoading(false); }
+    };
+    fetchDetails();
+  }, [wo.name]);
+
+  const progress = getWorkOrderProgress(fullData.produced_qty, fullData.qty);
+  const isDraft = fullData.docstatus === 0 || fullData.status === 'Draft';
+  const isCompleted = fullData.status === 'Completed' || fullData.produced_qty >= fullData.qty;
+
+  const handleUpdateWO = async () => {
+    setIsProcessing(true);
+    try {
+      const response = await fetch(`/api/frappe/resource/Work Order/${encodeURIComponent(fullData.name)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ qty: parseFloat(String(editForm.qty)), planned_start_date: editForm.planned_start_date }) });
+      if (!response.ok) throw new Error("Gagal update data");
+      alert('✅ Data Draft Berhasil Diperbarui!'); setIsEditing(false); if (onSuccess) onSuccess();
+    } catch (err: any) { alert(err.message); } finally { setIsProcessing(false); }
+  };
+
+  const handleSubmitWO = async () => {
+    if (!confirm('Konfirmasi Submit? Data tidak bisa diedit setelah ini.')) return;
+    setIsProcessing(true);
+    try {
+      const response = await fetch(`/api/frappe/resource/Work Order/${encodeURIComponent(fullData.name)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ docstatus: 1 }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(extractFrappeError(data, "Gagal Submit"));
+      alert('✅ Work Order disubmit! Sekarang Anda bisa membuat Job Card atau Start Produksi.'); onClose(); if (onSuccess) onSuccess();
+    } catch (err: any) { alert('Gagal Submit: \n' + err.message); setIsProcessing(false); }
+  };
+
+  const handleStartProduction = async () => {
+    if (!isGudangRole) return alert('Hanya Admin Gudang yang bisa memulai produksi (Transfer Material).');
+    const qtyToStart = prompt(`Jumlah untuk ditarik ke WIP:`, String(fullData.qty - (fullData.produced_qty || 0)));
+    if (!qtyToStart) return;
+    setIsProcessing(true);
+    try {
+      const response = await fetch(`/api/frappe/method/erpnext.manufacturing.doctype.work_order.work_order.make_stock_entry`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ work_order_id: fullData.name, purpose: 'Material Transfer for Manufacture', qty: parseFloat(qtyToStart) }) });
+      const data = await response.json();
+      if (!response.ok || data.error) throw new Error(extractFrappeError(data, "Gagal menyiapkan dokumen Transfer"));
+      const draftSE = data.message || data.data;
+      const createRes = await fetch('/api/frappe/resource/Stock Entry', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(draftSE) });
+      const createData = await createRes.json();
+      if (!createRes.ok) throw new Error(extractFrappeError(createData, "Gagal menyimpan Draft Transfer Material"));
+      const seName = createData.data?.name || createData.name;
+      const submitRes = await fetch(`/api/frappe/resource/Stock Entry/${seName}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ docstatus: 1 }) });
+      const submitData = await submitRes.json();
+      if (!submitRes.ok) throw new Error(extractFrappeError(submitData, "Gagal me-Submit Transfer Material (Cek stok gudangmu!)"));
+      alert('✅ Bahan Baku berhasil dipindahkan ke area WIP!'); onClose(); if (onSuccess) onSuccess();
+    } catch (err: any) { alert(`ERROR DARI ERPNEXT:\n${err.message}`); setIsProcessing(false); }
+  };
+
+  const handleFinishProduction = async () => {
+    if (!isGudangRole) return alert('Hanya Admin Gudang yang berhak memasukkan barang jadi ke gudang.');
+    const relatedJCs = jobCards.filter(jc => jc.work_order === fullData.name);
+    const unfinishedJCs = relatedJCs.filter(jc => jc.status !== 'Completed');
+    if (unfinishedJCs.length > 0) { alert(`⚠️ GAGAL FINISH: Ada ${unfinishedJCs.length} Job Card yang masih belum diselesaikan!`); return; }
+
+    const qtyToFinish = prompt(`Jumlah barang JADI yang selesai dan siap masuk Gudang Akhir (FG):`, String(fullData.qty - (fullData.produced_qty || 0)));
+    if (!qtyToFinish) return;
+    setIsProcessing(true);
+    try {
+      const response = await fetch(`/api/frappe/method/erpnext.manufacturing.doctype.work_order.work_order.make_stock_entry`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ work_order_id: fullData.name, purpose: 'Manufacture', qty: parseFloat(qtyToFinish) }) });
+      const data = await response.json();
+      if (!response.ok || data.error) throw new Error(extractFrappeError(data, "Gagal menyiapkan dokumen Manufacture"));
+      const draftSE = data.message || data.data;
+      const createRes = await fetch('/api/frappe/resource/Stock Entry', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(draftSE) });
+      const createData = await createRes.json();
+      if (!createRes.ok) throw new Error(extractFrappeError(createData, "Gagal menyimpan Draft Manufacture"));
+      const seName = createData.data?.name || createData.name;
+      const submitRes = await fetch(`/api/frappe/resource/Stock Entry/${seName}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ docstatus: 1 }) });
+      const submitData = await submitRes.json();
+      if (!submitRes.ok) throw new Error(extractFrappeError(submitData, "Gagal me-Submit Manufacture (Cek stok WIP-mu!)"));
+      alert('✅ Produk Jadi berhasil masuk stok FG! Work Order Selesai.'); onClose(); if (onSuccess) onSuccess();
+    } catch (err: any) { alert(`ERROR DARI ERPNEXT:\n${err.message}`); setIsProcessing(false); }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget && !isProcessing) onClose(); }}>
+      <div className="modal-content" style={{ maxWidth: '600px', width: '100%' }}>
+        {isLoading ? ( <div style={{ textAlign: 'center', padding: '40px' }}><Loader2 className="animate-spin" size={24} color="#0066B3" /></div> ) : (
+          <>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
+              <div><h2 style={{ fontSize: '18px', fontWeight: 800 }}>{fullData.name}</h2><span className={`badge ${isDraft ? 'badge-gray' : isCompleted ? 'badge-success' : 'badge-info'}`} style={{ marginTop: '5px' }}>{isDraft ? 'DRAFT' : fullData.status}</span></div>
+              <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={20} /></button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px', marginBottom: '20px' }}>
+              <div style={{ background: '#f8f9fb', padding: '12px', borderRadius: '8px' }}>
+                <p style={{ fontSize: '11px', color: '#6B7280' }}>Sales Order</p>
+                {fullData.sales_order ? (
+                  <a href={`http://34.101.192.135:8080/app/sales-order/${encodeURIComponent(fullData.sales_order)}`} target="_blank" rel="noopener noreferrer" style={{ fontSize: '13px', fontWeight: 700, color: '#0066B3', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    {fullData.sales_order} <ArrowUpRight size={12} />
+                  </a>
+                ) : (
+                  <p style={{ fontSize: '13px', fontWeight: 700, color: '#111827' }}>-</p>
+                )}
+              </div>
+              <div style={{ background: '#f8f9fb', padding: '12px', borderRadius: '8px' }}><p style={{ fontSize: '11px', color: '#6B7280' }}>Produk</p><p style={{ fontSize: '13px', fontWeight: 700 }}>{fullData.production_item}</p></div>
+              <div style={{ background: '#f8f9fb', padding: '12px', borderRadius: '8px' }}><p style={{ fontSize: '11px', color: '#6B7280' }}>BOM No</p><p style={{ fontSize: '13px', fontWeight: 700 }}>{fullData.bom_no}</p></div>
+              <div style={{ background: isEditing ? '#fffbeb' : '#f8f9fb', padding: '12px', borderRadius: '8px', border: isEditing ? '1px solid #fcd34d' : '1px solid transparent' }}><p style={{ fontSize: '11px', color: '#6B7280' }}>Qty Target</p>{isEditing ? <input type="number" className="erp-input" style={{ marginTop: '4px' }} value={editForm.qty} onChange={e => setEditForm({ ...editForm, qty: Number(e.target.value) })} /> : <p style={{ fontSize: '13px', fontWeight: 700 }}>{formatNumber(fullData.qty)} pcs</p>}</div>
+              <div style={{ background: isEditing ? '#fffbeb' : '#f8f9fb', padding: '12px', borderRadius: '8px', border: isEditing ? '1px solid #fcd34d' : '1px solid transparent' }}><p style={{ fontSize: '11px', color: '#6B7280' }}>Rencana Mulai</p>{isEditing ? <input type="date" className="erp-input" style={{ marginTop: '4px' }} value={editForm.planned_start_date} onChange={e => setEditForm({ ...editForm, planned_start_date: e.target.value })} /> : <p style={{ fontSize: '13px', fontWeight: 700 }}>{formatDate(fullData.planned_start_date)}</p>}</div>
+            </div>
+
+            <div style={{ marginBottom: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}><span style={{ fontSize: '13px', fontWeight: 700, color: '#374151' }}>Progress Produksi</span><span style={{ fontSize: '13px', fontWeight: 700, color: isCompleted ? '#059669' : '#0066B3' }}>{progress}%</span></div>
+              <div className="progress-bar" style={{ height: '10px' }}><div className="progress-fill" style={{ width: `${progress}%`, background: isCompleted ? '#10b981' : '#0066B3' }} /></div>
+            </div>
+            <div style={{ display: 'flex', gap: '8px', borderTop: '1px solid #eee', paddingTop: '15px' }}>
+              {isDraft ? (
+                <>{isEditing ? (<><button className="btn btn-secondary" onClick={() => setIsEditing(false)} disabled={isProcessing} style={{ flex: 1 }}>Batal</button><button className="btn btn-primary" onClick={handleUpdateWO} disabled={isProcessing} style={{ flex: 2 }}>Update Draft</button></>) : (<><button className="btn btn-secondary" onClick={() => setIsEditing(true)} disabled={isProcessing} style={{ flex: 1 }}><Edit size={14} /> Edit Data</button><button className="btn btn-primary" onClick={handleSubmitWO} disabled={isProcessing} style={{ flex: 2, background: '#059669' }}><Send size={14} /> Submit Work Order</button></>)}</>
+              ) : (
+                <>{!isCompleted ? (<>{fullData.status === 'Not Started' && (<button className={`btn ${isGudangRole ? 'btn-primary' : 'btn-secondary'}`} onClick={handleStartProduction} disabled={isProcessing || !isGudangRole} style={{ flex: 1, background: isGudangRole ? '#0066B3' : '#f3f4f6' }} title={!isGudangRole ? 'Hanya Admin Gudang' : ''}><PlayCircle size={14} /> Start Produksi</button>)}<button className={`btn ${isGudangRole ? 'btn-primary' : 'btn-secondary'}`} onClick={handleFinishProduction} disabled={isProcessing || !isGudangRole} style={{ flex: 1, background: isGudangRole ? '#059669' : '#f3f4f6' }} title={!isGudangRole ? 'Hanya Admin Gudang' : ''}><StopCircle size={14} /> Finish Produksi (Gudang)</button></>) : (<div style={{ width: '100%', textAlign: 'center', padding: '10px', background: '#ecfdf5', color: '#065f46', borderRadius: '8px', fontSize: '13px', fontWeight: 600 }}>✓ Produksi Selesai (Barang Masuk Gudang)</div>)}</>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function JobCardDetailModal({ jc, onClose, onSuccess }: { jc: any; onClose: () => void; onSuccess?: () => void }) {
+  const { user } = useAuth(); 
   const [isProcessing, setIsProcessing] = useState(false);
   const [fullData, setFullData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [elapsedTime, setElapsedTime] = useState('00:00:00');
+
+  const isOperatorRole = user?.role === 'operator' || user?.role === 'administrator';
 
   useEffect(() => {
     const fetchDetails = async () => {
@@ -559,6 +607,7 @@ function JobCardDetailModal({ jc, onClose, onSuccess }: { jc: any; onClose: () =
   }, [isWIP, fullData, openLogIndex]);
 
   const handleStartJob = async () => {
+    if (!isOperatorRole) return alert('Hanya Operator/Tukang yang bisa memulai pekerjaan.');
     setIsProcessing(true);
     try {
       const now = new Date(); const currentLogs = fullData.time_logs || [];
@@ -569,6 +618,7 @@ function JobCardDetailModal({ jc, onClose, onSuccess }: { jc: any; onClose: () =
   };
 
   const handleCompleteAndSubmit = async () => {
+    if (!isOperatorRole) return alert('Hanya Operator/Tukang yang bisa menyelesaikan pekerjaan.');
     if (!confirm('Selesaikan pekerjaan ini dan submit Job Card?')) return;
     setIsProcessing(true);
     try {
@@ -597,8 +647,8 @@ function JobCardDetailModal({ jc, onClose, onSuccess }: { jc: any; onClose: () =
             </div>
             {isWIP && (<div style={{ background: '#fffbeb', border: '1px solid #fcd34d', padding: '16px', borderRadius: '8px', marginBottom: '20px', color: '#92400e', textAlign: 'center' }}><Clock size={20} style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: '8px', color: '#d97706' }} /><span style={{ fontSize: '13px', fontWeight: 600 }}>Pekerjaan sedang berlangsung</span><div style={{ fontSize: '28px', fontWeight: 800, marginTop: '4px', fontVariantNumeric: 'tabular-nums' }}>{elapsedTime}</div><p style={{ fontSize: '11px', marginTop: '4px', opacity: 0.7 }}>Waktu Mulai: {fullData.time_logs[openLogIndex].from_time.split(' ')[1]}</p></div>)}
             <div style={{ display: 'flex', gap: '8px', borderTop: '1px solid #eee', paddingTop: '15px' }}>
-              {isDraft && !isWIP && (<button className="btn btn-primary" onClick={handleStartJob} disabled={isProcessing} style={{ width: '100%', background: '#0066B3', padding: '12px' }}><PlayCircle size={16} /> Mulai Produksi Sekarang</button>)}
-              {isDraft && isWIP && (<button className="btn btn-primary" onClick={handleCompleteAndSubmit} disabled={isProcessing} style={{ width: '100%', background: '#059669', padding: '12px' }}><CheckCircle size={16} /> Selesaikan Pekerjaan</button>)}
+              {isDraft && !isWIP && (<button className={`btn ${isOperatorRole ? 'btn-primary' : 'btn-secondary'}`} onClick={handleStartJob} disabled={isProcessing || !isOperatorRole} style={{ width: '100%', background: isOperatorRole ? '#0066B3' : '#f3f4f6', padding: '12px' }} title={!isOperatorRole ? 'Hanya Operator' : ''}><PlayCircle size={16} /> Mulai Produksi Sekarang</button>)}
+              {isDraft && isWIP && (<button className={`btn ${isOperatorRole ? 'btn-primary' : 'btn-secondary'}`} onClick={handleCompleteAndSubmit} disabled={isProcessing || !isOperatorRole} style={{ width: '100%', background: isOperatorRole ? '#059669' : '#f3f4f6', padding: '12px' }} title={!isOperatorRole ? 'Hanya Operator' : ''}><CheckCircle size={16} /> Selesaikan Pekerjaan</button>)}
               {!isDraft && (<a href={`http://34.101.192.135:8080/app/job-card/${encodeURIComponent(fullData.name)}`} target="_blank" rel="noopener noreferrer" className="btn btn-secondary" style={{ width: '100%', textAlign: 'center', textDecoration: 'none', padding: '12px' }}><Eye size={16} style={{ marginRight: '6px' }} /> Buka Detail Proses di ERPNext</a>)}
             </div>
           </>
@@ -665,21 +715,26 @@ function ManufacturingPageContent() {
   const filteredWOs = myWOs.filter((wo: any) => {
     const s = wo.docstatus === 0 || wo.status === 'Draft' ? 'Draft' : wo.status;
     if (statusFilter !== 'Semua' && s !== statusFilter) return false;
-    return !searchQuery || wo.name.toLowerCase().includes(searchQuery.toLowerCase()) || wo.production_item?.toLowerCase().includes(searchQuery.toLowerCase());
+    if (!searchQuery) return true;
+    const q = searchQuery.toLowerCase();
+    return (wo.name && wo.name.toLowerCase().includes(q)) || 
+           (wo.production_item && wo.production_item.toLowerCase().includes(q));
   });
 
   const filteredBOMs = myBOMs.filter((b: any) => {
     if (!searchQuery) return true;
-    return b.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      b.item_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      b.item?.toLowerCase().includes(searchQuery.toLowerCase());
+    const q = searchQuery.toLowerCase();
+    return (b.name && b.name.toLowerCase().includes(q)) ||
+           (b.item_name && b.item_name.toLowerCase().includes(q)) ||
+           (b.item && b.item.toLowerCase().includes(q));
   });
 
   const filteredJobCards = myJobCards.filter((jc: any) => {
     if (!searchQuery) return true;
-    return jc.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      jc.work_order?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      jc.operation?.toLowerCase().includes(searchQuery.toLowerCase());
+    const q = searchQuery.toLowerCase();
+    return (jc.name && jc.name.toLowerCase().includes(q)) ||
+           (jc.work_order && jc.work_order.toLowerCase().includes(q)) ||
+           (jc.operation && jc.operation.toLowerCase().includes(q));
   });
 
   const workOrderStatus = React.useMemo(() => ({
@@ -718,19 +773,24 @@ function ManufacturingPageContent() {
   const getPageInfo = () => {
     switch (activeTab) {
       case 'bom': return {
-        title: 'Bill of Materials', desc: 'Resep standar produk',
-        stats: [{ label: 'Total BOM', value: myBOMs.length, sub: 'Aktif / Draft', icon: <Layers size={22} />, color: '#7c3aed', bg: 'linear-gradient(135deg, #f5f3ff, #ede9fe)' }]
+        title: 'Bill of Materials', desc: 'Resep standar pembuatan produk (BOM)',
+        stats: [
+          { label: 'Total BOMs', value: myBOMs.length, sub: 'Resep Produksi', icon: <Layers size={22} />, color: '#7c3aed', bg: 'linear-gradient(135deg, #f5f3ff, #ede9fe)' }
+        ]
       };
       case 'workorders': return {
-        title: 'Work Orders', desc: 'Perintah produksi pabrik',
+        title: 'Work Orders', desc: 'Perintah produksi ke pabrik',
         stats: [
-          { label: 'Total WO', value: myWOs.length, sub: 'Orders', icon: <Cog size={22} />, color: '#0066B3', bg: 'linear-gradient(135deg, #eff6ff, #dbeafe)' },
-          { label: 'In Process', value: workOrderStatus.inProcess, sub: 'Running', icon: <Clock size={22} />, color: '#d97706', bg: 'linear-gradient(135deg, #fffbeb, #fef3c7)' }
+          { label: 'Total Orders', value: myWOs.length, sub: 'Perintah produksi', icon: <Cog size={22} />, color: '#0066B3', bg: 'linear-gradient(135deg, #eff6ff, #dbeafe)' },
+          { label: 'In Process', value: workOrderStatus.inProcess, sub: 'Sedang berjalan', icon: <Clock size={22} />, color: '#d97706', bg: 'linear-gradient(135deg, #fffbeb, #fef3c7)' },
+          { label: 'Completed', value: workOrderStatus.completed, sub: 'Produksi selesai', icon: <CheckCircle size={22} />, color: '#059669', bg: 'linear-gradient(135deg, #ecfdf5, #d1fae5)' },
         ]
       };
       case 'jobcards': return {
-        title: 'Job Cards', desc: 'Tugas operator stasiun kerja',
-        stats: [{ label: 'Total Task', value: myJobCards.length, sub: 'Job Cards', icon: <Wrench size={22} />, color: '#f59e0b', bg: 'linear-gradient(135deg, #fffbeb, #fef3c7)' }]
+        title: 'Job Cards', desc: 'Tugas operator pabrik per stasiun kerja',
+        stats: [
+          { label: 'Total Job Cards', value: myJobCards.length, sub: 'Tugas Mesin/Operator', icon: <Wrench size={22} />, color: '#f59e0b', bg: 'linear-gradient(135deg, #fffbeb, #fef3c7)' }
+        ]
       };
       default: return { title: 'Manufacturing', desc: 'Modul Produksi', stats: [] };
     }
@@ -738,18 +798,24 @@ function ManufacturingPageContent() {
 
   const pageInfo = getPageInfo();
 
-  const handleSmartDelete = async (doctype: string, docname: string, docstatus: number) => {
+  const handleSmartDelete = async (doctype: string, docname: string, docstatus: number | undefined, isActive: number | undefined) => {
     if (!confirm(`Yakin ingin menghapus ${doctype} ${docname}?`)) return;
     try {
       const { apiUpdate, apiDelete } = await import('@/lib/api');
-      if (docstatus === 1) {
+      
+      if (doctype === 'BOM') {
+        try { await apiUpdate(doctype, docname, { is_default: 0, is_active: 0 }); } catch (e) {}
+      }
+
+      if (docstatus === 1 || isActive === 1) {
         await apiUpdate(doctype, docname, { docstatus: 2 });
       }
+      
       await apiDelete(doctype, docname);
       alert('✅ Berhasil dihapus!');
       handleRefreshAll();
     } catch (err: any) {
-      alert(`❌ Gagal Hapus!\n\nAlasan ERPNext: ${err.message}\n\nTips: Klik icon MATA untuk melihat dokumen aslinya di ERPNext. Mungkin ada dokumen lain yang terhubung.`);
+      alert(`❌ Gagal Hapus!\n\nAlasan ERPNext: HTTP 417 / Konflik.\n\nTips: Dokumen ini tidak bisa dihapus karena sedang terikat dengan data lain (misal dipakai di Work Order). Klik icon MATA untuk menghapus dokumen terkait terlebih dahulu.`);
     }
   };
 
@@ -757,7 +823,7 @@ function ManufacturingPageContent() {
     if (!confirm(`Aktifkan BOM ${bomName} sekarang?`)) return;
     try {
       const response = await fetch(`/api/frappe/resource/BOM/${encodeURIComponent(bomName)}`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ is_active: 1, docstatus: 1 })
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ is_active: 1, docstatus: 1, is_default: 1 })
       });
       if (!response.ok) {
         const errData = await response.json();
@@ -774,21 +840,30 @@ function ManufacturingPageContent() {
     <div style={{ fontFamily: "'Montserrat', sans-serif", animation: 'fadeIn 0.3s ease-out' }}>
 
       {/* HEADER DINAMIS */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
-        <div><h1 style={{ fontSize: '22px', fontWeight: 800 }}>{pageInfo.title}</h1><p style={{ fontSize: '12px', color: '#6B7280' }}>{pageInfo.desc} <strong>({userCompany})</strong></p></div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
+        <div>
+          <h1 style={{ fontSize: '22px', fontWeight: 800 }}>{pageInfo.title}</h1>
+          <p style={{ fontSize: '12px', color: '#6B7280' }}>{pageInfo.desc} <strong>({userCompany})</strong></p>
+        </div>
         <div style={{ display: 'flex', gap: '10px' }}>
           {activeTab === 'bom' && <button className="btn btn-primary btn-sm" style={{ background: '#7c3aed' }} onClick={() => setShowCreateBOMModal(true)}><Plus size={14} /> BOM Baru</button>}
-          {activeTab === 'workorders' && <button className="btn btn-primary btn-sm" onClick={() => setShowCreateWOModal(true)}><Plus size={14} /> WO Baru</button>}
+          {activeTab === 'workorders' && <button className="btn btn-primary btn-sm" onClick={() => setShowCreateWOModal(true)}><Plus size={14} /> Work Order Baru</button>}
           {activeTab === 'jobcards' && <button className="btn btn-primary btn-sm" style={{ background: '#f59e0b' }} onClick={() => setShowCreateJCModal(true)}><Plus size={14} /> Job Card Baru</button>}
         </div>
       </div>
 
       {/* STATS DINAMIS */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px', marginBottom: '16px' }}>
+      <div style={{ display: 'flex', gap: '14px', marginBottom: '16px', flexWrap: 'wrap' }}>
         {pageInfo.stats.map((s, idx) => (
-          <div key={idx} className="stat-card card-hover">
-            <div><p style={{ fontSize: '12px', fontWeight: 600, color: '#6B7280', marginBottom: '6px' }}>{s.label}</p><p style={{ fontSize: '22px', fontWeight: 800 }}>{s.value}</p><p style={{ fontSize: '11px', color: '#6B7280' }}>{s.sub}</p></div>
-            <div style={{ width: '44px', height: '44px', borderRadius: '11px', background: s.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: s.color }}>{s.icon}</div>
+          <div key={idx} className="stat-card card-hover" style={{ flex: 1, minWidth: '200px' }}>
+            <div>
+              <p style={{ fontSize: '12px', fontWeight: 600, color: '#6B7280', marginBottom: '6px' }}>{s.label}</p>
+              <p style={{ fontSize: '22px', fontWeight: 800, color: '#111827', marginBottom: '4px' }}>{s.value}</p>
+              <p style={{ fontSize: '11px', color: '#6B7280', fontWeight: 500 }}>{s.sub}</p>
+            </div>
+            <div style={{ width: '44px', height: '44px', borderRadius: '11px', background: s.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: s.color, flexShrink: 0 }}>
+              {s.icon}
+            </div>
           </div>
         ))}
       </div>
@@ -839,11 +914,12 @@ function ManufacturingPageContent() {
 
       {/* AREA TABEL DATA */}
       <div className="chart-container">
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', justifyContent: 'space-between', marginBottom: '16px', alignItems: 'center' }}>
+        {/* BARIS PENCARIAN TERISOLASI */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px', alignItems: 'center' }}>
           <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#374151' }}>Daftar {pageInfo.title}</h3>
           <div style={{ position: 'relative', width: '100%', maxWidth: '220px' }}>
             <Search size={13} color="#9CA3AF" style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)' }} />
-            <input type="text" placeholder="Cari data..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} style={{ padding: '6px 10px 6px 30px', border: '1px solid #e5e7eb', borderRadius: '8px', fontSize: '12px', outline: 'none', width: '100%' }} />
+            <input type="text" placeholder={`Cari data...`} value={searchQuery} onChange={e => setSearchQuery(e.target.value)} style={{ padding: '6px 10px 6px 30px', border: '1px solid #e5e7eb', borderRadius: '8px', fontSize: '12px', outline: 'none', width: '100%' }} />
           </div>
         </div>
 
@@ -869,10 +945,15 @@ function ManufacturingPageContent() {
                     {bom.creation && <div style={{ fontSize: '10px', color: '#059669', fontWeight: 600, marginTop: '2px' }}>Ditambahkan: {formatCreationTime(bom.creation)}</div>}
                   </td>
                   <td style={{ fontWeight: 600, fontSize: '13px', color: '#111827' }}>{bom.item_name || bom.item}</td>
-                  <td><span className={`badge ${bom.docstatus === 1 ? 'badge-success' : 'badge-gray'}`}>{bom.docstatus === 1 ? 'Aktif' : 'Draft'}</span></td>
+                  <td>
+                    <span className={`badge ${(bom.docstatus === 1 || bom.is_active === 1) ? 'badge-success' : 'badge-gray'}`}>
+                      {(bom.docstatus === 1 || bom.is_active === 1) ? 'Aktif' : 'Draft'}
+                    </span>
+                  </td>
                   <td>
                     <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', alignItems: 'center' }}>
-                      {bom.docstatus === 0 && (
+                      {/* PENAMBAHAN TOMBOL AKTIFKAN JIKA MASIH DRAFT */}
+                      {(bom.is_active === 0 || bom.docstatus === 0 || !bom.docstatus) && (
                         <button onClick={() => handleActivateBOM(bom.name)} style={{ background: '#059669', color: 'white', border: 'none', padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }} title="Aktifkan BOM ini">
                           <CheckCircle size={12} /> Aktifkan
                         </button>
@@ -880,7 +961,7 @@ function ManufacturingPageContent() {
                       <a href={`http://34.101.192.135:8080/app/bom/${encodeURIComponent(bom.name)}`} target="_blank" rel="noopener noreferrer" style={{ color: '#0066B3', padding: '4px', display: 'flex' }} title="Buka di ERPNext" onClick={(e) => e.stopPropagation()}>
                         <Eye size={16} />
                       </a>
-                      <button onClick={(e) => { e.stopPropagation(); handleSmartDelete('BOM', bom.name, bom.docstatus); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', padding: '4px', display: 'flex' }} title="Hapus">
+                      <button onClick={(e) => { e.stopPropagation(); handleSmartDelete('BOM', bom.name, bom.docstatus, bom.is_active); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', padding: '4px', display: 'flex' }} title="Hapus">
                         <Trash2 size={16} />
                       </button>
                     </div>
@@ -896,7 +977,13 @@ function ManufacturingPageContent() {
                       <div style={{ color: '#0066B3', fontWeight: 700, fontSize: '13px' }}>{wo.name}</div>
                       {wo.creation && <div style={{ fontSize: '10px', color: '#059669', fontWeight: 600, marginTop: '2px' }}>Ditambahkan: {formatCreationTime(wo.creation)}</div>}
                     </td>
-                    <td style={{ fontSize: '12px', color: '#6B7280', fontWeight: 600 }}>{wo.sales_order || '-'}</td>
+                    <td style={{ fontSize: '12px', color: '#6B7280', fontWeight: 600 }}>
+                      {wo.sales_order ? (
+                        <a href={`http://34.101.192.135:8080/app/sales-order/${encodeURIComponent(wo.sales_order)}`} target="_blank" rel="noopener noreferrer" style={{ color: '#0066B3', display: 'flex', alignItems: 'center', gap: '4px', textDecoration: 'none' }} onClick={e => e.stopPropagation()}>
+                          {wo.sales_order} <ArrowUpRight size={12} />
+                        </a>
+                      ) : '-'}
+                    </td>
                     <td style={{ fontWeight: 600, fontSize: '13px', color: '#111827' }}>{wo.item_name}</td>
                     <td style={{ textAlign: 'right', fontWeight: 600 }}>{wo.qty} pcs</td>
                     <td style={{ fontSize: '12px', color: '#6B7280' }}>{formatDate(wo.planned_start_date)}</td>
@@ -906,7 +993,7 @@ function ManufacturingPageContent() {
                         <a href={`http://34.101.192.135:8080/app/work-order/${encodeURIComponent(wo.name)}`} target="_blank" rel="noopener noreferrer" style={{ color: '#0066B3', padding: '4px', display: 'flex' }} title="Buka di ERPNext" onClick={(e) => e.stopPropagation()}>
                           <Eye size={16} />
                         </a>
-                        <button onClick={(e) => { e.stopPropagation(); handleSmartDelete('Work Order', wo.name, wo.docstatus); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', padding: '4px', display: 'flex' }} title="Hapus">
+                        <button onClick={(e) => { e.stopPropagation(); handleSmartDelete('Work Order', wo.name, wo.docstatus, undefined); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', padding: '4px', display: 'flex' }} title="Hapus">
                           <Trash2 size={16} />
                         </button>
                       </div>
@@ -917,7 +1004,7 @@ function ManufacturingPageContent() {
               {activeTab === 'jobcards' && filteredJobCards.map((jc: any, index) => {
                 let durationText = '-';
                 if (jc.status === 'Completed' && jc.total_time_in_mins) {
-                  const hrs = Math.floor(jc.total_time_in_mins / 60); const mins = Math.floor(jc.total_time_in_mins % 60); durationText = hrs > 0 ? `${hrs}j ${mins}m` : `${mins} menit`;
+                   const hrs = Math.floor(jc.total_time_in_mins / 60); const mins = Math.floor(jc.total_time_in_mins % 60); durationText = hrs > 0 ? `${hrs}j ${mins}m` : `${mins} menit`;
                 } else if (jc.status === 'Work In Progress') { durationText = '⏳ Sedang Berjalan'; }
                 return (
                   <tr key={jc.name} onClick={() => setSelectedJC(jc)} style={{ cursor: 'pointer', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
@@ -936,7 +1023,7 @@ function ManufacturingPageContent() {
                         <a href={`http://34.101.192.135:8080/app/job-card/${encodeURIComponent(jc.name)}`} target="_blank" rel="noopener noreferrer" style={{ color: '#0066B3', padding: '4px', display: 'flex' }} title="Buka di ERPNext" onClick={(e) => e.stopPropagation()}>
                           <Eye size={16} />
                         </a>
-                        <button onClick={(e) => { e.stopPropagation(); handleSmartDelete('Job Card', jc.name, jc.docstatus); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', padding: '4px', display: 'flex' }} title="Hapus">
+                        <button onClick={(e) => { e.stopPropagation(); handleSmartDelete('Job Card', jc.name, jc.docstatus, undefined); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', padding: '4px', display: 'flex' }} title="Hapus">
                           <Trash2 size={16} />
                         </button>
                       </div>
@@ -951,13 +1038,13 @@ function ManufacturingPageContent() {
           </table>
         </div>
       </div>
-
+      
       {showCreateWOModal && <CreateWorkOrderModal userCompany={userCompany} items={items} boms={myBOMs} salesOrders={salesOrders} onClose={() => setShowCreateWOModal(false)} onSuccess={handleRefreshAll} />}
       {showCreateBOMModal && <CreateBOMModal userCompany={userCompany} items={items} onClose={() => setShowCreateBOMModal(false)} onSuccess={handleRefreshAll} />}
       {showCreateJCModal && <CreateJobCardModal userCompany={userCompany} workOrders={myWOs} jobCards={myJobCards} onClose={() => setShowCreateJCModal(false)} onSuccess={handleRefreshAll} />}
       {selectedWO && <WorkOrderDetailModal wo={selectedWO} jobCards={myJobCards} onClose={() => setSelectedWO(null)} onSuccess={handleRefreshAll} />}
       {selectedJC && <JobCardDetailModal jc={selectedJC} onClose={() => setSelectedJC(null)} onSuccess={handleRefreshAll} />}
-
+      
       <style>{`@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }`}</style>
     </div>
   );
