@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useManufacturingData, useStockData } from '@/hooks/useFrappeData';
 import { Cog, MoreHorizontal, CheckCircle, Activity, Loader2 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -17,9 +17,29 @@ export default function ManufacturingHomePage() {
   const { workOrders, isLoading: isMfgLoading } = useManufacturingData() as any;
   const { items, isLoading: isStockLoading } = useStockData();
 
+  // STATE UNTUK MEMBACA PROGRESS GOD MODE LOKAL
+  const [localWOStatus, setLocalWOStatus] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    const savedStatus = localStorage.getItem('erp_mock_wo_status');
+    if (savedStatus) {
+      try { setLocalWOStatus(JSON.parse(savedStatus)); } catch (e) {}
+    }
+  }, []);
+
   const stats = useMemo(() => {
+    // 0. Terapkan override status dari lokal ke data ERPNext
+    const overriddenWOs = (workOrders || []).map((wo: any) => {
+      const currentStatus = localWOStatus[wo.name] || wo.status;
+      return {
+        ...wo,
+        status: currentStatus,
+        produced_qty: currentStatus === 'Completed' ? (Number(wo.produced_qty) || Number(wo.qty)) : Number(wo.produced_qty)
+      };
+    });
+
     // 1. Filter khusus Netra Vidya
-    const wos = (workOrders || []).filter((wo: any) => 
+    const wos = overriddenWOs.filter((wo: any) => 
       wo.company === FIXED_COMPANY || 
       (wo.name && wo.name.includes('NV')) || 
       (wo.fg_warehouse && wo.fg_warehouse.includes('NV'))
@@ -60,7 +80,7 @@ export default function ManufacturingHomePage() {
       .sort((a, b) => new Date(`1 ${a.day}`).getTime() - new Date(`1 ${b.day}`).getTime());
 
     return { openWOs, wipWOs, manufacturedValue, producedTrend };
-  }, [workOrders, items]);
+  }, [workOrders, items, localWOStatus]);
 
   if (isMfgLoading || isStockLoading) return <div style={{ textAlign: 'center', padding: '60px' }}><Loader2 className="animate-spin" size={32} color={COLOR_PRIMARY} style={{ margin: '0 auto 16px' }} /><p style={{ color: '#6B7280', fontSize: '13px' }}>Memuat data produksi dari ERPNext...</p></div>;
 

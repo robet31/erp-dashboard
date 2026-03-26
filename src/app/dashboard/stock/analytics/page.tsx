@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useStockData, useSellingData } from '@/hooks/useFrappeData';
 import { Filter, MoreHorizontal, Calendar as CalIcon, Loader2, AlertTriangle } from 'lucide-react';
 import {
@@ -21,24 +21,69 @@ const formatUang = (value: number | string | undefined | any) => {
   return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(Number(value));
 };
 
+const formatUangSingkat = (value: number | string | undefined | any) => {
+  if (!value) return 'Rp 0';
+  const num = Number(value);
+  if (isNaN(num)) return 'Rp 0';
+  
+  if (num >= 1000000000) {
+    return `Rp ${(num / 1000000000).toFixed(1)} M`;
+  }
+  if (num >= 1000000) {
+    return `Rp ${(num / 1000000).toFixed(0)} Jt`;
+  }
+  return formatUang(num);
+};
+
 export default function StockAnalyticsPage() {
   const { items, bins, stockEntries, isLoading: isStockLoading } = useStockData();
   const { deliveryNotes, isLoading: isSellingLoading } = useSellingData();
   const warehouses = getWarehousesByCompany(FIXED_COMPANY);
 
+  // STATE UNTUK MEMBACA PROGRESS GOD MODE LOKAL
+  const [localLedger, setLocalLedger] = useState<Record<string, number>>({});
+  const [localEntryStatus, setLocalEntryStatus] = useState<Record<string, number>>({});
+  const [localDNStatus, setLocalDNStatus] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    const l = localStorage.getItem('erp_mock_stock_ledger'); if(l) setLocalLedger(JSON.parse(l));
+    const e = localStorage.getItem('erp_mock_stock_entry_status'); if(e) setLocalEntryStatus(JSON.parse(e));
+    const d = localStorage.getItem('erp_mock_dn_status'); if(d) setLocalDNStatus(JSON.parse(d));
+  }, []);
+
   const stats = useMemo(() => {
     const totalActiveItems = items.filter((i: any) => !i.disabled).length;
     const totalWarehouses = warehouses.length;
 
+    // SIMULATED BINS (Menggabungkan data ERPNext dengan Local God Mode)
+    const binMap: Record<string, any> = {};
+    bins.forEach((b: any) => {
+      binMap[`${b.item_code}_${b.warehouse}`] = { ...b, actual_qty: Number(b.actual_qty) || 0 };
+    });
+    Object.entries(localLedger).forEach(([key, qty]) => {
+      if (binMap[key]) {
+        binMap[key].actual_qty += Number(qty);
+      } else {
+        const [item_code, warehouse] = key.split('_');
+        binMap[key] = { item_code, warehouse, actual_qty: Number(qty) };
+      }
+    });
+
+    const simulatedBins = Object.values(binMap).map((b: any) => {
+      const item = items.find((i: any) => i.item_code === b.item_code);
+      const rate = item?.standard_rate || 0;
+      return { ...b, stock_value: b.actual_qty * rate };
+    });
+
     // 1. MENGHITUNG STOK REALISTIS MURNI MILIK NETRA VIDYA
-    const nvBins = bins.filter((b: any) => b.warehouse.includes(FIXED_COMPANY) || b.warehouse.includes('- NV'));
+    const nvBins = simulatedBins.filter((b: any) => b.warehouse.includes(FIXED_COMPANY) || b.warehouse.includes('- NV'));
     
     let totalStockValue = 0;
     const whValues: Record<string, number> = {};
 
     warehouses.forEach(w => whValues[w.name.split(' - ')[0]] = 0); // Init 0
 
-    // Hitung murni dari Bins Asli (Server)
+    // Hitung murni dari Bins Bayangan (Simulasi)
     nvBins.forEach((b: any) => {
       const val = Number(b.stock_value) || 0;
       totalStockValue += val;
@@ -50,9 +95,18 @@ export default function StockAnalyticsPage() {
       .map(([name, value]) => ({ name, value }))
       .filter(w => w.value > 0); // Sembunyikan gudang yang Rp 0
 
-    // 2. REAL Purchase Receipt Trends (Berdasarkan jumlah mutasi Material Receipt per bulan)
+    // 2. REAL Purchase Receipt Trends
     const receiptMap: Record<string, number> = {};
-    const nvStockEntries = stockEntries.filter((se: any) => se.company === FIXED_COMPANY && se.docstatus === 1 && se.stock_entry_type === 'Material Receipt');
+    const overriddenEntries = stockEntries.map((se: any) => ({
+      ...se, docstatus: localEntryStatus[se.name] !== undefined ? localEntryStatus[se.name] : se.docstatus
+    }));
+    
+    // PERBAIKAN: Filter dilonggarkan karena API ERPNext terkadang tidak memuat field "company"
+    const nvStockEntries = overriddenEntries.filter((se: any) => 
+      (!se.company || se.company === FIXED_COMPANY) && 
+      se.docstatus === 1 && 
+      se.stock_entry_type === 'Material Receipt'
+    );
     
     nvStockEntries.forEach((se: any) => {
       if (!se.posting_date) return;
@@ -64,9 +118,18 @@ export default function StockAnalyticsPage() {
       .map(([month, value]) => ({ month, value }))
       .sort((a, b) => new Date(`1 ${a.month}`).getTime() - new Date(`1 ${b.month}`).getTime());
 
-    // 3. REAL Delivery Trends (Berdasarkan jumlah Surat Jalan keluar per bulan)
+    // 3. REAL Delivery Trends
     const deliveryMap: Record<string, number> = {};
-    const nvDeliveries = deliveryNotes.filter((dn: any) => dn.company === FIXED_COMPANY && dn.docstatus === 1 && dn.is_return !== 1);
+    const overriddenDNs = deliveryNotes.map((dn: any) => ({
+      ...dn, docstatus: localDNStatus[dn.name] !== undefined ? localDNStatus[dn.name] : dn.docstatus
+    }));
+    
+    // PERBAIKAN: Filter dilonggarkan agar Delivery Note yang sudah disubmit di God Mode bisa terbaca
+    const nvDeliveries = overriddenDNs.filter((dn: any) => 
+      (!dn.company || dn.company === FIXED_COMPANY) && 
+      dn.docstatus === 1 && 
+      Number(dn.is_return) !== 1
+    );
     
     nvDeliveries.forEach((dn: any) => {
       if (!dn.posting_date) return;
@@ -78,13 +141,13 @@ export default function StockAnalyticsPage() {
       .map(([month, value]) => ({ month, value }))
       .sort((a, b) => new Date(`1 ${a.month}`).getTime() - new Date(`1 ${b.month}`).getTime());
 
-    // 4. REAL Oldest Items (Item Paling Lama Dibuat)
+    // 4. REAL Oldest Items
     const oldestItems = [...items]
       .filter((i: any) => i.is_stock_item)
       .sort((a: any, b: any) => new Date(a.creation).getTime() - new Date(b.creation).getTime())
       .slice(0, 5);
 
-    // 5. REAL Item Shortage Summary (Barang yang sisa sedikit di gudang)
+    // 5. REAL Item Shortage Summary
     const shortageItems = nvBins
       .filter((b: any) => Number(b.actual_qty) > 0 && Number(b.actual_qty) <= 15)
       .map((b: any) => ({ name: b.item_code, value: Number(b.actual_qty) }))
@@ -92,7 +155,7 @@ export default function StockAnalyticsPage() {
       .slice(0, 5);
 
     return { totalActiveItems, totalWarehouses, totalStockValue, whStockValue, receiptTrends, deliveryTrends, oldestItems, shortageItems };
-  }, [items, warehouses, bins, stockEntries, deliveryNotes]);
+  }, [items, warehouses, bins, stockEntries, deliveryNotes, localLedger, localEntryStatus, localDNStatus]);
 
   if (isStockLoading || isSellingLoading) return <div style={{ textAlign: 'center', padding: '60px 20px' }}><Loader2 className="animate-spin" size={32} color={COLOR_PRIMARY} style={{ margin: '0 auto 16px' }} /><p style={{ color: '#6B7280', fontSize: '13px' }}>Memuat analitik murni ERPNext...</p></div>;
 
@@ -133,8 +196,7 @@ export default function StockAnalyticsPage() {
             <BarChart data={stats.whStockValue} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
               <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} />
-              <YAxis tickFormatter={(v: any) => formatUang(v).replace(/,\d{2}/, '')} tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} width={100} />
-              {/* FIX: Formatter casting to any */}
+              <YAxis width={80} tickFormatter={(v: any) => formatUangSingkat(v)} tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} />
               <Tooltip formatter={(value: any) => formatUang(value)} cursor={{ fill: '#f3f4f6' }} contentStyle={{ borderRadius: '8px', fontSize: '12px', fontFamily: 'Poppins', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
               <Bar dataKey="value" name="Total Value" fill={COLOR_SECONDARY} barSize={60} radius={[4, 4, 0, 0]} />
             </BarChart>

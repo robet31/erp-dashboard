@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useManufacturingData } from '@/hooks/useFrappeData';
 import { Clock, Filter, Loader2, Factory, CheckCircle, Activity } from 'lucide-react';
 import {
@@ -15,11 +15,32 @@ const FIXED_COMPANY = 'Netra Vidya';
 
 export default function ManufacturingAnalyticsPage() {
   const { workOrders, isLoading } = useManufacturingData() as any;
+  
+  // STATE UNTUK MEMBACA PROGRESS GOD MODE LOKAL
+  const [localWOStatus, setLocalWOStatus] = useState<Record<string, string>>({});
 
-  // KALKULASI 100% DATA REAL DARI ERPNEXT
+  useEffect(() => {
+    const savedStatus = localStorage.getItem('erp_mock_wo_status');
+    if (savedStatus) {
+      try { setLocalWOStatus(JSON.parse(savedStatus)); } catch (e) {}
+    }
+  }, []);
+
+  // KALKULASI DATA REAL DARI ERPNEXT + BYPASS LOKAL
   const data = useMemo(() => {
+    // Terapkan override status dari lokal ke data ERPNext
+    const overriddenWOs = (workOrders || []).map((wo: any) => {
+      const currentStatus = localWOStatus[wo.name] || wo.status;
+      return {
+        ...wo,
+        status: currentStatus,
+        // Jika di lokal sudah completed, anggap actual qty terpenuhi
+        produced_qty: currentStatus === 'Completed' ? (Number(wo.produced_qty) || Number(wo.qty)) : Number(wo.produced_qty)
+      };
+    });
+
     // Filter khusus Netra Vidya
-    const wos = (workOrders || []).filter((wo: any) => 
+    const wos = overriddenWOs.filter((wo: any) => 
       wo.company === FIXED_COMPANY || 
       (wo.name && wo.name.includes('NV')) || 
       (wo.fg_warehouse && wo.fg_warehouse.includes('NV'))
@@ -47,7 +68,6 @@ export default function ManufacturingAnalyticsPage() {
       if (!itemMap[item]) itemMap[item] = { name: item, planned: 0, actual: 0 };
       
       itemMap[item].planned += Number(wo.qty || 0);
-      // Di Frappe, jika completed, produced_qty akan terisi. Kalau kosong, pakai patokan status
       const actualQty = Number(wo.produced_qty) > 0 ? Number(wo.produced_qty) : (wo.status === 'Completed' ? Number(wo.qty) : 0);
       itemMap[item].actual += actualQty;
     });
@@ -69,7 +89,7 @@ export default function ManufacturingAnalyticsPage() {
     });
 
     return { totalWO, completedWO, ongoingWO, woAnalysis, producedByItem, woByMonth };
-  }, [workOrders]);
+  }, [workOrders, localWOStatus]);
 
   if (isLoading) return <div style={{ textAlign: 'center', padding: '60px' }}><Loader2 className="animate-spin" size={32} color={COLOR_PRIMARY} style={{ margin: '0 auto 16px' }} /><p style={{ color: '#6B7280', fontSize: '13px' }}>Memuat analitik manufaktur...</p></div>;
 

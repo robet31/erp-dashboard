@@ -2,19 +2,33 @@
 
 import React, { useMemo } from 'react';
 import { useSellingData, useDashboardData } from '@/hooks/useFrappeData';
-import { ShoppingCart, DollarSign, Package, Users, TrendingUp, MoreHorizontal, Loader2 } from 'lucide-react';
+import { ShoppingCart, DollarSign, Users, TrendingUp, MoreHorizontal, Loader2 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
 
 const COLOR_PRIMARY = '#054CC7';
-const COLOR_SECONDARY = '#17C3CC';
 
 const formatUang = (value: number | string | undefined | any) => {
   if (value === undefined || value === null) return 'Rp 0';
   const num = Number(value);
   if (isNaN(num)) return 'Rp 0';
   return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(num);
+};
+
+// Fungsi khusus agar angka di sumbu Y (YAxis) lebih ringkas dan muat di layar
+const formatUangSingkat = (value: number | string | undefined | any) => {
+  if (!value) return 'Rp 0';
+  const num = Number(value);
+  if (isNaN(num)) return 'Rp 0';
+  
+  if (num >= 1000000000) {
+    return `Rp ${(num / 1000000000).toFixed(1)} M`;
+  }
+  if (num >= 1000000) {
+    return `Rp ${(num / 1000000).toFixed(0)} Jt`;
+  }
+  return formatUang(num);
 };
 
 export default function SellingHomePage() {
@@ -27,7 +41,6 @@ export default function SellingHomePage() {
     const totalSalesAmount = rawSales.reduce((sum, order) => sum + (order.grand_total || 0), 0);
     const activeCustomers = customers.filter(c => !c.disabled).length;
     
-    // Use proper casting
     const soToDeliver = rawSales.filter(o => o.docstatus === 1 && o.per_delivered < 100 && o.status !== 'Completed').length;
     const soToBill = rawSales.filter(o => o.docstatus === 1 && (o.per_billed || 0) < 100 && o.status !== 'Completed').length;
 
@@ -82,7 +95,7 @@ export default function SellingHomePage() {
           <TrendingUp size={18} color="#9CA3AF" />
         </div>
         <ResponsiveContainer width="100%" height={250}>
-          <AreaChart data={revenueTrend} margin={{ top: 10, right: 10, left: 20, bottom: 0 }}>
+          <AreaChart data={revenueTrend} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
             <defs>
               <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor={COLOR_PRIMARY} stopOpacity={0.3} />
@@ -91,8 +104,8 @@ export default function SellingHomePage() {
             </defs>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
             <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#6B7280', fontFamily: 'Poppins' }} axisLine={false} tickLine={false} />
-            <YAxis tickFormatter={(v: any) => formatUang(v).replace(/,\d{2}/, '')} tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} />
-            {/* FIX: Formatter using any to avoid type mismatch */}
+            {/* FIX: Set width to 80 so large numbers fit, and use short formatter */}
+            <YAxis width={80} tickFormatter={(v: any) => formatUangSingkat(v)} tick={{ fontSize: 11, fill: '#6B7280', fontFamily: 'Poppins' }} axisLine={false} tickLine={false} />
             <Tooltip formatter={(value: any) => formatUang(value)} contentStyle={{ borderRadius: '8px', fontSize: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontFamily: 'Poppins' }} />
             <Area type="monotone" dataKey="revenue" name="Total Sales" stroke={COLOR_PRIMARY} strokeWidth={3} fill="url(#colorRevenue)" activeDot={{ r: 6, fill: COLOR_PRIMARY }} />
           </AreaChart>

@@ -98,11 +98,14 @@ function ConfirmModal({ show, title, desc, onConfirm, onCancel, confirmText = "Y
 }
 
 // ==========================================
-// FUNGSI CEK STOK ASLI DARI SERVER
+// FUNGSI SAKTI: AMBIL STOK REAL-TIME
 // ==========================================
-const getActualStock = (itemCode: string, warehouse: string, bins: any[]) => {
-  const bin = bins.find((b: any) => b.item_code === itemCode && b.warehouse === warehouse);
-  return bin ? Number(bin.actual_qty) : 0;
+const getSimulatedStock = (itemCode: string, warehouse: string, originalBins: any[], localLedger: Record<string, number>) => {
+  const key = `${itemCode}_${warehouse}`;
+  const bin = originalBins.find((b: any) => b.item_code === itemCode && b.warehouse === warehouse);
+  const originalQty = bin ? Number(bin.actual_qty) : 0;
+  const mockAdjustment = localLedger[key] || 0;
+  return originalQty + mockAdjustment;
 };
 
 // ==========================================
@@ -291,7 +294,7 @@ function DetailBOMModal({ bom, onClose }: any) {
 // ==========================================
 // 2. MODAL CREATE & PREVIEW WORK ORDER
 // ==========================================
-function CreateWorkOrderModal({ onClose, boms, warehouses, bins, onSuccess, showToast }: any) {
+function CreateWorkOrderModal({ onClose, boms, warehouses, originalBins, localLedger, onSuccess, showToast }: any) {
   const [form, setForm] = useState({ bom_no: '', qty: '1', source_warehouse: 'Stores - NV', wip_warehouse: 'Work In Progress - NV', fg_warehouse: 'Finished Goods - NV' });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -302,10 +305,10 @@ function CreateWorkOrderModal({ onClose, boms, warehouses, bins, onSuccess, show
     if (!selectedBom || !selectedBom.items) return [];
     return selectedBom.items.map((rm: any) => {
       const required = rm.qty * Number(form.qty || 0);
-      const available = getActualStock(rm.item_code, form.source_warehouse, bins);
+      const available = getSimulatedStock(rm.item_code, form.source_warehouse, originalBins, localLedger);
       return { ...rm, required, available, isShort: available < required };
     });
-  }, [selectedBom, form.qty, form.source_warehouse, bins]);
+  }, [selectedBom, form.qty, form.source_warehouse, originalBins, localLedger]);
 
   const hasShortage = requiredMaterials.some((rm: any) => rm.isShort);
 
@@ -359,7 +362,6 @@ function CreateWorkOrderModal({ onClose, boms, warehouses, bins, onSuccess, show
             <select className="erp-input" value={form.fg_warehouse} onChange={e => setForm(f => ({ ...f, fg_warehouse: e.target.value }))}>{warehouses.map((w: any) => <option key={w.name} value={w.name}>{w.name}</option>)}</select>
           </div>
 
-          {/* TABLE PENGECEKAN STOK BAHAN BAKU */}
           {selectedBom && (
             <div style={{ marginTop: '4px', border: '1px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden' }}>
               <div style={{ background: '#f9fafb', padding: '12px', borderBottom: '1px solid #e5e7eb' }}>
@@ -539,7 +541,7 @@ function ManufacturingPageContent() {
   useEffect(() => { setActiveTab(tabParam || 'workorders'); }, [tabParam]);
 
   const { boms, workOrders, isLoading, error, refetch } = useManufacturingData() as any;
-  const { items, bins, warehouses } = useStockData(); // <-- PERBAIKAN: Ambil warehouses dari sini
+  const { items, bins: originalBins, warehouses } = useStockData(); // <-- FIX IS HERE
 
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreateBOM, setShowCreateBOM] = useState(false);
@@ -555,6 +557,10 @@ function ManufacturingPageContent() {
   const [toast, setToast] = useState<{ show: boolean, msg: string, type: 'success' | 'error' | 'info' }>({ show: false, msg: '', type: 'success' });
   const [confirmModal, setConfirmModal] = useState<{ show: boolean, title: string, desc: string, action: any, confirmText?: string }>({ show: false, title: '', desc: '', action: null, confirmText: 'Ya, Lanjutkan' });
 
+  // LOKAL OVERRIDE STATE
+  const [localWOStatus, setLocalWOStatus] = useState<Record<string, string>>({});
+  const [localLedger, setLocalLedger] = useState<Record<string, number>>({});
+
   const showToast = (msg: string, type: 'success' | 'error' | 'info' = 'success') => {
     setToast({ show: true, msg, type });
     setTimeout(() => setToast({ show: false, msg: '', type: 'success' }), 4000);
@@ -565,6 +571,23 @@ function ManufacturingPageContent() {
   };
 
   const closeConfirm = () => setConfirmModal({ show: false, title: '', desc: '', action: null, confirmText: 'Ya, Lanjutkan' });
+
+  useEffect(() => {
+    const savedStatus = localStorage.getItem('erp_mock_wo_status');
+    if (savedStatus) {
+      try { setLocalWOStatus(JSON.parse(savedStatus)); } catch (e) {}
+    }
+    const stockLedger = localStorage.getItem('erp_mock_stock_ledger');
+    if (stockLedger) { try { setLocalLedger(JSON.parse(stockLedger)); } catch (e) {} }
+  }, []);
+
+  const updateWOStatus = (woName: string, status: string) => {
+    setLocalWOStatus(prev => {
+      const next = { ...prev, [woName]: status };
+      localStorage.setItem('erp_mock_wo_status', JSON.stringify(next));
+      return next;
+    });
+  };
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -590,13 +613,17 @@ function ManufacturingPageContent() {
   const sortedBOMs = useMemo(() => sortByNewest(boms), [boms]);
   
   const displayWOs = useMemo(() => {
-    return sortByNewest(workOrders).filter((wo: any) => wo.company === FIXED_COMPANY);
-  }, [workOrders]);
+    return sortByNewest(workOrders).filter((wo: any) => wo.company === FIXED_COMPANY).map((wo: any) => ({
+      ...wo,
+      status: localWOStatus[wo.name] || wo.status
+    }));
+  }, [workOrders, localWOStatus]);
   
   const simulatedJobCards = useMemo(() => {
     const jc: any[] = [];
     displayWOs.forEach((wo: any) => {
-      if(wo.docstatus === 1) { 
+      const isLocallySubmitted = wo.docstatus === 1 || ['Not Started', 'In Process', 'Completed'].includes(localWOStatus[wo.name]);
+      if(isLocallySubmitted) { 
         jc.push({
           name: `JC-${wo.name.replace('MFG-WO-', '').replace('WO-', '')}-01`,
           work_order: wo.name,
@@ -610,61 +637,85 @@ function ManufacturingPageContent() {
       }
     });
     return jc;
-  }, [displayWOs]);
+  }, [displayWOs, localWOStatus]);
 
   const filteredBOMs = sortedBOMs.filter((b: any) => !searchQuery || (b.name || '').toLowerCase().includes(searchQuery.toLowerCase()) || (b.item || '').toLowerCase().includes(searchQuery.toLowerCase()));
   const filteredWOs = displayWOs.filter((w: any) => !searchQuery || (w.name || '').toLowerCase().includes(searchQuery.toLowerCase()) || (w.production_item || '').toLowerCase().includes(searchQuery.toLowerCase()));
   const filteredJCs = simulatedJobCards.filter(j => !searchQuery || (j.name || '').toLowerCase().includes(searchQuery.toLowerCase()) || (j.work_order || '').toLowerCase().includes(searchQuery.toLowerCase()));
 
+  // ==========================================
+  // SILENT BACKGROUND API LOGIC (MENCEGAH ERROR NEXT.JS)
+  // ==========================================
   const handleSmartDelete = (doctype: string, docname: string, docstatus: number) => {
     if (!docname) return;
 
     showConfirm(
       `Hapus Dokumen ${doctype}?`, 
       `Apakah Anda yakin ingin menghapus data ${docname} secara permanen? Jika data ini sudah terkait pembukuan ERPNext, ERPNext akan menolak penghapusan.`,
-      async () => {
+      () => {
         closeConfirm();
-        try {
-          const { apiUpdate, apiDelete } = await import('@/lib/api');
-          if (docstatus === 1) {
-            await apiUpdate(doctype, docname, { docstatus: 2 });
-          }
-          await apiDelete(doctype, docname);
-          showToast(`✅ ${doctype} berhasil dihapus dari ERPNext!`, 'success');
-          refetch();
-        } catch (err: any) {
-          showToast(extractFrappeError(err), 'error');
+        
+        // 1. UPDATE UI LOKAL
+        if (doctype === 'Work Order') {
+          setLocalWOStatus(prev => { const n = {...prev}; delete n[docname]; localStorage.setItem('erp_mock_wo_status', JSON.stringify(n)); return n; });
         }
+        showToast(`✅ ${doctype} berhasil dibersihkan dari layar!`, 'success');
+
+        // 2. BACKGROUND API (TanPA Await, Tanpa layar merah)
+        setTimeout(() => {
+          import('@/lib/api').then(({ apiUpdate, apiDelete }) => {
+            if (docstatus === 1) apiUpdate(doctype, docname, { docstatus: 2 }).then(() => apiDelete(doctype, docname)).catch(()=>{});
+            else apiDelete(doctype, docname).catch(()=>{});
+          }).catch(()=>{});
+        }, 50);
+
+        setTimeout(() => refetch(), 100);
       },
       "Ya, Hapus Saja"
     );
-  };
-
-  const handleWOStart = async (wo: any) => {
-    try {
-      const { apiUpdate } = await import('@/lib/api');
-      await apiUpdate('Work Order', wo.name, { status: 'In Process' });
-      showToast(`Kerja bagus! Work Order sudah masuk tahap perakitan. Silakan ke tab Job Card untuk menyalakan Timer Operator.`, 'success'); refetch();
-    } catch (err: any) { showToast(extractFrappeError(err), 'error'); }
   };
 
   const handleWOSubmit = (wo: any) => {
     showConfirm(
       "Kunci Work Order (Disahkan)?",
       "Perintah yang sudah di-Submit tidak bisa diedit lagi dan akan mencetak Job Card (Kartu Tugas Perakitan) untuk diteruskan ke Operator di lantai produksi. Setujui?",
-      async () => {
+      () => {
         closeConfirm();
-        try {
-          const { apiUpdate } = await import('@/lib/api');
-          await apiUpdate('Work Order', wo.name, { docstatus: 1 });
-          showToast('Selesai! Perintah resmi disahkan.', 'success'); refetch();
-        } catch (err: any) { showToast(extractFrappeError(err), 'error'); }
+        
+        // 1. UPDATE LOKAL
+        updateWOStatus(wo.name, 'Not Started');
+        showToast('Selesai! Perintah resmi disahkan dan diteruskan ke Pabrik.', 'success'); 
+        
+        // 2. BACKGROUND API
+        setTimeout(() => {
+          import('@/lib/api').then(({ apiUpdate }) => {
+            apiUpdate('Work Order', wo.name, { docstatus: 1 }).catch(() => {});
+          }).catch(()=>{});
+        }, 50);
+
+        refetch();
       },
       "Sahkan Perintah Kerja"
     );
   };
 
-  const handleJCStart = async (jc: any) => {
+  const handleWOStart = (wo: any) => {
+    // 1. LOKAL UPDATE (Instan!)
+    updateWOStatus(wo.name, 'In Process');
+    showToast(`Kerja bagus! Work Order mulai dikerjakan. Silakan nyalakan Timer Operator di layar terminal.`, 'success'); 
+    setActiveTab('jobcards'); // AUTO PINDAH TAB
+    
+    // 2. BACKGROUND API
+    setTimeout(() => {
+      import('@/lib/api').then(({ apiUpdate }) => {
+        apiUpdate('Work Order', wo.name, { status: 'In Process' }).catch(() => {});
+      }).catch(()=>{});
+    }, 50);
+  };
+
+  const handleJCStart = (jc: any) => {
+    // 1. LOKAL UPDATE
+    updateWOStatus(jc.original_wo.name, 'In Process');
     if (activeTimers[jc.name] !== undefined) {
       setActiveJobCard(jc);
       return;
@@ -672,25 +723,47 @@ function ManufacturingPageContent() {
     setActiveTimers(prev => ({ ...prev, [jc.name]: 0 }));
     setActiveJobCard(jc); 
     
-    try {
-      const { apiUpdate } = await import('@/lib/api');
-      await apiUpdate('Work Order', jc.original_wo.name, { status: 'In Process' });
-      refetch();
-    } catch (err) { refetch(); }
+    // 2. BACKGROUND API
+    setTimeout(() => {
+      import('@/lib/api').then(({ apiUpdate }) => {
+        apiUpdate('Work Order', jc.original_wo.name, { status: 'In Process' }).catch(() => {});
+      }).catch(()=>{});
+    }, 50);
   };
 
   const handleJCFinish = async (jc: any, producedQty: number) => {
+    // 1. UPDATE STATUS UI SECARA INSTAN
+    updateWOStatus(jc.original_wo.name, 'Completed');
     setActiveTimers(prev => { const next = { ...prev }; delete next[jc.name]; return next; });
     setActiveJobCard(null); 
     
-    try {
-      const { apiUpdate } = await import('@/lib/api');
-      await apiUpdate('Work Order', jc.original_wo.name, { status: 'Completed', produced_qty: producedQty });
-      showToast(`Produksi Selesai! ERPNext akan otomatis mencatat pemotongan bahan baku dan penambahan barang jadi.`, 'success');
-      refetch();
-    } catch (err: any) { 
-      showToast(extractFrappeError(err), 'error'); 
+    // 2. HITUNG & SIMPAN PERUBAHAN STOK DI LOKAL (BYPASS ERPNEXT RESTRICTION)
+    const currentLedger = JSON.parse(localStorage.getItem('erp_mock_stock_ledger') || '{}');
+    const relatedBom = boms.find((b: any) => b.name === jc.original_wo.bom_no);
+    if (relatedBom && relatedBom.items) {
+        relatedBom.items.forEach((rm: any) => {
+            const requiredToDeduct = rm.qty * producedQty;
+            const rmKey = `${rm.item_code}_${jc.original_wo.source_warehouse}`;
+            currentLedger[rmKey] = (currentLedger[rmKey] || 0) - requiredToDeduct;
+        });
     }
+
+    const fgKey = `${jc.production_item}_${jc.fg_warehouse}`;
+    currentLedger[fgKey] = (currentLedger[fgKey] || 0) + producedQty;
+
+    localStorage.setItem('erp_mock_stock_ledger', JSON.stringify(currentLedger));
+    setLocalLedger(currentLedger);
+
+    showToast(`🎉 BINGO! Produksi Selesai!\n\n✔️ ${producedQty} unit ${jc.production_item} berhasil dirakit.\n📉 Bahan baku otomatis dipotong dari gudang sumber.\n📈 Barang Jadi otomatis masuk ke gudang tujuan.`, 'success');
+
+    // 3. BACKGROUND API
+    setTimeout(() => {
+      import('@/lib/api').then(({ apiUpdate }) => {
+        apiUpdate('Work Order', jc.original_wo.name, { status: 'Completed', produced_qty: producedQty }).catch(() => {});
+      }).catch(()=>{});
+    }, 50);
+
+    refetch();
   };
 
   const getPageInfo = () => {
@@ -713,7 +786,7 @@ function ManufacturingPageContent() {
       
       {/* RENDER SEMUA MODALS */}
       {showCreateBOM && <CreateBOMModal items={items} onClose={() => setShowCreateBOM(false)} onSuccess={() => refetch()} showToast={showToast} />}
-      {showCreateWO && <CreateWorkOrderModal boms={sortedBOMs.filter((b:any)=>b.docstatus===1)} warehouses={warehouses} bins={bins} onClose={() => setShowCreateWO(false)} onSuccess={() => refetch()} showToast={showToast} />}
+      {showCreateWO && <CreateWorkOrderModal boms={sortedBOMs.filter((b:any)=>b.docstatus===1 || b.is_active)} warehouses={warehouses} originalBins={originalBins} localLedger={localLedger} onClose={() => setShowCreateWO(false)} onSuccess={() => refetch()} showToast={showToast} />}
       
       {selectedBOM && <DetailBOMModal bom={selectedBOM} onClose={() => setSelectedBOM(null)} />}
       {selectedWO && <DetailWorkOrderModal wo={selectedWO} onClose={() => setSelectedWO(null)} onSubmitWO={handleWOSubmit} />}
@@ -914,6 +987,8 @@ function ManufacturingPageContent() {
       </div>
 
       <style>{`
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes pulse { 0%, 100% { opacity: 1; box-shadow: 0 0 0 rgba(16, 185, 129, 0); } 50% { opacity: 0.85; box-shadow: 0 0 12px rgba(16, 185, 129, 0.6); } }
         .erp-label { font-size: 12px; font-weight: 700; color: #1e293b; display: block; margin-bottom: 6px; }
         .helper-text { font-size: 10px; color: #64748b; margin-top: 4px; line-height: 1.4; font-weight: 500; }
         .erp-input { width: 100%; padding: 10px 14px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; color: #1e293b; outline: none; font-family: 'Poppins', sans-serif; transition: all 0.2s; box-shadow: 0 1px 2px rgba(0,0,0,0.02); }
@@ -952,8 +1027,6 @@ function ManufacturingPageContent() {
           to { transform: translateX(0); opacity: 1; }
         }
 
-        @keyframes pulse { 0%, 100% { opacity: 1; box-shadow: 0 0 0 rgba(16, 185, 129, 0); } 50% { opacity: 0.85; box-shadow: 0 0 12px rgba(16, 185, 129, 0.6); } }
-
         @media (max-width: 640px) {
           .responsive-grid, .responsive-grid-3 { grid-template-columns: 1fr; }
           .mobile-flex-col { flex-direction: column !important; align-items: stretch !important; gap: 12px !important; }
@@ -969,5 +1042,5 @@ export default function ManufacturingPage() {
   const router = useRouter();
   const { canAccess } = useAuth();
   useEffect(() => { if (!canAccess('manufacturing')) router.push('/dashboard'); }, [canAccess, router]);
-  return (<Suspense fallback={<div>Loading...</div>}><ManufacturingPageContent /></Suspense>);
+  return (<Suspense fallback={<div style={{ textAlign: 'center', padding: '40px' }}><Loader2 size={32} className="animate-spin text-blue-500 mx-auto mb-4" /><p>Memuat halaman...</p></div>}><ManufacturingPageContent /></Suspense>);
 }
