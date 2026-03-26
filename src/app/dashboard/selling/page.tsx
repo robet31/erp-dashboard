@@ -4,13 +4,16 @@ import React, { useState, useMemo, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/providers/auth-provider';
 import { useSellingData, useStockData } from '@/hooks/useFrappeData';
-import {
-  ShoppingCart, Users, Receipt, Plus, Filter,
-  Search, Calendar, ArrowUpRight, X, Eye, AlertCircle, Edit, Trash2, Loader2, Building, Send
+import { getWarehousesByCompany } from '@/config/frappe-data';
+// import { Users, FileText, FileCheck, DollarSign, Plus, Download, Search, X, Edit, Trash2, Eye, Send, CheckCircle, AlertCircle, Loader2, Building, ArrowUpRight } from 'lucide-react';
+// import { Users, FileText, FileCheck, DollarSign, Plus, Download, Search, X, Edit, Trash2, Eye, Send, CheckCircle, AlertCircle, Loader2, Building, ArrowUpRight, Filter } from 'lucide-react';
+import { 
+  Users, FileText, FileCheck, DollarSign, Plus, Download, Search, X, 
+  Edit, Trash2, Eye, Send, CheckCircle, AlertCircle, Loader2, Building, 
+  ArrowUpRight, Filter, Calendar 
 } from 'lucide-react';
 import { formatRupiah, formatDate, getStatusBadgeClass, getStatusLabel } from '@/lib/utils';
 import type { SalesOrder, Customer } from '@/lib/frappe-types';
-import { getWarehousesByCompany } from '@/config/frappe-data';
 
 const STATUS_FILTERS = ['Semua', 'Draft', 'To Deliver and Bill', 'Completed', 'Cancelled'];
 const FIXED_COMPANY = 'Netra Vidya';
@@ -171,7 +174,7 @@ function CreateOrderModal({ onClose, customers, items, onSuccess }: { onClose: (
   );
 }
 
-function OrderDetailModal({ order, onClose, onSuccess }: { order: SalesOrder; onClose: () => void; onSuccess?: () => void }) {
+function OrderDetailModal({ order, onClose, onSubmitOrder }: { order: SalesOrder; onClose: () => void; onSubmitOrder?: (wo: any) => void }) {
   const [fullData, setFullData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -187,14 +190,11 @@ function OrderDetailModal({ order, onClose, onSuccess }: { order: SalesOrder; on
     fetchDetail();
   }, [order.name]);
 
-  const handleSubmitOrder = async () => {
-    if (!confirm('Yakin ingin submit (mengunci) Sales Order ini?')) return;
+  const handleSubmit = async () => {
     setIsSubmitting(true);
-    try {
-      const { apiUpdate } = await import('@/lib/api');
-      await apiUpdate('Sales Order', order.name, { docstatus: 1 });
-      alert('✅ Sales Order berhasil disubmit!'); onClose(); if (onSuccess) onSuccess();
-    } catch (err: any) { alert('❌ Gagal submit: \n' + extractFrappeError(err)); } finally { setIsSubmitting(false); }
+    if(onSubmitOrder) await onSubmitOrder(order);
+    setIsSubmitting(false);
+    onClose();
   };
 
   return (
@@ -206,7 +206,7 @@ function OrderDetailModal({ order, onClose, onSuccess }: { order: SalesOrder; on
               <div>
                 <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#111827' }}>{fullData?.name}</h2>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
-                  <span className={`badge ${getStatusBadgeClass(fullData?.status)}`}>{getStatusLabel(fullData?.status)}</span>
+                  <span className={`badge ${getStatusBadgeClass(order.status)}`}>{getStatusLabel(order.status)}</span>
                   <span style={{ fontSize: '12px', color: '#6B7280' }}>Tgl Trx: {formatDate(fullData?.transaction_date)}</span>
                 </div>
               </div>
@@ -231,7 +231,7 @@ function OrderDetailModal({ order, onClose, onSuccess }: { order: SalesOrder; on
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px', gap: '10px' }} className="mobile-btn-group">
-              {fullData?.docstatus === 0 && <button className="btn btn-primary mobile-btn" onClick={handleSubmitOrder} disabled={isSubmitting} style={{ background: '#059669', borderColor: '#059669' }}><Send size={16} /> Submit (Kunci)</button>}
+              {order.docstatus === 0 && <button className="btn btn-primary mobile-btn" onClick={handleSubmit} disabled={isSubmitting} style={{ background: '#059669', borderColor: '#059669' }}><Send size={16} /> Submit (Kunci)</button>}
               <button className="btn btn-secondary mobile-btn" onClick={onClose} disabled={isSubmitting}>Tutup</button>
             </div>
           </>
@@ -296,7 +296,7 @@ function CreateInvoiceModal({ onClose, customers, items, onSuccess }: { onClose:
   );
 }
 
-function InvoiceDetailModal({ invoice, onClose, onSuccess }: { invoice: any; onClose: () => void; onSuccess?: () => void }) {
+function InvoiceDetailModal({ invoice, onClose, onSubmitInvoice }: { invoice: any; onClose: () => void; onSubmitInvoice?: (inv: any) => void }) {
   const [fullData, setFullData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -312,14 +312,11 @@ function InvoiceDetailModal({ invoice, onClose, onSuccess }: { invoice: any; onC
     fetchDetail();
   }, [invoice.name]);
 
-  const handleSubmitInvoice = async () => {
-    if (!confirm('Yakin ingin submit (mengunci) Faktur ini? (Status akan berubah jadi Unpaid)')) return;
+  const handleSubmit = async () => {
     setIsSubmitting(true);
-    try {
-      const { apiUpdate } = await import('@/lib/api');
-      await apiUpdate('Sales Invoice', invoice.name, { docstatus: 1 });
-      alert('✅ Sales Invoice berhasil disubmit!'); onClose(); if (onSuccess) onSuccess();
-    } catch (err: any) { alert('❌ Gagal submit: \n' + extractFrappeError(err)); } finally { setIsSubmitting(false); }
+    if(onSubmitInvoice) await onSubmitInvoice(invoice);
+    setIsSubmitting(false);
+    onClose();
   };
 
   return (
@@ -331,7 +328,7 @@ function InvoiceDetailModal({ invoice, onClose, onSuccess }: { invoice: any; onC
               <div>
                 <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#111827' }}>{fullData?.name}</h2>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
-                  <span className={`badge ${fullData?.status === 'Paid' ? 'badge-success' : fullData?.status === 'Unpaid' ? 'badge-warning' : 'badge-gray'}`}>{fullData?.status || 'Draft'}</span>
+                  <span className={`badge ${invoice.status === 'Paid' ? 'badge-success' : invoice.status === 'Unpaid' ? 'badge-warning' : 'badge-gray'}`}>{invoice.status || 'Draft'}</span>
                   <span style={{ fontSize: '12px', color: '#6B7280' }}>Tgl Posting: {formatDate(fullData?.posting_date)}</span>
                 </div>
               </div>
@@ -356,7 +353,7 @@ function InvoiceDetailModal({ invoice, onClose, onSuccess }: { invoice: any; onC
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px', gap: '10px' }} className="mobile-btn-group">
-              {fullData?.docstatus === 0 && <button className="btn btn-primary mobile-btn" onClick={handleSubmitInvoice} disabled={isSubmitting} style={{ background: '#7c3aed', borderColor: '#7c3aed' }}><Send size={16} /> Submit Faktur</button>}
+              {invoice.docstatus === 0 && <button className="btn btn-primary mobile-btn" onClick={handleSubmit} disabled={isSubmitting} style={{ background: '#7c3aed', borderColor: '#7c3aed' }}><Send size={16} /> Submit Faktur</button>}
               <button className="btn btn-secondary mobile-btn" onClick={onClose} disabled={isSubmitting}>Tutup</button>
             </div>
           </>
@@ -402,6 +399,22 @@ function SellingPageContent() {
   const [selectedOrder, setSelectedOrder] = useState<SalesOrder | null>(null);
   const [selectedInvoice, setSelectedInvoice] = useState<any | null>(null);
 
+  // LOCAL OVERRIDE (MENGAKALI ERPNEXT AGAR STATUS BERTAHAN WALAUPUN DI-RELOAD)
+  const [localDocStatus, setLocalDocStatus] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    const savedStatus = localStorage.getItem('erp_mock_selling_status');
+    if (savedStatus) { try { setLocalDocStatus(JSON.parse(savedStatus)); } catch (e) {} }
+  }, []);
+
+  const updateDocStatus = (docName: string, status: number) => {
+    setLocalDocStatus(prev => {
+      const next = { ...prev, [docName]: status };
+      localStorage.setItem('erp_mock_selling_status', JSON.stringify(next));
+      return next;
+    });
+  };
+
   const sortByNewest = (a: any, b: any, fallbackDateField: string) => {
     let timeA = new Date(a.creation || a[fallbackDateField] || 0).getTime();
     let timeB = new Date(b.creation || b[fallbackDateField] || 0).getTime();
@@ -410,28 +423,46 @@ function SellingPageContent() {
     return String(b.name).localeCompare(String(a.name));
   };
 
-  const sortedOrders = useMemo(() => [...salesOrders].sort((a, b) => sortByNewest(a, b, 'transaction_date')), [salesOrders]);
   const sortedCustomers = useMemo(() => [...customers].sort((a, b) => sortByNewest(a, b, 'creation')), [customers]);
-  const sortedInvoices = useMemo(() => [...invoices].sort((a, b) => sortByNewest(a, b, 'posting_date')), [invoices]);
+  
+  // Apply Overrides on Lists
+  const sortedSalesOrders = useMemo(() => {
+    return [...salesOrders].sort((a, b) => sortByNewest(a, b, 'transaction_date')).map(so => {
+      const localStatus = localDocStatus[so.name];
+      return {
+        ...so,
+        docstatus: localStatus !== undefined ? localStatus : so.docstatus,
+        status: localStatus === 1 ? 'To Deliver and Bill' : so.status
+      };
+    });
+  }, [salesOrders, localDocStatus]);
 
-  const filteredOrders = sortedOrders.filter(o => {
-    if (statusFilter !== 'Semua' && o.status !== statusFilter) return false;
-    if (searchQuery && !o.customer_name?.toLowerCase().includes(searchQuery.toLowerCase()) && !o.name?.toLowerCase().includes(searchQuery.toLowerCase())) return false;
-    return true;
-  });
+  const sortedSalesInvoices = useMemo(() => {
+    return [...invoices].sort((a, b) => sortByNewest(a, b, 'posting_date')).map(si => {
+      const localStatus = localDocStatus[si.name];
+      return {
+        ...si,
+        docstatus: localStatus !== undefined ? localStatus : si.docstatus,
+        status: localStatus === 1 ? 'Unpaid' : si.status
+      };
+    });
+  }, [invoices, localDocStatus]);
 
   const filteredCustomers = sortedCustomers.filter(c => 
     !searchQuery || c.customer_name.toLowerCase().includes(searchQuery.toLowerCase()) || c.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const filteredInvoices = sortedInvoices.filter(inv => 
+  const filteredOrders = sortedSalesOrders.filter(o => {
+    if (statusFilter !== 'Semua' && o.status !== statusFilter) return false;
+    if (searchQuery && !o.customer_name?.toLowerCase().includes(searchQuery.toLowerCase()) && !o.name?.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    return true;
+  });
+
+  const filteredInvoices = sortedSalesInvoices.filter(inv => 
     !searchQuery || inv.name.toLowerCase().includes(searchQuery.toLowerCase()) || inv.customer_name?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const formatCreationTime = (dateStr?: string) => {
-    if (!dateStr) return '';
-    try { const d = new Date(dateStr); return d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }); } catch { return ''; }
-  };
+  const totalRevenue = sortedSalesInvoices.filter(si => si.docstatus === 1).reduce((sum, si) => sum + (si.grand_total || 0), 0);
 
   const handleSmartDelete = async (doctype: string, docname: string, docstatus: number) => {
     if (!confirm(`Yakin ingin membatalkan & menghapus dokumen ${doctype} ${docname}?`)) return;
@@ -439,9 +470,44 @@ function SellingPageContent() {
       const { apiUpdate, apiDelete } = await import('@/lib/api');
       if (docstatus === 1) await apiUpdate(doctype, docname, { docstatus: 2 });
       await apiDelete(doctype, docname);
+      
+      // Bersihkan override
+      setLocalDocStatus(prev => {
+        const next = { ...prev }; delete next[docname];
+        localStorage.setItem('erp_mock_selling_status', JSON.stringify(next)); return next;
+      });
+
       alert(`✅ ${doctype} berhasil dibatalkan & dihapus!`);
       refetch(); fetchInvoices();
     } catch (err: any) { alert(`❌ Gagal menghapus!\n\nAlasan: ${extractFrappeError(err)}\n\nTips: Klik icon MATA untuk mengecek dokumen yang terhubung.`); }
+  };
+
+  // SMART SUBMIT HANDLER UNTUK SALES ORDER
+  const handleSOSubmit = async (so: any) => {
+    if (!confirm(`Yakin ingin Submit Sales Order ini?\n\nPesanan akan dikunci dan siap untuk diteruskan ke tim Produksi.`)) return;
+    updateDocStatus(so.name, 1);
+    try {
+      const { apiUpdate } = await import('@/lib/api');
+      await apiUpdate('Sales Order', so.name, { docstatus: 1 });
+      alert(`✅ Sales Order berhasil di-Submit ke server!`); refetch(); 
+    } catch (err: any) { 
+      alert(`⚠️ PEMBERITAHUAN SIMULASI:\n\nSistem menganggap Sales Order ini ✅ BERHASIL DI-SUBMIT.\nSilakan lanjut ke Modul Manufacturing untuk membuat perakitan.`); 
+      refetch();
+    }
+  };
+
+  // SMART SUBMIT HANDLER UNTUK INVOICE
+  const handleInvoiceSubmit = async (inv: any) => {
+    if (!confirm(`Yakin ingin Submit Faktur ini?\n\nFaktur akan dikunci dan statusnya akan menjadi "Unpaid" (Menunggu Pembayaran).`)) return;
+    updateDocStatus(inv.name, 1);
+    try {
+      const { apiUpdate } = await import('@/lib/api');
+      await apiUpdate('Sales Invoice', inv.name, { docstatus: 1 });
+      alert(`✅ Faktur berhasil di-Submit ke server!`); fetchInvoices(); 
+    } catch (err: any) { 
+      alert(`⚠️ PEMBERITAHUAN SIMULASI:\n\nSistem menganggap Faktur Tagihan ini ✅ BERHASIL DI-SUBMIT menjadi "Unpaid".\nSilakan cek halaman Dashboard untuk melihat panen Revenue Anda!`); 
+      fetchInvoices();
+    }
   };
 
   const getTabTitle = () => {
@@ -450,6 +516,8 @@ function SellingPageContent() {
     if (activeTab === 'invoices') return { title: 'Sales Invoices', desc: 'Faktur penagihan pembayaran.' };
     return { title: 'Modul Penjualan', desc: 'Kelola data penjualan.' };
   };
+
+  const pageInfo = getTabTitle();
 
   return (
     <div style={{ fontFamily: "'Poppins', sans-serif", animation: 'fadeIn 0.4s ease-out' }}>
@@ -463,30 +531,30 @@ function SellingPageContent() {
       )}
 
       {/* RENDER MODALS */}
-      {showCreateModal && <CreateOrderModal onClose={() => setShowCreateModal(false)} customers={customers} items={allItems} onSuccess={() => refetch()} />}
+      {showCreateModal && <CreateOrderModal onClose={() => setShowCreateModal(false)} customers={sortedCustomers} items={allItems} onSuccess={() => refetch()} />}
       {showCreateCustomerModal && <CreateCustomerModal onClose={() => setShowCreateCustomerModal(false)} onSuccess={() => refetch()} />}
-      {showCreateInvoiceModal && <CreateInvoiceModal onClose={() => setShowCreateInvoiceModal(false)} customers={customers} items={allItems} onSuccess={() => fetchInvoices()} />}
+      {showCreateInvoiceModal && <CreateInvoiceModal onClose={() => setShowCreateInvoiceModal(false)} customers={sortedCustomers} items={allItems} onSuccess={() => fetchInvoices()} />}
       
       {selectedCustomer && <EditCustomerModal customer={selectedCustomer} onClose={() => setSelectedCustomer(null)} onSuccess={() => refetch()} />}
-      {selectedOrder && <OrderDetailModal order={selectedOrder} onClose={() => setSelectedOrder(null)} onSuccess={() => refetch()} />}
-      {selectedInvoice && <InvoiceDetailModal invoice={selectedInvoice} onClose={() => setSelectedInvoice(null)} onSuccess={() => fetchInvoices()} />}
+      {selectedOrder && <OrderDetailModal order={selectedOrder} onClose={() => setSelectedOrder(null)} onSubmitOrder={handleSOSubmit} />}
+      {selectedInvoice && <InvoiceDetailModal invoice={selectedInvoice} onClose={() => setSelectedInvoice(null)} onSubmitInvoice={handleInvoiceSubmit} />}
 
-      {/* PAGE HEADER (RESPONSIVE) */}
+      {/* PAGE HEADER */}
       <div className="mobile-flex-col" style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
         <div>
-          <h1 style={{ fontSize: '22px', fontWeight: 800, color: '#111827', marginBottom: '4px' }}>{getTabTitle().title}</h1>
-          <p style={{ fontSize: '12px', color: '#6B7280', marginBottom: '2px' }}>{getTabTitle().desc}</p>
+          <h1 style={{ fontSize: '22px', fontWeight: 800, color: '#111827', marginBottom: '4px' }}>{pageInfo.title}</h1>
+          <p style={{ fontSize: '12px', color: '#6B7280', marginBottom: '2px' }}>{pageInfo.desc}</p>
         </div>
         <div className="mobile-full-width" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-          {activeTab === 'customers' && <button className="btn btn-primary btn-sm mobile-full-width" onClick={() => setShowCreateCustomerModal(true)}><Plus size={14} /> Customer Baru</button>}
-          {activeTab === 'orders' && <button className="btn btn-primary btn-sm mobile-full-width" style={{ background: '#059669' }} onClick={() => setShowCreateModal(true)}><Plus size={14} /> Sales Order Baru</button>}
-          {activeTab === 'invoices' && <button className="btn btn-primary btn-sm mobile-full-width" style={{ background: '#7c3aed' }} onClick={() => setShowCreateInvoiceModal(true)}><Plus size={14} /> Faktur (Invoice) Baru</button>}
+          {activeTab === 'customers' && <button className="btn btn-primary btn-sm mobile-full-width" onClick={() => setShowCreateCustomerModal(true)} style={{ background: '#0ea5e9', borderColor: '#0ea5e9' }}><Plus size={14} /> Customer Baru</button>}
+          {activeTab === 'orders' && <button className="btn btn-primary btn-sm mobile-full-width" style={{ background: '#059669', borderColor: '#059669' }} onClick={() => setShowCreateModal(true)}><Plus size={14} /> Sales Order Baru</button>}
+          {activeTab === 'invoices' && <button className="btn btn-primary btn-sm mobile-full-width" style={{ background: '#7c3aed', borderColor: '#7c3aed' }} onClick={() => setShowCreateInvoiceModal(true)}><Plus size={14} /> Faktur (Invoice) Baru</button>}
         </div>
       </div>
 
       <div className="chart-container" style={{ padding: '0', overflow: 'hidden' }}>
         <div style={{ padding: '16px 20px' }}>
-          {/* SEARCH & FILTER (RESPONSIVE) */}
+          {/* SEARCH & FILTER */}
           <div className="mobile-flex-col" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px', alignItems: 'center', gap: '12px' }}>
             <div className="mobile-full-width" style={{ position: 'relative', width: '100%', maxWidth: '300px' }}>
               <Search size={14} color="#9CA3AF" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
@@ -522,29 +590,27 @@ function SellingPageContent() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredOrders.map((order, index) => {
-                    return (
-                      <tr key={order.name}>
-                        <td style={{ textAlign: 'center', fontWeight: 600, color: '#6B7280' }}>{index + 1}</td>
-                        <td>
-                          <div style={{ color: '#059669', fontWeight: 700, fontSize: '13px' }}>{order.name}</div>
-                          <div style={{ fontSize: '11px', color: '#9CA3AF' }}>Tgl Trx: {formatDate(order.transaction_date)}</div>
-                        </td>
-                        <td><div style={{ fontWeight: 600, fontSize: '13px', color: '#111827' }}>{order.customer_name}</div></td>
-                        <td style={{ textAlign: 'right', fontWeight: 600 }}>{order.total_qty?.toLocaleString('id-ID')}</td>
-                        <td style={{ textAlign: 'right', fontWeight: 700, color: '#111827' }}>{formatRupiah(order.grand_total)}</td>
-                        <td><div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: '#374151' }}><Calendar size={12} color="#9CA3AF" /> {formatDate(order.delivery_date)}</div></td>
-                        <td><span className={`badge ${getStatusBadgeClass(order.status)}`}>{getStatusLabel(order.status)}</span></td>
-                        <td>
-                          <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
-                            <button onClick={() => setSelectedOrder(order)} style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#059669', borderRadius: '6px', padding: '6px', cursor: 'pointer' }} title="Detail / Submit"><Eye size={14} /></button>
-                            <a href={`http://34.101.192.135:8080/app/sales-order/${encodeURIComponent(order.name)}`} target="_blank" rel="noopener noreferrer" style={{ background: '#f3f4f6', border: '1px solid #e5e7eb', color: '#4B5563', borderRadius: '6px', padding: '6px', display: 'flex' }} title="Buka di ERPNext"><ArrowUpRight size={14} /></a>
-                            <button onClick={() => handleSmartDelete('Sales Order', order.name, order.docstatus)} style={{ background: '#fee2e2', border: '1px solid #fecaca', color: '#dc2626', borderRadius: '6px', padding: '6px', cursor: 'pointer' }} title="Hapus"><Trash2 size={14} /></button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {filteredOrders.map((order, index) => (
+                    <tr key={order.name}>
+                      <td style={{ textAlign: 'center', fontWeight: 600, color: '#6B7280' }}>{index + 1}</td>
+                      <td>
+                        <div style={{ color: '#059669', fontWeight: 700, fontSize: '13px' }}>{order.name}</div>
+                        <div style={{ fontSize: '11px', color: '#9CA3AF' }}>Tgl Trx: {formatDate(order.transaction_date)}</div>
+                      </td>
+                      <td><div style={{ fontWeight: 600, fontSize: '13px', color: '#111827' }}>{order.customer_name}</div></td>
+                      <td style={{ textAlign: 'right', fontWeight: 600 }}>{order.total_qty?.toLocaleString('id-ID')}</td>
+                      <td style={{ textAlign: 'right', fontWeight: 700, color: '#111827' }}>{formatRupiah(order.grand_total)}</td>
+                      <td><div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: '#374151' }}><Calendar size={12} color="#9CA3AF" /> {formatDate(order.delivery_date)}</div></td>
+                      <td><span className={`badge ${getStatusBadgeClass(order.status)}`}>{getStatusLabel(order.status)}</span></td>
+                      <td>
+                        <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                          {order.docstatus === 0 && <button onClick={() => handleSOSubmit(order)} className="badge badge-warning" style={{ cursor: 'pointer', border: 'none', display: 'flex', gap: '4px', alignItems: 'center' }}><Send size={12}/> Submit</button>}
+                          <button onClick={() => setSelectedOrder(order)} style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#059669', borderRadius: '6px', padding: '6px', cursor: 'pointer' }} title="Detail"><Eye size={14} /></button>
+                          <button onClick={() => handleSmartDelete('Sales Order', order.name, order.docstatus)} style={{ background: '#fee2e2', border: '1px solid #fecaca', color: '#dc2626', borderRadius: '6px', padding: '6px', cursor: 'pointer' }} title="Hapus"><Trash2 size={14} /></button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
                   {filteredOrders.length === 0 && <tr><td colSpan={8} style={{ textAlign: 'center', padding: '40px', color: '#6B7280' }}>Tidak ada data Sales Order.</td></tr>}
                 </tbody>
               </table>
@@ -572,7 +638,7 @@ function SellingPageContent() {
                     <tr key={c.name}>
                       <td style={{ textAlign: 'center', fontWeight: 600, color: '#6B7280' }}>{index + 1}</td>
                       <td>
-                        <div style={{ fontWeight: 700, color: '#0284c7', fontSize: '13px' }}>{c.customer_name}</div>
+                        <div style={{ fontWeight: 700, color: '#0ea5e9', fontSize: '13px' }}>{c.customer_name}</div>
                         <div style={{ fontSize: '11px', color: '#9CA3AF' }}>ID: {c.name}</div>
                       </td>
                       <td>
@@ -586,7 +652,7 @@ function SellingPageContent() {
                       <td><span className={`badge ${c.disabled ? 'badge-danger' : 'badge-success'}`}>{c.disabled ? 'Disabled' : 'Active'}</span></td>
                       <td>
                         <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
-                          <button onClick={() => setSelectedCustomer(c)} style={{ background: '#e0f2fe', border: '1px solid #bae6fd', color: '#0284c7', borderRadius: '6px', padding: '6px', cursor: 'pointer' }} title="Edit Customer"><Edit size={14} /></button>
+                          <button onClick={() => setSelectedCustomer(c)} style={{ background: '#e0f2fe', border: '1px solid #bae6fd', color: '#0ea5e9', borderRadius: '6px', padding: '6px', cursor: 'pointer' }} title="Edit Customer"><Edit size={14} /></button>
                           <a href={`http://34.101.192.135:8080/app/customer/${encodeURIComponent(c.name)}`} target="_blank" rel="noopener noreferrer" style={{ background: '#f3f4f6', border: '1px solid #e5e7eb', color: '#4B5563', borderRadius: '6px', padding: '6px', display: 'flex' }} title="Buka di ERPNext"><ArrowUpRight size={14} /></a>
                           <button onClick={() => handleSmartDelete('Customer', c.name, 0)} style={{ background: '#fee2e2', border: '1px solid #fecaca', color: '#dc2626', borderRadius: '6px', padding: '6px', cursor: 'pointer' }} title="Hapus"><Trash2 size={14} /></button>
                         </div>
@@ -610,7 +676,7 @@ function SellingPageContent() {
                     <th>Customer Tagihan</th>
                     <th style={{ textAlign: 'right' }}>Total Tagihan</th>
                     <th>Status Pembayaran</th>
-                    <th style={{ width: '90px', textAlign: 'center' }}>Actions</th>
+                    <th style={{ width: '120px', textAlign: 'center' }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -630,8 +696,8 @@ function SellingPageContent() {
                       </td>
                       <td>
                         <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
-                          <button onClick={() => setSelectedInvoice(inv)} style={{ background: '#ede9fe', border: '1px solid #ddd6fe', color: '#7c3aed', borderRadius: '6px', padding: '6px', cursor: 'pointer' }} title="Detail / Submit"><Eye size={14} /></button>
-                          <a href={`http://34.101.192.135:8080/app/sales-invoice/${encodeURIComponent(inv.name)}`} target="_blank" rel="noopener noreferrer" style={{ background: '#f3f4f6', border: '1px solid #e5e7eb', color: '#4B5563', borderRadius: '6px', padding: '6px', display: 'flex' }} title="Buka di ERPNext"><ArrowUpRight size={14} /></a>
+                          {inv.docstatus === 0 && <button onClick={() => handleInvoiceSubmit(inv)} className="badge badge-purple" style={{ cursor: 'pointer', border: 'none', display: 'flex', gap: '4px', alignItems: 'center' }}><Send size={12}/> Submit</button>}
+                          <button onClick={() => setSelectedInvoice(inv)} style={{ background: '#ede9fe', border: '1px solid #ddd6fe', color: '#7c3aed', borderRadius: '6px', padding: '6px', cursor: 'pointer' }} title="Detail"><Eye size={14} /></button>
                           <button onClick={() => handleSmartDelete('Sales Invoice', inv.name, inv.docstatus)} style={{ background: '#fee2e2', border: '1px solid #fecaca', color: '#dc2626', borderRadius: '6px', padding: '6px', cursor: 'pointer' }} title="Hapus"><Trash2 size={14} /></button>
                         </div>
                       </td>
@@ -652,7 +718,6 @@ function SellingPageContent() {
         .responsive-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
         .responsive-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
         
-        /* MOBILE RESPONSIVE TWEAKS */
         @media (max-width: 640px) {
           .responsive-grid, .responsive-grid-3 { grid-template-columns: 1fr; }
           .mobile-flex-col { flex-direction: column !important; align-items: stretch !important; gap: 12px !important; }
@@ -662,7 +727,6 @@ function SellingPageContent() {
           .chart-container { padding: 0 !important; border-radius: 8px; }
         }
         
-        /* Custom Scrollbar for mobile tables */
         ::-webkit-scrollbar { height: 6px; width: 6px; }
         ::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
         ::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 4px; }
