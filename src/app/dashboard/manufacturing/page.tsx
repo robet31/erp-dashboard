@@ -4,7 +4,7 @@ import React, { useState, useMemo, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useManufacturingData, useStockData } from '@/hooks/useFrappeData';
 import {
-  Cog, Plus, X, Trash2, Eye, Search, Layers, Wrench, PlayCircle, CheckCircle, AlertCircle, Send, Timer, MonitorPlay, CheckSquare, Loader2
+  Cog, Plus, X, Trash2, Eye, Search, Layers, Wrench, PlayCircle, CheckCircle, AlertCircle, Send, Timer, MonitorPlay, CheckSquare, Loader2, Info
 } from 'lucide-react';
 import { getWarehousesByCompany } from '@/config/frappe-data';
 
@@ -52,54 +52,84 @@ function CreateBOMModal({ onClose, items, onSuccess }: any) {
     try {
       const selectedMainItem = items.find((i: any) => i.item_code === form.item);
       const bomData = {
-        item: form.item, quantity: parseFloat(form.quantity), uom: selectedMainItem?.stock_uom || 'Nos',
-        company: FIXED_COMPANY, is_active: 1, is_default: 1,
+        item: form.item, 
+        quantity: parseFloat(form.quantity), 
+        uom: selectedMainItem?.stock_uom || 'Nos',
+        company: FIXED_COMPANY, 
+        is_active: 1, 
         items: bomItems.map(bi => {
           const itemDetail = items.find((it: any) => it.item_code === bi.item_code);
           return { item_code: bi.item_code, qty: parseFloat(String(bi.qty)), uom: itemDetail?.stock_uom || 'Nos', rate: itemDetail?.standard_rate || 0 };
         })
       };
+      
       const { apiCreate, apiUpdate } = await import('@/lib/api');
       const res: any = await apiCreate('BOM', bomData);
+      
       const docName = res.data?.name || res.name;
       if(docName) await apiUpdate('BOM', docName, { docstatus: 1 });
-      alert('✅ BOM Berhasil dibuat dan diaktifkan!'); onClose(); if (onSuccess) onSuccess();
-    } catch (err: any) { setError(extractFrappeError(err, "Gagal membuat BOM.")); } finally { setIsSubmitting(false); }
+      
+      alert('✅ Resep BOM Berhasil dibuat dan langsung Aktif!'); onClose(); if (onSuccess) onSuccess();
+    } catch (err: any) { setError(extractFrappeError(err, "Gagal membuat BOM. Pastikan item yang dipilih valid.")); } finally { setIsSubmitting(false); }
   };
 
   return (
     <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal-content" style={{ width: '100%', maxWidth: '520px', margin: '0 16px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
-          <h2 style={{ fontSize: '18px', fontWeight: 800 }}>Buat BOM Baru</h2>
-          <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer' }}><X size={20} /></button>
-        </div>
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      <div className="modal-content" style={{ width: '100%', maxWidth: '560px', margin: '0 16px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px', alignItems: 'center' }}>
           <div>
-            <label className="erp-label">Produk Akhir (Item Jadi) *</label>
-            <select required className="erp-input" value={form.item} onChange={e => setForm(f => ({ ...f, item: e.target.value }))}>
-              <option value="">-- Pilih Item --</option>
-              {items.map((i: any) => <option key={i.name} value={i.item_code}>{i.item_code} - {i.item_name}</option>)}
-            </select>
+            <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#111827', margin: 0 }}>Buat Resep Baru (BOM)</h2>
+            <p style={{ fontSize: '12px', color: '#6B7280', marginTop: '2px' }}>Bill of Materials untuk panduan pabrik</p>
           </div>
-          <div style={{ borderTop: '1px solid #eee', paddingTop: '15px' }}>
-            <p style={{ fontWeight: 700, fontSize: '13px', marginBottom: '10px', color: COLOR_PRIMARY }}>Daftar Bahan Baku:</p>
+          <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', color: '#6B7280' }}><X size={20} /></button>
+        </div>
+        
+        <div style={{ background: '#eff6ff', padding: '12px', borderRadius: '8px', border: `1px solid ${COLOR_PRIMARY}30`, display: 'flex', gap: '8px', marginBottom: '16px' }}>
+          <Info size={16} color={COLOR_PRIMARY} style={{ flexShrink: 0, marginTop: '2px' }} />
+          <p style={{ fontSize: '11px', color: '#1e3a8a', lineHeight: 1.4, margin: 0 }}>BOM (Bill of Materials) adalah resep. Sistem butuh tahu barang apa yang ingin dihasilkan dan komponen apa saja yang harus diambil dari gudang.</p>
+        </div>
+
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <div className="responsive-grid">
+            <div>
+              <label className="erp-label">Produk Jadi (Item yang dirakit) *</label>
+              <select required className="erp-input" value={form.item} onChange={e => setForm(f => ({ ...f, item: e.target.value }))}>
+                <option value="">-- Pilih Laptop/Barang Jadi --</option>
+                {items.map((i: any) => <option key={i.name} value={i.item_code}>{i.item_code} - {i.item_name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="erp-label">Qty Dihasilkan *</label>
+              <input type="number" required min="1" className="erp-input" value={form.quantity} onChange={e => setForm(f => ({ ...f, quantity: e.target.value }))} />
+              <p style={{ fontSize: '10px', color: '#6B7280', marginTop: '4px' }}>Resep ini menghasilkan berapa unit?</p>
+            </div>
+          </div>
+          
+          <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '16px', marginTop: '4px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <p style={{ fontWeight: 700, fontSize: '13px', color: '#111827', margin: 0 }}>Daftar Bahan Baku (Komponen)</p>
+            </div>
+            
             {bomItems.map((bi, i) => (
-              <div key={i} style={{ display: 'flex', gap: '8px', marginBottom: '8px' }} className="mobile-flex-col">
-                <select style={{ flex: 3 }} className="erp-input" value={bi.item_code} onChange={e => { const n = [...bomItems]; n[i].item_code = e.target.value; setBomItems(n); }}>
-                  <option value="">Pilih Bahan...</option>
-                  {items.map((it: any) => <option key={it.name} value={it.item_code}>{it.item_code}</option>)}
-                </select>
-                <div style={{ display: 'flex', gap: '8px', flex: 1 }}>
-                  <input style={{ flex: 1 }} type="number" min="0.1" step="any" placeholder="Qty" className="erp-input" value={bi.qty} onChange={e => { const n = [...bomItems]; n[i].qty = Number(e.target.value); setBomItems(n); }} />
-                  {bomItems.length > 1 && <button type="button" onClick={() => setBomItems(bomItems.filter((_, idx) => idx !== i))} style={{ color: '#ef4444', border:'none', background:'none', padding: '0 8px' }}><Trash2 size={16} /></button>}
+              <div key={i} style={{ display: 'flex', gap: '8px', marginBottom: '10px', alignItems: 'center' }} className="mobile-flex-col">
+                <div style={{ flex: 3 }}>
+                  <select className="erp-input" value={bi.item_code} onChange={e => { const n = [...bomItems]; n[i].item_code = e.target.value; setBomItems(n); }}>
+                    <option value="">-- Pilih Komponen --</option>
+                    {items.map((it: any) => <option key={it.name} value={it.item_code}>{it.item_code}</option>)}
+                  </select>
+                </div>
+                <div style={{ display: 'flex', gap: '8px', flex: 1, alignItems: 'center' }}>
+                  <input style={{ flex: 1, textAlign: 'center' }} type="number" min="0.1" step="any" placeholder="Qty" className="erp-input" value={bi.qty} onChange={e => { const n = [...bomItems]; n[i].qty = Number(e.target.value); setBomItems(n); }} />
+                  {bomItems.length > 1 && <button type="button" onClick={() => setBomItems(bomItems.filter((_, idx) => idx !== i))} style={{ color: '#ef4444', border:'none', background:'#fee2e2', padding: '6px', borderRadius: '6px', cursor: 'pointer', display: 'flex' }}><Trash2 size={14} /></button>}
                 </div>
               </div>
             ))}
-            <button type="button" className="btn btn-secondary btn-sm mobile-full-width" onClick={() => setBomItems([...bomItems, { item_code: '', qty: 1 }])} style={{ color: COLOR_PRIMARY, borderColor: COLOR_PRIMARY, background: '#eff6ff', marginTop: '8px' }}>+ Tambah Bahan</button>
+            <button type="button" className="btn btn-secondary btn-sm mobile-full-width" onClick={() => setBomItems([...bomItems, { item_code: '', qty: 1 }])} style={{ color: COLOR_PRIMARY, borderColor: COLOR_PRIMARY, background: '#eff6ff', marginTop: '4px' }} disabled={bomItems[bomItems.length - 1].item_code === ''}>+ Tambah Bahan Lain</button>
           </div>
+          
           {error && <div className="error-box"><AlertCircle size={16}/> {error}</div>}
-          <div className="mobile-btn-group" style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+          
+          <div className="mobile-btn-group" style={{ display: 'flex', gap: '10px', marginTop: '16px', borderTop: '1px solid #e5e7eb', paddingTop: '16px' }}>
             <button type="button" onClick={onClose} className="btn btn-secondary mobile-btn" style={{ flex: 1 }}>Batal</button>
             <button type="submit" className="btn btn-primary mobile-btn" style={{ flex: 2, background: COLOR_PRIMARY, borderColor: COLOR_PRIMARY }} disabled={isSubmitting}>{isSubmitting ? 'Memproses...' : 'Simpan & Aktifkan BOM'}</button>
           </div>
@@ -128,28 +158,41 @@ function CreateWorkOrderModal({ onClose, boms, onSuccess }: any) {
       const woData = { production_item: selectedBom?.item, bom_no: form.bom_no, qty: parseFloat(form.qty), company: FIXED_COMPANY, source_warehouse: form.source_warehouse, wip_warehouse: form.wip_warehouse, fg_warehouse: form.fg_warehouse, use_multi_level_bom: 0 };
       const { apiCreate } = await import('@/lib/api');
       await apiCreate('Work Order', woData);
-      alert('✅ Work Order Berhasil dibuat (Draft)!'); onClose(); if (onSuccess) onSuccess();
+      alert('✅ Surat Perintah Kerja (Work Order) berhasil dibuat!'); onClose(); if (onSuccess) onSuccess();
     } catch (err: any) { setError(extractFrappeError(err, "Gagal membuat Work Order.")); } finally { setIsSubmitting(false); }
   };
 
   return (
     <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="modal-content" style={{ width: '100%', maxWidth: '520px', margin: '0 16px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
-          <h2 style={{ fontSize: '18px', fontWeight: 800 }}>Buat Work Order Baru</h2>
-          <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer' }}><X size={20} /></button>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px', alignItems: 'center' }}>
+          <div>
+            <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#111827', margin: 0 }}>Buat Work Order Baru</h2>
+            <p style={{ fontSize: '12px', color: '#6B7280', marginTop: '2px' }}>Surat Perintah Kerja Pabrik</p>
+          </div>
+          <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', color: '#6B7280' }}><X size={20} /></button>
         </div>
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          <div><label className="erp-label">Pilih BOM (Resep) *</label><select required className="erp-input" value={form.bom_no} onChange={e => setForm(f => ({ ...f, bom_no: e.target.value }))}><option value="">-- Pilih BOM Aktif --</option>{boms.map((b: any) => <option key={b.name} value={b.name}>{b.name} ({b.item})</option>)}</select></div>
-          <div><label className="erp-label">Qty untuk Diproduksi *</label><input type="number" required min="1" className="erp-input" value={form.qty} onChange={e => setForm(f => ({ ...f, qty: e.target.value }))} /></div>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <div>
+            <label className="erp-label">Pilih BOM (Resep) *</label>
+            <select required className="erp-input" value={form.bom_no} onChange={e => setForm(f => ({ ...f, bom_no: e.target.value }))}>
+              <option value="">-- Pilih Resep Produksi (BOM) --</option>
+              {boms.map((b: any) => <option key={b.name} value={b.name}>{b.name} (Bikin {b.item})</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="erp-label">Qty Target Produksi *</label>
+            <input type="number" required min="1" className="erp-input" value={form.qty} onChange={e => setForm(f => ({ ...f, qty: e.target.value }))} />
+            <p style={{ fontSize: '10px', color: '#6B7280', marginTop: '4px' }}>Pabrik disuruh merakit berapa unit kali ini?</p>
+          </div>
           <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '15px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <p style={{ fontWeight: 700, fontSize: '13px', color: COLOR_PRIMARY }}>Pengaturan Gudang Produksi</p>
+            <p style={{ fontWeight: 700, fontSize: '13px', color: COLOR_PRIMARY, margin: 0 }}>Pengaturan Gudang Produksi</p>
             <div><label className="erp-label">Gudang Bahan Baku (Source)</label><select className="erp-input" value={form.source_warehouse} onChange={e => setForm(f => ({ ...f, source_warehouse: e.target.value }))}>{warehouses.map(w => <option key={w.name} value={w.name}>{w.name}</option>)}</select></div>
             <div><label className="erp-label">Gudang Produksi (WIP)</label><select className="erp-input" value={form.wip_warehouse} onChange={e => setForm(f => ({ ...f, wip_warehouse: e.target.value }))}>{warehouses.map(w => <option key={w.name} value={w.name}>{w.name}</option>)}</select></div>
             <div><label className="erp-label">Gudang Barang Jadi (Target FG)</label><select className="erp-input" value={form.fg_warehouse} onChange={e => setForm(f => ({ ...f, fg_warehouse: e.target.value }))}>{warehouses.map(w => <option key={w.name} value={w.name}>{w.name}</option>)}</select></div>
           </div>
           {error && <div className="error-box"><AlertCircle size={16}/>{error}</div>}
-          <div className="mobile-btn-group" style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+          <div className="mobile-btn-group" style={{ display: 'flex', gap: '10px', marginTop: '16px', borderTop: '1px solid #e5e7eb', paddingTop: '16px' }}>
             <button type="button" onClick={onClose} className="btn btn-secondary mobile-btn" style={{ flex: 1 }}>Batal</button>
             <button type="submit" className="btn btn-primary mobile-btn" style={{ flex: 2, background: COLOR_SECONDARY, borderColor: COLOR_SECONDARY }} disabled={isSubmitting}>{isSubmitting ? 'Memproses...' : 'Buat Work Order'}</button>
           </div>
@@ -497,7 +540,14 @@ function ManufacturingPageContent() {
                         <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', flexWrap: 'wrap' }}>
                           {wo.status === 'Draft' && <button onClick={() => handleWOSubmit(wo)} className="badge badge-info" style={{ cursor: 'pointer', border: 'none', display: 'flex', gap: '4px', alignItems: 'center' }}><Send size={12}/> Submit</button>}
                           {wo.status === 'Not Started' && <button onClick={() => handleWOStart(wo)} className="badge badge-purple" style={{ cursor: 'pointer', border: 'none', display: 'flex', gap: '4px', alignItems: 'center', background: COLOR_SECONDARY, color: 'white' }}><PlayCircle size={12}/> Start</button>}
-                          {wo.status === 'In Process' && <span style={{ fontSize: '11px', color: COLOR_PRIMARY, fontWeight: 600 }}>Cek tab Job Card 👉</span>}
+                          
+                          {/* TOMBOL BARU: LANGSUNG MENUJU JOB CARD */}
+                          {wo.status === 'In Process' && (
+                            <button onClick={() => setActiveTab('jobcards')} style={{ fontSize: '11px', color: COLOR_PRIMARY, fontWeight: 700, background: '#eff6ff', border: '1px solid #bfdbfe', padding: '4px 10px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', transition: 'all 0.2s' }}>
+                              Cek Job Card 👉
+                            </button>
+                          )}
+                          
                           {wo.status === 'Completed' && <span style={{ fontSize: '11px', color: '#059669', fontWeight: 600 }}><CheckCircle size={12} style={{display:'inline', verticalAlign:'middle'}}/> Selesai</span>}
                           
                           <a href={`http://34.101.192.135:8080/app/work-order/${encodeURIComponent(wo.name)}`} target="_blank" rel="noopener noreferrer" style={{ background: '#f3f4f6', border: '1px solid #e5e7eb', color: '#4B5563', borderRadius: '6px', padding: '6px', display: 'flex' }}><Eye size={14} /></a>

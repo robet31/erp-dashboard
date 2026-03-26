@@ -6,7 +6,7 @@ import { useAuth } from '@/providers/auth-provider';
 import { useStockData, useSellingData } from '@/hooks/useFrappeData';
 import {
   Package, Warehouse, AlertTriangle, TrendingUp,
-  Plus, Download, Search, X, Edit, Trash2, ArrowRight, AlertCircle, Eye, Truck, Send, Link as LinkIcon, Barcode, Calendar, Loader2
+  Plus, Download, Search, X, Edit, Trash2, ArrowRight, AlertCircle, Eye, Truck, Send, Link as LinkIcon, Barcode, Calendar, Loader2, Info
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell
@@ -61,27 +61,46 @@ function CreateItemModal({ onClose, onSuccess }: any) {
 
   return (
     <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal-content" style={{ width: '100%', maxWidth: '500px', margin: '0 16px' }}>
+      <div className="modal-content" style={{ width: '100%', maxWidth: '520px', margin: '0 16px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-          <div><h2 style={{ fontSize: '18px', fontWeight: 800, color: '#111827' }}>New Item</h2></div>
+          <div><h2 style={{ fontSize: '18px', fontWeight: 800, color: '#111827' }}>Tambah Item Baru</h2></div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6B7280' }}><X size={20} /></button>
         </div>
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           <div className="responsive-grid">
-            <div><label className="erp-label">Item Code *</label><input type="text" required className="erp-input" value={form.item_code} onChange={e => setForm(f => ({ ...f, item_code: e.target.value }))} /></div>
-            <div><label className="erp-label">Item Name *</label><input type="text" required className="erp-input" value={form.item_name} onChange={e => setForm(f => ({ ...f, item_name: e.target.value }))} /></div>
+            <div><label className="erp-label">Item Code *</label><input type="text" required className="erp-input" value={form.item_code} onChange={e => setForm(f => ({ ...f, item_code: e.target.value }))} placeholder="Contoh: FG-NB-PRO15" /></div>
+            <div><label className="erp-label">Item Name *</label><input type="text" required className="erp-input" value={form.item_name} onChange={e => setForm(f => ({ ...f, item_name: e.target.value }))} placeholder="Contoh: NetraBook Pro 15" /></div>
           </div>
           <div className="responsive-grid">
-            <div><label className="erp-label">Item Group</label><select className="erp-input" value={form.item_group} onChange={e => setForm(f => ({ ...f, item_group: e.target.value }))}><option value="Products">Products</option><option value="Raw Material">Raw Material</option><option value="Consumables">Consumables</option></select></div>
-            <div><label className="erp-label">Default Unit of Measure</label><select className="erp-input" value={form.stock_uom} onChange={e => setForm(f => ({ ...f, stock_uom: e.target.value }))}><option value="Nos">Nos</option><option value="Unit">Unit</option><option value="Kg">Kg</option></select></div>
+            <div><label className="erp-label">Kategori (Item Group)</label><select className="erp-input" value={form.item_group} onChange={e => setForm(f => ({ ...f, item_group: e.target.value }))}><option value="Products">Products (Barang Jadi)</option><option value="Raw Material">Raw Material (Bahan Baku)</option><option value="Consumables">Consumables (Bahan Habis Pakai)</option><option value="Services">Services (Jasa)</option></select></div>
+            <div><label className="erp-label">Satuan Dasar (UoM)</label><select className="erp-input" value={form.stock_uom} onChange={e => setForm(f => ({ ...f, stock_uom: e.target.value }))}><option value="Nos">Nos (Pcs)</option><option value="Unit">Unit</option><option value="Kg">Kg</option></select></div>
           </div>
-          <div><label className="erp-label">Standard Rate (Rp)</label><input type="number" min="0" className="erp-input" value={form.standard_rate} onChange={e => setForm(f => ({ ...f, standard_rate: e.target.value }))} /></div>
-          <div style={{ display: 'flex', gap: '16px', marginTop: '8px' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#374151', cursor: 'pointer' }}><input type="checkbox" checked={form.is_stock_item} onChange={e => setForm(f => ({ ...f, is_stock_item: e.target.checked }))} /> Maintain Stock</label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#374151', cursor: 'pointer' }}><input type="checkbox" checked={form.is_fixed_asset} onChange={e => setForm(f => ({ ...f, is_fixed_asset: e.target.checked }))} /> Is Fixed Asset</label>
+          <div><label className="erp-label">Harga Standar / Standard Rate (Rp)</label><input type="number" min="0" className="erp-input" value={form.standard_rate} onChange={e => setForm(f => ({ ...f, standard_rate: e.target.value }))} placeholder="0" /></div>
+          
+          {/* HELPER BOXES UNTUK CHECKBOX */}
+          <div style={{ display: 'flex', gap: '12px', marginTop: '4px' }} className="mobile-flex-col">
+            <div style={{ flex: 1, background: form.is_stock_item ? '#eff6ff' : '#f8fafc', padding: '12px', borderRadius: '8px', border: `1px solid ${form.is_stock_item ? COLOR_PRIMARY : '#e5e7eb'}`, transition: 'all 0.2s' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 700, color: form.is_stock_item ? COLOR_PRIMARY : '#374151', cursor: 'pointer' }}>
+                <input type="checkbox" checked={form.is_stock_item} onChange={e => setForm(f => ({ ...f, is_stock_item: e.target.checked }))} style={{ width: '16px', height: '16px', accentColor: COLOR_PRIMARY }} /> 
+                Maintain Stock
+              </label>
+              <p style={{ fontSize: '11px', color: '#6B7280', marginTop: '6px', lineHeight: 1.4 }}>Centang untuk melacak fisik barang di gudang. Hapus centang jika ini adalah <b>Jasa/Service</b>.</p>
+            </div>
+            
+            <div style={{ flex: 1, background: form.is_fixed_asset ? '#fef3c7' : '#f8fafc', padding: '12px', borderRadius: '8px', border: `1px solid ${form.is_fixed_asset ? '#d97706' : '#e5e7eb'}`, transition: 'all 0.2s' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 700, color: form.is_fixed_asset ? '#d97706' : '#374151', cursor: 'pointer' }}>
+                <input type="checkbox" checked={form.is_fixed_asset} onChange={e => setForm(f => ({ ...f, is_fixed_asset: e.target.checked }))} style={{ width: '16px', height: '16px', accentColor: '#d97706' }} /> 
+                Is Fixed Asset
+              </label>
+              <p style={{ fontSize: '11px', color: '#6B7280', marginTop: '6px', lineHeight: 1.4 }}>Centang jika barang ini adalah <b>Aset Perusahaan</b> yang menyusut (misal: Mesin, Komputer Kantor).</p>
+            </div>
           </div>
+
           {error && <div className="error-box">{error}</div>}
-          <div style={{ display: 'flex', gap: '10px', marginTop: '16px', justifyContent: 'flex-end', borderTop: '1px solid #e5e7eb', paddingTop: '16px' }}><button type="button" onClick={onClose} className="btn btn-secondary mobile-btn">Batal</button><button type="submit" disabled={isSubmitting} className="btn btn-primary mobile-btn" style={{ background: COLOR_PRIMARY, borderColor: COLOR_PRIMARY }}>{isSubmitting ? 'Menyimpan...' : 'Simpan'}</button></div>
+          <div style={{ display: 'flex', gap: '10px', marginTop: '16px', justifyContent: 'flex-end', borderTop: '1px solid #e5e7eb', paddingTop: '16px' }}>
+            <button type="button" onClick={onClose} className="btn btn-secondary mobile-btn">Batal</button>
+            <button type="submit" disabled={isSubmitting} className="btn btn-primary mobile-btn" style={{ background: COLOR_PRIMARY, borderColor: COLOR_PRIMARY }}>{isSubmitting ? 'Menyimpan...' : 'Simpan Item'}</button>
+          </div>
         </form>
       </div>
     </div>
@@ -112,7 +131,7 @@ function EditItemModal({ item, onClose, onSuccess }: any) {
 
   return (
     <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal-content" style={{ width: '100%', maxWidth: '500px', margin: '0 16px' }}>
+      <div className="modal-content" style={{ width: '100%', maxWidth: '520px', margin: '0 16px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
           <div><h2 style={{ fontSize: '18px', fontWeight: 800, color: '#111827' }}>Edit Item</h2><p style={{ fontSize: '12px', color: '#6B7280' }}>ID: {item.name}</p></div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6B7280' }}><X size={20} /></button>
@@ -124,10 +143,26 @@ function EditItemModal({ item, onClose, onSuccess }: any) {
             <div><label className="erp-label">Default Unit of Measure</label><select required className="erp-input" value={form.stock_uom} onChange={e => setForm(f => ({ ...f, stock_uom: e.target.value }))}><option value="Nos">Nos</option><option value="Unit">Unit</option></select></div>
           </div>
           <div><label className="erp-label">Standard Rate (Rp)</label><input type="number" min="0" className="erp-input" value={form.standard_rate} onChange={e => setForm(f => ({ ...f, standard_rate: e.target.value }))} /></div>
-          <div style={{ display: 'flex', gap: '16px', marginTop: '8px' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#374151', cursor: 'pointer' }}><input type="checkbox" checked={form.is_stock_item} onChange={e => setForm(f => ({ ...f, is_stock_item: e.target.checked }))} /> Maintain Stock</label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#374151', cursor: 'pointer' }}><input type="checkbox" checked={form.is_fixed_asset} onChange={e => setForm(f => ({ ...f, is_fixed_asset: e.target.checked }))} /> Is Fixed Asset</label>
+          
+          {/* HELPER BOXES UNTUK CHECKBOX */}
+          <div style={{ display: 'flex', gap: '12px', marginTop: '4px' }} className="mobile-flex-col">
+            <div style={{ flex: 1, background: form.is_stock_item ? '#eff6ff' : '#f8fafc', padding: '12px', borderRadius: '8px', border: `1px solid ${form.is_stock_item ? COLOR_PRIMARY : '#e5e7eb'}`, transition: 'all 0.2s' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 700, color: form.is_stock_item ? COLOR_PRIMARY : '#374151', cursor: 'pointer' }}>
+                <input type="checkbox" checked={form.is_stock_item} onChange={e => setForm(f => ({ ...f, is_stock_item: e.target.checked }))} style={{ width: '16px', height: '16px', accentColor: COLOR_PRIMARY }} /> 
+                Maintain Stock
+              </label>
+              <p style={{ fontSize: '11px', color: '#6B7280', marginTop: '6px', lineHeight: 1.4 }}>Centang untuk melacak fisik barang di gudang. Hapus centang jika ini adalah <b>Jasa/Service</b>.</p>
+            </div>
+            
+            <div style={{ flex: 1, background: form.is_fixed_asset ? '#fef3c7' : '#f8fafc', padding: '12px', borderRadius: '8px', border: `1px solid ${form.is_fixed_asset ? '#d97706' : '#e5e7eb'}`, transition: 'all 0.2s' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 700, color: form.is_fixed_asset ? '#d97706' : '#374151', cursor: 'pointer' }}>
+                <input type="checkbox" checked={form.is_fixed_asset} onChange={e => setForm(f => ({ ...f, is_fixed_asset: e.target.checked }))} style={{ width: '16px', height: '16px', accentColor: '#d97706' }} /> 
+                Is Fixed Asset
+              </label>
+              <p style={{ fontSize: '11px', color: '#6B7280', marginTop: '6px', lineHeight: 1.4 }}>Centang jika barang ini adalah <b>Aset Perusahaan</b> yang menyusut (misal: Mesin, Komputer Kantor).</p>
+            </div>
           </div>
+
           <div style={{ display: 'flex', gap: '10px', marginTop: '16px', justifyContent: 'flex-end', borderTop: '1px solid #e5e7eb', paddingTop: '16px' }}>
             <button type="button" onClick={handleDelete} className="btn btn-secondary mobile-btn" style={{ color: '#dc2626' }}><Trash2 size={15} /> Hapus</button>
             <button type="submit" className="btn btn-primary mobile-btn" disabled={isSubmitting} style={{ background: COLOR_PRIMARY, borderColor: COLOR_PRIMARY }}>{isSubmitting ? 'Menyimpan...' : 'Simpan Perubahan'}</button>
@@ -143,10 +178,10 @@ function EditItemModal({ item, onClose, onSuccess }: any) {
 // ==========================================
 function CreateStockEntryModal({ onClose, warehouses, items, onSuccess }: any) {
   const ALLOWED_ENTRY_TYPES = [
-    { value: 'Material Receipt', label: 'Material Receipt' }, 
-    { value: 'Material Issue', label: 'Material Issue' },
-    { value: 'Material Transfer', label: 'Material Transfer' },
-    { value: 'Manufacture', label: 'Manufacture' }
+    { value: 'Material Receipt', label: 'Material Receipt (Penerimaan Barang)' }, 
+    { value: 'Material Issue', label: 'Material Issue (Pengeluaran Barang)' },
+    { value: 'Material Transfer', label: 'Material Transfer (Pindah Gudang)' },
+    { value: 'Manufacture', label: 'Manufacture (Hasil Produksi)' }
   ];
 
   const [form, setForm] = useState({ 
@@ -227,7 +262,7 @@ function CreateStockEntryModal({ onClose, warehouses, items, onSuccess }: any) {
             <div><label className="erp-label">Series</label><input type="text" readOnly className="erp-input disabled-input" value="MAT-STE-.YYYY.-" /></div>
           </div>
           <div className="responsive-grid" style={{ marginBottom: '16px' }}>
-            <div><label className="erp-label">Stock Entry Type *</label>
+            <div><label className="erp-label">Tujuan Transaksi (Type) *</label>
               <select required value={form.stock_entry_type} onChange={e => setForm(f => ({ ...f, stock_entry_type: e.target.value, from_warehouse: '', to_warehouse: '' }))} className="erp-input">
                 {ALLOWED_ENTRY_TYPES.map((t: any) => <option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
@@ -246,12 +281,12 @@ function CreateStockEntryModal({ onClose, warehouses, items, onSuccess }: any) {
           <div style={{ background: '#f8f9fb', padding: '16px', borderRadius: '8px', border: '1px solid #e5e7eb', marginBottom: '20px' }}>
             <h3 style={{ fontSize: '13px', fontWeight: 700, color: COLOR_PRIMARY, borderBottom: '1px solid #e5e7eb', paddingBottom: '8px', marginBottom: '12px' }}>Default Warehouse</h3>
             <div className="responsive-grid">
-              <div><label className="erp-label" style={{ color: '#dc2626' }}>Default Source Warehouse</label>
+              <div><label className="erp-label" style={{ color: '#dc2626' }}>Default Source Warehouse (Gudang Asal)</label>
                 <select className="erp-input" value={form.from_warehouse} onChange={e => setForm(f => ({ ...f, from_warehouse: e.target.value }))} disabled={form.stock_entry_type === 'Material Receipt'}>
                   <option value="">Pilih Gudang Sumber...</option>{activeWarehouses.map((w: any) => <option key={w.name} value={w.name}>{w.name}</option>)}
                 </select>
               </div>
-              <div><label className="erp-label" style={{ color: '#059669' }}>Default Target Warehouse</label>
+              <div><label className="erp-label" style={{ color: '#059669' }}>Default Target Warehouse (Gudang Tujuan)</label>
                 <select className="erp-input" value={form.to_warehouse} onChange={e => setForm(f => ({ ...f, to_warehouse: e.target.value }))} disabled={form.stock_entry_type === 'Material Issue'}>
                   <option value="">Pilih Gudang Tujuan...</option>{activeWarehouses.map((w: any) => <option key={w.name} value={w.name}>{w.name}</option>)}
                 </select>
@@ -259,13 +294,7 @@ function CreateStockEntryModal({ onClose, warehouses, items, onSuccess }: any) {
             </div>
           </div>
 
-          <h3 style={{ fontSize: '13px', fontWeight: 700, color: '#111827', borderBottom: '1px solid #e5e7eb', paddingBottom: '8px', marginBottom: '12px' }}>Items</h3>
-          <div style={{ marginBottom: '12px' }}>
-            <div style={{ position: 'relative', width: '250px' }}>
-              <Barcode size={14} color="#9CA3AF" style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)' }} />
-              <input type="text" placeholder="Scan Barcode" className="erp-input" style={{ paddingLeft: '32px', background: '#f9fafb' }} readOnly />
-            </div>
-          </div>
+          <h3 style={{ fontSize: '13px', fontWeight: 700, color: '#111827', borderBottom: '1px solid #e5e7eb', paddingBottom: '8px', marginBottom: '12px' }}>Items to Transact</h3>
 
           <div style={{ overflowX: 'auto', border: '1px solid #e5e7eb', borderRadius: '8px' }}>
             <table className="erp-table" style={{ width: '100%', minWidth: '600px' }}>
@@ -282,7 +311,7 @@ function CreateStockEntryModal({ onClose, warehouses, items, onSuccess }: any) {
                 <tr>
                   <td style={{ textAlign: 'center', fontWeight: 600 }}>1</td>
                   <td><select required className="erp-input" value={form.item_code} onChange={handleItemChange} style={{ padding: '6px', fontSize: '12px' }}><option value="">Pilih Item...</option>{items.map((i: any) => <option key={i.name} value={i.item_code}>{i.item_code}</option>)}</select></td>
-                  <td><input type="number" step="any" required min="0" className="erp-input" value={form.qty} onChange={e => setForm(f => ({ ...f, qty: e.target.value }))} style={{ padding: '6px', fontSize: '12px', textAlign: 'center' }} placeholder="0.00" /></td>
+                  <td><input type="number" step="any" required min="0.1" className="erp-input" value={form.qty} onChange={e => setForm(f => ({ ...f, qty: e.target.value }))} style={{ padding: '6px', fontSize: '12px', textAlign: 'center' }} placeholder="0" /></td>
                   <td style={{ textAlign: 'right', fontWeight: 600, color: '#374151' }}>{formatUang(form.basic_rate)}</td>
                   <td style={{ textAlign: 'right', fontWeight: 700, color: COLOR_PRIMARY }}>{formatUang(form.basic_rate * Number(form.qty || 0))}</td>
                 </tr>
@@ -293,7 +322,7 @@ function CreateStockEntryModal({ onClose, warehouses, items, onSuccess }: any) {
           {error && <div className="error-box" style={{ marginTop: '16px' }}><AlertCircle size={16} />{error}</div>}
           <div style={{ display: 'flex', gap: '10px', marginTop: '24px', justifyContent: 'flex-end', borderTop: '1px solid #e5e7eb', paddingTop: '16px' }}>
             <button type="button" onClick={onClose} className="btn btn-secondary mobile-btn">Batal</button>
-            <button type="submit" disabled={isSubmitting} className="btn btn-primary mobile-btn" style={{ background: COLOR_PRIMARY, borderColor: COLOR_PRIMARY }}>{isSubmitting ? 'Memproses...' : 'Simpan'}</button>
+            <button type="submit" disabled={isSubmitting} className="btn btn-primary mobile-btn" style={{ background: COLOR_PRIMARY, borderColor: COLOR_PRIMARY }}>{isSubmitting ? 'Memproses...' : 'Simpan Draft'}</button>
           </div>
         </form>
       </div>
@@ -405,7 +434,17 @@ function CreateWarehouseModal({ onClose, onSuccess }: { onClose: () => void; onS
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           <div><label className="erp-label">Nama Warehouse *</label><input required type="text" className="erp-input" value={form.warehouse_name} onChange={e => setForm(f => ({ ...f, warehouse_name: e.target.value }))} placeholder="cth: Gudang Utama" /></div>
           <div><label className="erp-label">Perusahaan</label><input type="text" readOnly className="erp-input disabled-input" value={form.company} /></div>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', cursor: 'pointer', color: '#374151' }}><input type="checkbox" checked={form.is_group} onChange={e => setForm(f => ({ ...f, is_group: e.target.checked }))} /> Ini adalah parent warehouse (group)</label>
+          
+          <div style={{ background: form.is_group ? '#f5f3ff' : '#f8fafc', padding: '12px', borderRadius: '8px', border: `1px solid ${form.is_group ? '#8b5cf6' : '#e5e7eb'}`, transition: 'all 0.2s', marginTop: '8px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 700, color: form.is_group ? '#7c3aed' : '#374151', cursor: 'pointer' }}>
+              <input type="checkbox" checked={form.is_group} onChange={e => setForm(f => ({ ...f, is_group: e.target.checked }))} style={{ width: '16px', height: '16px', accentColor: '#8b5cf6' }} /> 
+              Set as Group Warehouse
+            </label>
+            <p style={{ fontSize: '11px', color: '#6B7280', marginTop: '6px', lineHeight: 1.4 }}>
+              Centang jika ini adalah <b>Gudang Folder</b> (induk) yang hanya digunakan untuk mengelompokkan gudang-gudang kecil di bawahnya. Gudang Grup tidak bisa menerima stok fisik langsung.
+            </p>
+          </div>
+
           <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}><button type="button" onClick={onClose} className="btn btn-secondary mobile-btn">Batal</button><button type="submit" disabled={isSubmitting} className="btn btn-primary mobile-btn" style={{ background: COLOR_PRIMARY, borderColor: COLOR_PRIMARY }}>{isSubmitting ? 'Menyimpan...' : 'Simpan'}</button></div>
         </form>
       </div>
@@ -445,7 +484,17 @@ function EditWarehouseModal({ warehouse, onClose, onSuccess }: any) {
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           <div><label className="erp-label">Nama Warehouse *</label><input required type="text" className="erp-input" value={form.warehouse_name} onChange={e => setForm(f => ({ ...f, warehouse_name: e.target.value }))} /></div>
           <div><label className="erp-label">Perusahaan</label><input type="text" readOnly className="erp-input disabled-input" value={form.company} /></div>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', cursor: 'pointer', color: '#374151' }}><input type="checkbox" checked={form.is_group} onChange={e => setForm(f => ({ ...f, is_group: e.target.checked }))} /> Ini adalah parent warehouse (group)</label>
+          
+          <div style={{ background: form.is_group ? '#f5f3ff' : '#f8fafc', padding: '12px', borderRadius: '8px', border: `1px solid ${form.is_group ? '#8b5cf6' : '#e5e7eb'}`, transition: 'all 0.2s', marginTop: '8px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 700, color: form.is_group ? '#7c3aed' : '#374151', cursor: 'pointer' }}>
+              <input type="checkbox" checked={form.is_group} onChange={e => setForm(f => ({ ...f, is_group: e.target.checked }))} style={{ width: '16px', height: '16px', accentColor: '#8b5cf6' }} /> 
+              Set as Group Warehouse
+            </label>
+            <p style={{ fontSize: '11px', color: '#6B7280', marginTop: '6px', lineHeight: 1.4 }}>
+              Centang jika ini adalah <b>Gudang Folder</b> (induk) yang hanya digunakan untuk mengelompokkan gudang-gudang kecil di bawahnya. Gudang Grup tidak bisa menerima stok fisik langsung.
+            </p>
+          </div>
+
           <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
             <button type="button" onClick={handleDelete} className="btn btn-secondary mobile-btn" style={{ color: '#dc2626' }}><Trash2 size={15} /> Hapus</button>
             <button type="submit" disabled={isSubmitting} className="btn btn-primary mobile-btn" style={{ background: COLOR_PRIMARY, borderColor: COLOR_PRIMARY }}>{isSubmitting ? 'Menyimpan...' : 'Simpan Perubahan'}</button>
@@ -582,7 +631,17 @@ function CreateDeliveryNoteModal({ onClose, customers, items, warehouses, orders
             </div>
             <div>
               <label className="erp-label">Company</label><input type="text" readOnly className="erp-input disabled-input" value={form.company} />
-              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: 600, color: '#dc2626', marginTop: '10px', cursor: 'pointer' }}><input type="checkbox" checked={form.is_return} onChange={e => setForm(f => ({ ...f, is_return: e.target.checked, linked_so: '' }))} /> Is Return</label>
+              
+              {/* HELPER BOX UNTUK IS RETURN */}
+              <div style={{ background: form.is_return ? '#fee2e2' : '#f8fafc', padding: '10px', borderRadius: '8px', border: `1px solid ${form.is_return ? '#ef4444' : '#e5e7eb'}`, transition: 'all 0.2s', marginTop: '10px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: 700, color: form.is_return ? '#b91c1c' : '#374151', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={form.is_return} onChange={e => setForm(f => ({ ...f, is_return: e.target.checked, linked_so: '' }))} style={{ accentColor: '#ef4444' }} /> 
+                  Tandai sebagai Barang Retur (Is Return)
+                </label>
+                <p style={{ fontSize: '10px', color: '#6B7280', marginTop: '4px', lineHeight: 1.3 }}>
+                  Gunakan ini jika pelanggan mengembalikan barang yang rusak. Alih-alih keluar, stok akan <b>masuk kembali</b> ke gudangmu.
+                </p>
+              </div>
             </div>
           </div>
 
@@ -612,7 +671,7 @@ function CreateDeliveryNoteModal({ onClose, customers, items, warehouses, orders
                   <tr>
                     <td style={{ textAlign: 'center', fontWeight: 600 }}>1</td>
                     <td><select required className="erp-input" value={form.item_code} onChange={handleItemChange} style={{ padding: '6px', fontSize: '12px' }}><option value="">Pilih Item...</option>{items.map((i: any) => <option key={i.name} value={i.item_code}>{i.item_code}</option>)}</select></td>
-                    <td><input type="number" step="any" required min="0" className="erp-input" value={form.qty} onChange={handleQtyChange} style={{ padding: '6px', fontSize: '12px', textAlign: 'center' }} placeholder="0" /></td>
+                    <td><input type="number" step="any" required min="0.1" className="erp-input" value={form.qty} onChange={handleQtyChange} style={{ padding: '6px', fontSize: '12px', textAlign: 'center' }} placeholder="0" /></td>
                     <td><input type="number" step="any" required min="0" className="erp-input" value={form.rate} onChange={handleRateChange} style={{ padding: '6px', fontSize: '12px', textAlign: 'right' }} placeholder="0" /></td>
                     <td style={{ textAlign: 'right', fontWeight: 700, color: COLOR_PRIMARY }}>{formatUang(form.amount)}</td>
                   </tr>

@@ -28,24 +28,32 @@ const formatUang = (value: number | string | undefined) => {
   return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(num);
 };
 
-const getImageUrl = (url?: string) => {
-  if (!url) return '';
-  if (url.startsWith('http') || url.startsWith('data:image')) return url;
-  if (url.startsWith('/')) return `${BACKEND_URL}${url}`;
-  return `${BACKEND_URL}/${url}`;
-};
-
+// ==========================================
+// PENINGKATAN: PESAN ERROR YANG MANUSIAWI
+// ==========================================
 const extractFrappeError = (err: any, fallbackMsg: string = 'Terjadi kesalahan sistem') => {
   if (typeof err === 'string') return err;
   let errorMsg = err?.message || err?.error?.message || fallbackMsg;
   if (err?._server_messages) {
-    try { errorMsg = JSON.parse(JSON.parse(err._server_messages)[0]).message.replace(/<[^>]*>?/gm, ''); } catch (e) { }
+    try { 
+      const messages = JSON.parse(err._server_messages);
+      errorMsg = JSON.parse(messages[0]).message.replace(/<[^>]*>?/gm, ''); 
+    } catch (e) { }
   }
+  
+  // Terjemahan Cerdas Error ERPNext ke Bahasa Indonesia
+  const lowerErr = errorMsg.toLowerCase();
+  if (lowerErr.includes('duplicate')) return 'Data ini sudah terdaftar di sistem (Duplikat). Silakan gunakan nama lain.';
+  if (lowerErr.includes('not found')) return 'Data referensi tidak ditemukan di database.';
+  if (lowerErr.includes('mandatory')) return 'Masih ada kolom wajib (berbintang merah) yang belum Anda isi.';
+  if (lowerErr.includes('negative')) return 'Nilai angka tidak boleh kurang dari nol (Minus).';
+  if (lowerErr.includes('stock')) return 'Stok di gudang tidak mencukupi untuk transaksi ini.';
+  
   return errorMsg;
 };
 
 // ==========================================
-// 1. MODALS FOR CUSTOMER
+// 1. MODALS FOR CUSTOMER (VALIDASI KETAT)
 // ==========================================
 function CreateCustomerModal({ onClose, onSuccess }: { onClose: () => void; onSuccess?: () => void }) {
   const [form, setForm] = useState({ 
@@ -84,31 +92,75 @@ function CreateCustomerModal({ onClose, onSuccess }: { onClose: () => void; onSu
             <div>
               <h3 style={{ fontSize: '13px', fontWeight: 700, color: COLOR_PRIMARY, borderBottom: '1px solid #e5e7eb', paddingBottom: '8px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '6px' }}><Briefcase size={14}/> Profil Utama</h3>
               <div style={{ marginBottom: '14px' }}><label className="erp-label">Customer Type *</label><select required className="erp-input" value={form.customer_type} onChange={e => setForm(f => ({ ...f, customer_type: e.target.value }))}><option value="Company">Company</option><option value="Individual">Individual</option><option value="Partnership">Partnership</option></select></div>
-              <div style={{ marginBottom: '14px' }}><label className="erp-label">Customer Name *</label><input required type="text" className="erp-input" value={form.customer_name} onChange={e => setForm(f => ({ ...f, customer_name: e.target.value }))} placeholder="Nama Perusahaan / Institusi" /></div>
+              
+              {/* VALIDASI: HANYA HURUF DAN TITIK/KOMA UNTUK NAMA PERUSAHAAN */}
+              <div style={{ marginBottom: '14px' }}><label className="erp-label">Customer Name *</label>
+                <input required type="text" className="erp-input" value={form.customer_name} 
+                onChange={e => setForm(f => ({ ...f, customer_name: e.target.value.replace(/[^a-zA-Z\s.,]/g, '') }))} 
+                placeholder="Nama Perusahaan (Hanya Huruf)" />
+              </div>
               
               <h3 style={{ fontSize: '13px', fontWeight: 700, color: COLOR_PRIMARY, borderBottom: '1px solid #e5e7eb', paddingBottom: '8px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '6px', marginTop: '24px' }}><User size={14}/> Primary Contact Details</h3>
               <div className="responsive-grid">
-                <div style={{ marginBottom: '14px' }}><label className="erp-label">First Name</label><input type="text" className="erp-input" value={form.map_to_first_name} onChange={e => setForm(f => ({ ...f, map_to_first_name: e.target.value }))} placeholder="Nama Depan" /></div>
-                <div style={{ marginBottom: '14px' }}><label className="erp-label">Last Name</label><input type="text" className="erp-input" value={form.map_to_last_name} onChange={e => setForm(f => ({ ...f, map_to_last_name: e.target.value }))} placeholder="Nama Belakang" /></div>
+                
+                {/* VALIDASI: HANYA ALFABET */}
+                <div style={{ marginBottom: '14px' }}><label className="erp-label">First Name</label>
+                  <input type="text" className="erp-input" value={form.map_to_first_name} 
+                  onChange={e => setForm(f => ({ ...f, map_to_first_name: e.target.value.replace(/[^a-zA-Z\s]/g, '') }))} 
+                  placeholder="Nama Depan (Hanya Huruf)" />
+                </div>
+                
+                <div style={{ marginBottom: '14px' }}><label className="erp-label">Last Name</label>
+                  <input type="text" className="erp-input" value={form.map_to_last_name} 
+                  onChange={e => setForm(f => ({ ...f, map_to_last_name: e.target.value.replace(/[^a-zA-Z\s]/g, '') }))} 
+                  placeholder="Nama Belakang (Hanya Huruf)" />
+                </div>
               </div>
               <div style={{ marginBottom: '14px' }}><label className="erp-label">Email Id</label><input type="email" className="erp-input" value={form.email_address} onChange={e => setForm(f => ({ ...f, email_address: e.target.value }))} placeholder="email@contoh.com" /></div>
-              <div style={{ marginBottom: '14px' }}><label className="erp-label">Mobile Number</label><input type="text" className="erp-input" value={form.mobile_number} onChange={e => setForm(f => ({ ...f, mobile_number: e.target.value }))} placeholder="0812..." /></div>
+              
+              {/* VALIDASI: HANYA ANGKA */}
+              <div style={{ marginBottom: '14px' }}><label className="erp-label">Mobile Number</label>
+                <input type="text" className="erp-input" value={form.mobile_number} 
+                onChange={e => setForm(f => ({ ...f, mobile_number: e.target.value.replace(/[^0-9]/g, '') }))} 
+                placeholder="0812... (Hanya Angka)" />
+              </div>
             </div>
             <div>
               <h3 style={{ fontSize: '13px', fontWeight: 700, color: COLOR_PRIMARY, borderBottom: '1px solid #e5e7eb', paddingBottom: '8px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '6px' }}><MapPin size={14}/> Primary Address Details</h3>
               <div style={{ marginBottom: '14px' }}><label className="erp-label">Address Line 1</label><input type="text" className="erp-input" value={form.address_line1} onChange={e => setForm(f => ({ ...f, address_line1: e.target.value }))} placeholder="Alamat jalan lengkap" /></div>
               <div style={{ marginBottom: '14px' }}><label className="erp-label">Address Line 2</label><input type="text" className="erp-input" value={form.address_line2} onChange={e => setForm(f => ({ ...f, address_line2: e.target.value }))} placeholder="Gedung, Lantai, Patokan" /></div>
               <div className="responsive-grid">
-                <div style={{ marginBottom: '14px' }}><label className="erp-label">City</label><input type="text" className="erp-input" value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} placeholder="Kota" /></div>
-                <div style={{ marginBottom: '14px' }}><label className="erp-label">State / Province</label><input type="text" className="erp-input" value={form.state} onChange={e => setForm(f => ({ ...f, state: e.target.value }))} placeholder="Provinsi" /></div>
+                
+                {/* VALIDASI: HANYA ALFABET */}
+                <div style={{ marginBottom: '14px' }}><label className="erp-label">City</label>
+                  <input type="text" className="erp-input" value={form.city} 
+                  onChange={e => setForm(f => ({ ...f, city: e.target.value.replace(/[^a-zA-Z\s]/g, '') }))} 
+                  placeholder="Kota (Hanya Huruf)" />
+                </div>
+                <div style={{ marginBottom: '14px' }}><label className="erp-label">State / Province</label>
+                  <input type="text" className="erp-input" value={form.state} 
+                  onChange={e => setForm(f => ({ ...f, state: e.target.value.replace(/[^a-zA-Z\s]/g, '') }))} 
+                  placeholder="Provinsi (Hanya Huruf)" />
+                </div>
               </div>
               <div className="responsive-grid">
-                <div style={{ marginBottom: '14px' }}><label className="erp-label">ZIP Code</label><input type="text" className="erp-input" value={form.pincode} onChange={e => setForm(f => ({ ...f, pincode: e.target.value }))} placeholder="Kode Pos" /></div>
-                <div style={{ marginBottom: '14px' }}><label className="erp-label">Country</label><input type="text" className="erp-input" value={form.country} onChange={e => setForm(f => ({ ...f, country: e.target.value }))} placeholder="Negara" /></div>
+                
+                {/* VALIDASI: HANYA ANGKA */}
+                <div style={{ marginBottom: '14px' }}><label className="erp-label">ZIP Code</label>
+                  <input type="text" className="erp-input" value={form.pincode} 
+                  onChange={e => setForm(f => ({ ...f, pincode: e.target.value.replace(/[^0-9]/g, '') }))} 
+                  placeholder="Kode Pos (Hanya Angka)" />
+                </div>
+                
+                <div style={{ marginBottom: '14px' }}><label className="erp-label">Country</label>
+                  <input type="text" className="erp-input" value={form.country} 
+                  onChange={e => setForm(f => ({ ...f, country: e.target.value.replace(/[^a-zA-Z\s]/g, '') }))} 
+                  placeholder="Negara (Hanya Huruf)" />
+                </div>
               </div>
             </div>
           </div>
-          {error && <div className="error-box" style={{ marginTop: '16px' }}>{error}</div>}
+          {error && <div className="error-box" style={{ marginTop: '16px' }}><AlertCircle size={16}/> {error}</div>}
           <div style={{ display: 'flex', gap: '10px', marginTop: '24px', justifyContent: 'flex-end', borderTop: '1px solid #e5e7eb', paddingTop: '16px' }}>
             <button type="button" onClick={onClose} className="btn btn-secondary mobile-btn" disabled={isSubmitting}>Batal</button>
             <button type="submit" disabled={isSubmitting} className="btn btn-primary mobile-btn" style={{ background: COLOR_PRIMARY, borderColor: COLOR_PRIMARY }}>{isSubmitting ? 'Menyimpan...' : 'Simpan Customer'}</button>
@@ -212,29 +264,35 @@ function DetailCustomerModal({ customer, onClose, onSuccess }: { customer: any; 
                     <div style={{ marginBottom: '14px' }}><label className="erp-label">Customer Type *</label><select required className="erp-input" value={form?.customer_type} onChange={e => setForm((f: any) => ({ ...f, customer_type: e.target.value }))}><option value="Company">Company</option><option value="Individual">Individual</option><option value="Partnership">Partnership</option></select></div>
                   </div>
                   <div style={{ marginBottom: '14px' }}><label className="erp-label">Customer Name *</label><input required type="text" readOnly className="erp-input disabled-input" value={form?.customer_name} /></div>
+                  
                   <h3 style={{ fontSize: '13px', fontWeight: 700, color: COLOR_PRIMARY, borderBottom: '1px solid #e5e7eb', paddingBottom: '8px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '6px', marginTop: '24px' }}><User size={14}/> Primary Contact Details</h3>
                   <div className="responsive-grid">
-                    <div style={{ marginBottom: '14px' }}><label className="erp-label">First Name</label><input type="text" className="erp-input" value={form?.map_to_first_name} onChange={e => setForm((f: any) => ({ ...f, map_to_first_name: e.target.value }))} /></div>
-                    <div style={{ marginBottom: '14px' }}><label className="erp-label">Last Name</label><input type="text" className="erp-input" value={form?.map_to_last_name} onChange={e => setForm((f: any) => ({ ...f, map_to_last_name: e.target.value }))} /></div>
+                    {/* VALIDASI: HANYA ALFABET */}
+                    <div style={{ marginBottom: '14px' }}><label className="erp-label">First Name</label><input type="text" className="erp-input" value={form?.map_to_first_name} onChange={e => setForm((f: any) => ({ ...f, map_to_first_name: e.target.value.replace(/[^a-zA-Z\s]/g, '') }))} /></div>
+                    <div style={{ marginBottom: '14px' }}><label className="erp-label">Last Name</label><input type="text" className="erp-input" value={form?.map_to_last_name} onChange={e => setForm((f: any) => ({ ...f, map_to_last_name: e.target.value.replace(/[^a-zA-Z\s]/g, '') }))} /></div>
                   </div>
                   <div style={{ marginBottom: '14px' }}><label className="erp-label">Email Id</label><input type="email" className="erp-input" value={form?.email_address} onChange={e => setForm((f: any) => ({ ...f, email_address: e.target.value }))} /></div>
-                  <div style={{ marginBottom: '14px' }}><label className="erp-label">Mobile Number</label><input type="text" className="erp-input" value={form?.mobile_number} onChange={e => setForm((f: any) => ({ ...f, mobile_number: e.target.value }))} /></div>
+                  
+                  {/* VALIDASI: HANYA ANGKA */}
+                  <div style={{ marginBottom: '14px' }}><label className="erp-label">Mobile Number</label><input type="text" className="erp-input" value={form?.mobile_number} onChange={e => setForm((f: any) => ({ ...f, mobile_number: e.target.value.replace(/[^0-9]/g, '') }))} /></div>
                 </div>
                 <div>
                   <h3 style={{ fontSize: '13px', fontWeight: 700, color: COLOR_PRIMARY, borderBottom: '1px solid #e5e7eb', paddingBottom: '8px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '6px' }}><MapPin size={14}/> Primary Address Details</h3>
                   <div style={{ marginBottom: '14px' }}><label className="erp-label">Address Line 1</label><input type="text" className="erp-input" value={form?.address_line1} onChange={e => setForm((f: any) => ({ ...f, address_line1: e.target.value }))} /></div>
                   <div style={{ marginBottom: '14px' }}><label className="erp-label">Address Line 2</label><input type="text" className="erp-input" value={form?.address_line2} onChange={e => setForm((f: any) => ({ ...f, address_line2: e.target.value }))} /></div>
                   <div className="responsive-grid">
-                    <div style={{ marginBottom: '14px' }}><label className="erp-label">City</label><input type="text" className="erp-input" value={form?.city} onChange={e => setForm((f: any) => ({ ...f, city: e.target.value }))} /></div>
-                    <div style={{ marginBottom: '14px' }}><label className="erp-label">State / Province</label><input type="text" className="erp-input" value={form?.state} onChange={e => setForm((f: any) => ({ ...f, state: e.target.value }))} /></div>
+                    {/* VALIDASI: HANYA ALFABET */}
+                    <div style={{ marginBottom: '14px' }}><label className="erp-label">City</label><input type="text" className="erp-input" value={form?.city} onChange={e => setForm((f: any) => ({ ...f, city: e.target.value.replace(/[^a-zA-Z\s]/g, '') }))} /></div>
+                    <div style={{ marginBottom: '14px' }}><label className="erp-label">State / Province</label><input type="text" className="erp-input" value={form?.state} onChange={e => setForm((f: any) => ({ ...f, state: e.target.value.replace(/[^a-zA-Z\s]/g, '') }))} /></div>
                   </div>
                   <div className="responsive-grid">
-                    <div style={{ marginBottom: '14px' }}><label className="erp-label">ZIP Code</label><input type="text" className="erp-input" value={form?.pincode} onChange={e => setForm((f: any) => ({ ...f, pincode: e.target.value }))} /></div>
-                    <div style={{ marginBottom: '14px' }}><label className="erp-label">Country</label><input type="text" className="erp-input" value={form?.country} onChange={e => setForm((f: any) => ({ ...f, country: e.target.value }))} /></div>
+                    {/* VALIDASI: HANYA ANGKA & ALFABET KETAT */}
+                    <div style={{ marginBottom: '14px' }}><label className="erp-label">ZIP Code</label><input type="text" className="erp-input" value={form?.pincode} onChange={e => setForm((f: any) => ({ ...f, pincode: e.target.value.replace(/[^0-9]/g, '') }))} /></div>
+                    <div style={{ marginBottom: '14px' }}><label className="erp-label">Country</label><input type="text" className="erp-input" value={form?.country} onChange={e => setForm((f: any) => ({ ...f, country: e.target.value.replace(/[^a-zA-Z\s]/g, '') }))} /></div>
                   </div>
                 </div>
               </div>
-              {error && <div className="error-box" style={{ marginTop: '16px' }}>{error}</div>}
+              {error && <div className="error-box" style={{ marginTop: '16px' }}><AlertCircle size={16}/> {error}</div>}
               <div style={{ display: 'flex', gap: '10px', marginTop: '24px', justifyContent: 'flex-end', borderTop: '1px solid #e5e7eb', paddingTop: '16px' }}>
                 <button type="button" onClick={onClose} className="btn btn-secondary mobile-btn" disabled={isSubmitting}>Tutup</button>
                 <button type="submit" disabled={isSubmitting} className="btn btn-primary mobile-btn" style={{ background: COLOR_PRIMARY, borderColor: COLOR_PRIMARY }}>{isSubmitting ? 'Menyimpan...' : 'Simpan Perubahan'}</button>
@@ -248,7 +306,7 @@ function DetailCustomerModal({ customer, onClose, onSuccess }: { customer: any; 
 }
 
 // ==========================================
-// 2. MODALS FOR SALES ORDER
+// 2. MODALS FOR SALES ORDER (CEGAH MINUS)
 // ==========================================
 function CreateOrderModal({ onClose, customers, items, onSuccess }: { onClose: () => void; customers: Customer[]; items: any[]; onSuccess?: () => void }) {
   const [form, setForm] = useState({ 
@@ -266,11 +324,33 @@ function CreateOrderModal({ onClose, customers, items, onSuccess }: { onClose: (
     const val = e.target.value; const selected = items.find((i: any) => i.item_code === val); const newRate = selected?.standard_rate || 0;
     setForm(f => ({ ...f, item_code: val, rate: String(newRate), amount: newRate * Number(f.qty || 0) }));
   };
-  const handleQtyChange = (e: React.ChangeEvent<HTMLInputElement>) => { const val = e.target.value; setForm(f => ({ ...f, qty: val, amount: Number(val) * Number(f.rate || 0) })); };
-  const handleRateChange = (e: React.ChangeEvent<HTMLInputElement>) => { const val = e.target.value; setForm(f => ({ ...f, rate: val, amount: Number(f.qty || 0) * Number(val) })); };
+
+  // VALIDASI ANTI MINUS (REAL-TIME)
+  const handleQtyChange = (e: React.ChangeEvent<HTMLInputElement>) => { 
+    const val = e.target.value; 
+    if (val.includes('-') || Number(val) < 0) {
+      setError('❌ Ditolak: Quantity tidak boleh bernilai minus!');
+      return;
+    }
+    setError('');
+    setForm(f => ({ ...f, qty: val, amount: Number(val) * Number(f.rate || 0) })); 
+  };
+
+  const handleRateChange = (e: React.ChangeEvent<HTMLInputElement>) => { 
+    const val = e.target.value; 
+    if (val.includes('-') || Number(val) < 0) {
+      setError('❌ Ditolak: Harga (Rate) tidak boleh bernilai minus!');
+      return;
+    }
+    setError('');
+    setForm(f => ({ ...f, rate: val, amount: Number(f.qty || 0) * Number(val) })); 
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault(); if (Number(form.qty) <= 0 || Number(form.rate) <= 0) return setError('Qty dan Rate harus lebih dari 0.');
+    e.preventDefault(); 
+    if (Number(form.qty) <= 0) return setError('Quantity harus lebih dari 0.');
+    if (Number(form.rate) <= 0) return setError('Harga (Rate) harus lebih dari 0.');
+    
     setIsSubmitting(true); setError('');
     try {
       const selectedItem = items.find((i: any) => i.item_code === form.item_code);
@@ -312,12 +392,12 @@ function CreateOrderModal({ onClose, customers, items, onSuccess }: { onClose: (
               <div><label className="erp-label">Model Laptop *</label><select required className="erp-input" value={form.item_code} onChange={handleItemChange}><option value="">Pilih Item...</option>{items.map((i: any) => <option key={i.name} value={i.item_code}>{i.item_code} - {i.item_name}</option>)}</select></div>
             </div>
             <div className="responsive-grid-3">
-              <div><label className="erp-label">Quantity *</label><input type="number" step="any" required placeholder="0" className="erp-input" value={form.qty} onChange={handleQtyChange} /></div>
-              <div><label className="erp-label">Rate (Rp) *</label><input type="number" step="any" required placeholder="0" className="erp-input" value={form.rate} onChange={handleRateChange} /></div>
+              <div><label className="erp-label">Quantity *</label><input type="number" step="any" min="1" required placeholder="0" className="erp-input" value={form.qty} onChange={handleQtyChange} /></div>
+              <div><label className="erp-label">Rate (Rp) *</label><input type="number" step="any" min="1" required placeholder="0" className="erp-input" value={form.rate} onChange={handleRateChange} /></div>
               <div><label className="erp-label">Amount</label><input type="text" readOnly className="erp-input disabled-input" style={{ fontWeight: 700, color: COLOR_PRIMARY }} value={formatUang(form.amount)} /></div>
             </div>
           </div>
-          {error && <div className="error-box">{error}</div>}
+          {error && <div className="error-box"><AlertCircle size={16}/> {error}</div>}
           <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
             <button type="button" onClick={onClose} className="btn btn-secondary mobile-btn" disabled={isSubmitting}>Batal</button>
             <button type="submit" className="btn btn-primary mobile-btn" disabled={isSubmitting} style={{ background: COLOR_PRIMARY, borderColor: COLOR_PRIMARY }}>{isSubmitting ? 'Menyimpan...' : 'Simpan Draft SO'}</button>
@@ -373,7 +453,6 @@ function OrderDetailModal({ order, onClose, onSubmitOrder }: { order: any; onClo
               <div style={{ background: '#f8f9fb', padding: '10px', borderRadius: '8px' }}><p style={{ fontSize: '11px', color: '#6B7280' }}>Grand Total</p><p style={{ fontSize: '14px', fontWeight: 800, color: COLOR_PRIMARY }}>{formatUang(fullData?.grand_total)}</p></div>
             </div>
 
-            {/* Indikator Status Persentase Billed & Delivered yg REALISTIS (Tanpa tombol manual) */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px', marginBottom: '20px' }}>
               <div style={{ background: '#f0fdf4', padding: '12px', borderRadius: '8px', border: '1px solid #bbf7d0' }}>
                 <p style={{ fontSize: '11px', color: '#166534', fontWeight: 600 }}>% Delivered</p>
@@ -410,11 +489,13 @@ function OrderDetailModal({ order, onClose, onSubmitOrder }: { order: any; onClo
 }
 
 // ==========================================
-// 3. MODALS FOR SALES INVOICE (CREATE & DETAIL)
+// 3. MODALS FOR SALES INVOICE (POSTING TIME & CEGAH MINUS)
 // ==========================================
 function CreateInvoiceModal({ onClose, customers, items, orders, onSuccess, onLink }: { onClose: () => void; customers: Customer[]; items: any[]; orders: SalesOrder[]; onSuccess?: () => void; onLink: (inv: string, so: string) => void }) {
   const [form, setForm] = useState({ 
-    customer: '', company: FIXED_COMPANY, posting_date: new Date().toISOString().split('T')[0], 
+    customer: '', company: FIXED_COMPANY, 
+    posting_date: new Date().toISOString().split('T')[0], 
+    posting_time: new Date().toLocaleTimeString('id-ID', { hour12: false, hour: '2-digit', minute:'2-digit', second:'2-digit' }),
     item_code: '', qty: '1', rate: '', amount: 0, linked_so: '' 
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -450,13 +531,43 @@ function CreateInvoiceModal({ onClose, customers, items, orders, onSuccess, onLi
     const val = e.target.value; const selected = items.find((i: any) => i.item_code === val); const newRate = selected?.standard_rate || 0;
     setForm(f => ({ ...f, item_code: val, rate: String(newRate), amount: newRate * Number(f.qty || 0) }));
   };
-  const handleQtyChange = (e: React.ChangeEvent<HTMLInputElement>) => { const val = e.target.value; setForm(f => ({ ...f, qty: val, amount: Number(val) * Number(f.rate || 0) })); };
+  
+  // VALIDASI ANTI MINUS
+  const handleQtyChange = (e: React.ChangeEvent<HTMLInputElement>) => { 
+    const val = e.target.value; 
+    if (val.includes('-') || Number(val) < 0) {
+      setError('❌ Ditolak: Quantity tidak boleh bernilai minus!');
+      return;
+    }
+    setError('');
+    setForm(f => ({ ...f, qty: val, amount: Number(val) * Number(f.rate || 0) })); 
+  };
+  const handleRateChange = (e: React.ChangeEvent<HTMLInputElement>) => { 
+    const val = e.target.value; 
+    if (val.includes('-') || Number(val) < 0) {
+      setError('❌ Ditolak: Harga (Rate) tidak boleh bernilai minus!');
+      return;
+    }
+    setError('');
+    setForm(f => ({ ...f, rate: val, amount: Number(f.qty || 0) * Number(val) })); 
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault(); setIsSubmitting(true); setError('');
+    e.preventDefault(); 
+    if (Number(form.qty) <= 0) return setError('Quantity harus lebih dari 0.');
+    if (Number(form.rate) <= 0) return setError('Harga (Rate) harus lebih dari 0.');
+    
+    setIsSubmitting(true); setError('');
     try {
       const selectedItem = items.find((i: any) => i.item_code === form.item_code);
-      const invoiceData = { customer: form.customer, posting_date: form.posting_date, company: form.company, currency: 'IDR', items: [{ item_code: form.item_code, item_name: selectedItem?.item_name || form.item_code, qty: parseFloat(form.qty), rate: parseFloat(form.rate), amount: form.amount }] };
+      const invoiceData = { 
+        customer: form.customer, 
+        posting_date: form.posting_date, 
+        posting_time: form.posting_time, 
+        company: form.company, 
+        currency: 'IDR', 
+        items: [{ item_code: form.item_code, item_name: selectedItem?.item_name || form.item_code, qty: parseFloat(form.qty), rate: parseFloat(form.rate), amount: form.amount }] 
+      };
       const { apiCreate } = await import('@/lib/api');
       const res = await apiCreate('Sales Invoice', invoiceData);
       
@@ -487,21 +598,28 @@ function CreateInvoiceModal({ onClose, customers, items, orders, onSuccess, onLi
             <p style={{ fontSize: '10px', color: '#3b82f6', marginTop: '6px' }}>*Otomatis mengisi form di bawah dan menaikkan % Amount Billed pada SO saat disubmit.</p>
           </div>
 
+          <div style={{ marginBottom: '14px' }}>
+            <label className="erp-label">Customer Tagihan *</label>
+            <select required value={form.customer} onChange={e => setForm(f => ({ ...f, customer: e.target.value }))} className="erp-input">
+              <option value="">Pilih customer...</option>{customers.map(c => <option key={c.name} value={c.name}>{c.customer_name}</option>)}
+            </select>
+          </div>
+
           <div className="responsive-grid">
-            <div><label className="erp-label">Customer Tagihan *</label><select required value={form.customer} onChange={e => setForm(f => ({ ...f, customer: e.target.value }))} className="erp-input"><option value="">Pilih customer...</option>{customers.map(c => <option key={c.name} value={c.name}>{c.customer_name}</option>)}</select></div>
-            <div><label className="erp-label">Tanggal Tagihan *</label><input type="date" required className="erp-input" value={form.posting_date} onChange={e => setForm(f => ({ ...f, posting_date: e.target.value }))} /></div>
+            <div><label className="erp-label">Tanggal Terbit *</label><input type="date" required className="erp-input" value={form.posting_date} onChange={e => setForm(f => ({ ...f, posting_date: e.target.value }))} /></div>
+            <div><label className="erp-label">Waktu Terbit *</label><input type="time" step="1" required className="erp-input" value={form.posting_time} onChange={e => setForm(f => ({ ...f, posting_time: e.target.value }))} /></div>
           </div>
           
           <div style={{ borderTop: '1px solid #f3f4f6', paddingTop: '12px' }}>
             <p style={{ fontSize: '13px', fontWeight: 700, color: '#374151', marginBottom: '10px' }}>Detail Tagihan</p>
             <div style={{ marginBottom: '10px' }}><label className="erp-label">Produk / Jasa *</label><select required className="erp-input" value={form.item_code} onChange={handleItemChange}><option value="">Pilih Item...</option>{items.map((i: any) => <option key={i.name} value={i.item_code}>{i.item_code} - {i.item_name}</option>)}</select></div>
             <div className="responsive-grid-3">
-              <div><label className="erp-label">Qty</label><input type="number" required placeholder="0" step="any" className="erp-input" value={form.qty} onChange={handleQtyChange} /></div>
-              <div><label className="erp-label">Rate (Rp)</label><input type="number" required placeholder="0" step="any" className="erp-input" value={form.rate} onChange={e => { setForm(f => ({ ...f, rate: e.target.value, amount: Number(f.qty || 0) * Number(e.target.value) })); }} /></div>
+              <div><label className="erp-label">Qty</label><input type="number" required placeholder="0" min="1" step="any" className="erp-input" value={form.qty} onChange={handleQtyChange} /></div>
+              <div><label className="erp-label">Rate (Rp)</label><input type="number" required placeholder="0" min="1" step="any" className="erp-input" value={form.rate} onChange={handleRateChange} /></div>
               <div><label className="erp-label">Total</label><input type="text" readOnly className="erp-input disabled-input" style={{ fontWeight: 700, color: COLOR_PRIMARY }} value={formatUang(form.amount)} /></div>
             </div>
           </div>
-          {error && <div className="error-box">{error}</div>}
+          {error && <div className="error-box"><AlertCircle size={16}/> {error}</div>}
           <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
             <button type="button" onClick={onClose} className="btn btn-secondary mobile-btn" disabled={isSubmitting}>Batal</button>
             <button type="submit" className="btn btn-primary mobile-btn" disabled={isSubmitting} style={{ background: COLOR_PRIMARY, borderColor: COLOR_PRIMARY }}>{isSubmitting ? 'Memproses...' : 'Simpan Draft'}</button>
@@ -545,7 +663,7 @@ function InvoiceDetailModal({ invoice, onClose, onSubmitInvoice }: { invoice: an
                 <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#111827' }}>{fullData?.name}</h2>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
                   <span className={`badge ${invoice.status === 'Paid' ? 'badge-success' : invoice.status === 'Unpaid' ? 'badge-warning' : 'badge-gray'}`}>{invoice.status || 'Draft'}</span>
-                  <span style={{ fontSize: '12px', color: '#6B7280' }}>Tgl Posting: {formatDate(fullData?.posting_date)}</span>
+                  <span style={{ fontSize: '12px', color: '#6B7280' }}>Tgl Posting: {formatDate(fullData?.posting_date)} {fullData?.posting_time}</span>
                 </div>
               </div>
               <button onClick={onClose} disabled={isSubmitting} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={20} /></button>
@@ -763,7 +881,6 @@ function SellingPageContent() {
     }
   };
 
-  // LOGIKA REALISTIS: Saat Invoice disubmit, otomatis update persentase Billed di SO yang terhubung
   const handleInvoiceSubmit = async (inv: any) => {
     if (!confirm(`Yakin ingin Submit Faktur ini?\n\nFaktur akan dikunci dan statusnya akan menjadi "Unpaid" (Menunggu Pembayaran).`)) return;
     updateDocStatus(inv.name, 1);
@@ -847,7 +964,7 @@ function SellingPageContent() {
             )}
           </div>
 
-          {/* TABLE SALES ORDERS (Disesuaikan persis dengan kolom ERPNext) */}
+          {/* TABLE SALES ORDERS */}
           {activeTab === 'orders' && (
             <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
               <table className="erp-table" style={{ minWidth: '900px' }}>
