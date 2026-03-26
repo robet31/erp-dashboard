@@ -8,9 +8,9 @@ import { getWarehousesByCompany } from '@/config/frappe-data';
 import { 
   Users, FileText, FileCheck, DollarSign, Plus, Download, Search, X, 
   Edit, Trash2, Eye, Send, CheckCircle, AlertCircle, Loader2, Building, 
-  ArrowUpRight, Filter, Calendar, MapPin, Phone, Mail, Briefcase, User, Image as ImageIcon, UploadCloud
+  ArrowUpRight, Filter, Calendar, MapPin, Phone, Mail, Briefcase, User, Image as ImageIcon, UploadCloud, Link as LinkIcon
 } from 'lucide-react';
-import { formatRupiah, formatDate, getStatusBadgeClass, getStatusLabel } from '@/lib/utils';
+import { formatDate, getStatusBadgeClass, getStatusLabel } from '@/lib/utils';
 import type { SalesOrder, Customer } from '@/lib/frappe-types';
 
 const STATUS_FILTERS = ['Semua', 'Draft', 'To Deliver and Bill', 'Completed', 'Cancelled'];
@@ -20,6 +20,13 @@ const FIXED_COMPANY = 'Netra Vidya';
 const COLOR_PRIMARY = '#054CC7';
 const COLOR_SECONDARY = '#17C3CC';
 const BACKEND_URL = 'http://34.101.192.135:8080';
+
+const formatUang = (value: number | string | undefined) => {
+  if (value === undefined || value === null) return 'Rp 0';
+  const num = Number(value);
+  if (isNaN(num)) return 'Rp 0';
+  return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(num);
+};
 
 const getImageUrl = (url?: string) => {
   if (!url) return '';
@@ -241,10 +248,9 @@ function DetailCustomerModal({ customer, onClose, onSuccess }: { customer: any; 
 }
 
 // ==========================================
-// 2. MODALS FOR SALES ORDER (CREATE & DETAIL)
+// 2. MODALS FOR SALES ORDER
 // ==========================================
 function CreateOrderModal({ onClose, customers, items, onSuccess }: { onClose: () => void; customers: Customer[]; items: any[]; onSuccess?: () => void }) {
-  // Ditambahkan po_no (Customer PO) dan transaction_date untuk kelengkapan form
   const [form, setForm] = useState({ 
     customer: '', company: FIXED_COMPANY, 
     po_no: '', 
@@ -308,7 +314,7 @@ function CreateOrderModal({ onClose, customers, items, onSuccess }: { onClose: (
             <div className="responsive-grid-3">
               <div><label className="erp-label">Quantity *</label><input type="number" step="any" required placeholder="0" className="erp-input" value={form.qty} onChange={handleQtyChange} /></div>
               <div><label className="erp-label">Rate (Rp) *</label><input type="number" step="any" required placeholder="0" className="erp-input" value={form.rate} onChange={handleRateChange} /></div>
-              <div><label className="erp-label">Amount</label><input type="text" readOnly className="erp-input disabled-input" style={{ fontWeight: 700, color: COLOR_PRIMARY }} value={formatRupiah(form.amount)} /></div>
+              <div><label className="erp-label">Amount</label><input type="text" readOnly className="erp-input disabled-input" style={{ fontWeight: 700, color: COLOR_PRIMARY }} value={formatUang(form.amount)} /></div>
             </div>
           </div>
           {error && <div className="error-box">{error}</div>}
@@ -322,7 +328,7 @@ function CreateOrderModal({ onClose, customers, items, onSuccess }: { onClose: (
   );
 }
 
-function OrderDetailModal({ order, onClose, onSubmitOrder }: { order: SalesOrder; onClose: () => void; onSubmitOrder?: (wo: any) => void }) {
+function OrderDetailModal({ order, onClose, onSubmitOrder }: { order: any; onClose: () => void; onSubmitOrder?: (wo: any) => void; }) {
   const [fullData, setFullData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -364,12 +370,21 @@ function OrderDetailModal({ order, onClose, onSubmitOrder }: { order: SalesOrder
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px', marginBottom: '16px' }}>
               <div style={{ background: '#f8f9fb', padding: '10px', borderRadius: '8px' }}><p style={{ fontSize: '11px', color: '#6B7280' }}>Customer</p><p style={{ fontSize: '13px', fontWeight: 700 }}>{fullData?.customer_name}</p></div>
               <div style={{ background: '#f8f9fb', padding: '10px', borderRadius: '8px' }}><p style={{ fontSize: '11px', color: '#6B7280' }}>Delivery Date</p><p style={{ fontSize: '13px', fontWeight: 700 }}>{formatDate(fullData?.delivery_date)}</p></div>
-              <div style={{ background: '#f8f9fb', padding: '10px', borderRadius: '8px' }}><p style={{ fontSize: '11px', color: '#6B7280' }}>Grand Total</p><p style={{ fontSize: '14px', fontWeight: 800, color: COLOR_PRIMARY }}>{formatRupiah(fullData?.grand_total)}</p></div>
+              <div style={{ background: '#f8f9fb', padding: '10px', borderRadius: '8px' }}><p style={{ fontSize: '11px', color: '#6B7280' }}>Grand Total</p><p style={{ fontSize: '14px', fontWeight: 800, color: COLOR_PRIMARY }}>{formatUang(fullData?.grand_total)}</p></div>
             </div>
 
+            {/* Indikator Status Persentase Billed & Delivered yg REALISTIS (Tanpa tombol manual) */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px', marginBottom: '20px' }}>
-              <div style={{ background: '#f0fdf4', padding: '10px', borderRadius: '8px', border: '1px solid #bbf7d0' }}><p style={{ fontSize: '11px', color: '#166534', fontWeight: 600 }}>% Delivered</p><p style={{ fontSize: '14px', fontWeight: 800, color: '#15803d' }}>{Number(fullData?.per_delivered || 0)}%</p></div>
-              <div style={{ background: '#f0fdf4', padding: '10px', borderRadius: '8px', border: '1px solid #bbf7d0' }}><p style={{ fontSize: '11px', color: '#166534', fontWeight: 600 }}>% Amount Billed</p><p style={{ fontSize: '14px', fontWeight: 800, color: '#15803d' }}>{Number(fullData?.per_billed || 0)}%</p></div>
+              <div style={{ background: '#f0fdf4', padding: '12px', borderRadius: '8px', border: '1px solid #bbf7d0' }}>
+                <p style={{ fontSize: '11px', color: '#166534', fontWeight: 600 }}>% Delivered</p>
+                <p style={{ fontSize: '16px', fontWeight: 800, color: '#15803d' }}>{Number(order.per_delivered || 0).toFixed(0)}%</p>
+                <p style={{ fontSize: '10px', color: '#166534', marginTop: '4px' }}>*Otomatis via Delivery Note</p>
+              </div>
+              <div style={{ background: '#f0fdf4', padding: '12px', borderRadius: '8px', border: '1px solid #bbf7d0' }}>
+                <p style={{ fontSize: '11px', color: '#166534', fontWeight: 600 }}>% Amount Billed</p>
+                <p style={{ fontSize: '16px', fontWeight: 800, color: '#15803d' }}>{Number(order.per_billed || 0).toFixed(0)}%</p>
+                <p style={{ fontSize: '10px', color: '#166534', marginTop: '4px' }}>*Otomatis via Sales Invoice</p>
+              </div>
             </div>
             
             <div style={{ overflowX: 'auto', border: '1px solid #f3f4f6', borderRadius: '8px', padding: '1px' }}>
@@ -377,14 +392,14 @@ function OrderDetailModal({ order, onClose, onSubmitOrder }: { order: SalesOrder
                 <thead><tr><th>Item Code</th><th>Item Name</th><th style={{ textAlign: 'right' }}>Qty</th><th style={{ textAlign: 'right' }}>Rate</th><th style={{ textAlign: 'right' }}>Amount</th></tr></thead>
                 <tbody>
                   {(fullData?.items || []).map((item: any, i: number) => (
-                    <tr key={i}><td><span style={{ color: COLOR_SECONDARY, fontWeight: 600 }}>{item.item_code}</span></td><td style={{ whiteSpace: 'normal' }}>{item.item_name}</td><td style={{ textAlign: 'right' }}>{Number(item.qty)} {item.uom}</td><td style={{ textAlign: 'right' }}>{formatRupiah(item.rate)}</td><td style={{ textAlign: 'right', fontWeight: 700 }}>{formatRupiah(item.amount)}</td></tr>
+                    <tr key={i}><td><span style={{ color: COLOR_SECONDARY, fontWeight: 600 }}>{item.item_code}</span></td><td style={{ whiteSpace: 'normal' }}>{item.item_name}</td><td style={{ textAlign: 'right' }}>{Number(item.qty)} {item.uom}</td><td style={{ textAlign: 'right' }}>{formatUang(item.rate)}</td><td style={{ textAlign: 'right', fontWeight: 700 }}>{formatUang(item.amount)}</td></tr>
                   ))}
                 </tbody>
               </table>
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px', gap: '10px' }} className="mobile-btn-group">
-              {order.docstatus === 0 && <button className="btn btn-primary mobile-btn" onClick={handleSubmit} disabled={isSubmitting} style={{ background: COLOR_PRIMARY, borderColor: COLOR_PRIMARY }}><Send size={16} /> Submit (Kunci)</button>}
+              {order.docstatus === 0 && <button className="btn btn-primary mobile-btn" onClick={handleSubmit} disabled={isSubmitting} style={{ background: COLOR_PRIMARY, borderColor: COLOR_PRIMARY }}><Send size={16} /> Submit (Siap Kirim)</button>}
               <button className="btn btn-secondary mobile-btn" onClick={onClose} disabled={isSubmitting}>Tutup</button>
             </div>
           </>
@@ -397,10 +412,39 @@ function OrderDetailModal({ order, onClose, onSubmitOrder }: { order: SalesOrder
 // ==========================================
 // 3. MODALS FOR SALES INVOICE (CREATE & DETAIL)
 // ==========================================
-function CreateInvoiceModal({ onClose, customers, items, onSuccess }: { onClose: () => void; customers: Customer[]; items: any[]; onSuccess?: () => void }) {
-  const [form, setForm] = useState({ customer: '', company: FIXED_COMPANY, posting_date: new Date().toISOString().split('T')[0], item_code: '', qty: '1', rate: '', amount: 0 });
+function CreateInvoiceModal({ onClose, customers, items, orders, onSuccess, onLink }: { onClose: () => void; customers: Customer[]; items: any[]; orders: SalesOrder[]; onSuccess?: () => void; onLink: (inv: string, so: string) => void }) {
+  const [form, setForm] = useState({ 
+    customer: '', company: FIXED_COMPANY, posting_date: new Date().toISOString().split('T')[0], 
+    item_code: '', qty: '1', rate: '', amount: 0, linked_so: '' 
+  });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+
+  // Fitur Tarik Data Realistis dari Sales Order
+  const handleSOChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const soName = e.target.value;
+    setForm(f => ({ ...f, linked_so: soName }));
+    if (!soName) return;
+
+    try {
+      const res = await fetch(`/api/frappe/resource/Sales Order/${encodeURIComponent(soName)}`);
+      const data = await res.json();
+      if (data.data) {
+        const soData = data.data;
+        const firstItem = soData.items?.[0] || {};
+        setForm(f => ({
+          ...f,
+          customer: soData.customer,
+          item_code: firstItem.item_code || '',
+          qty: firstItem.qty ? String(firstItem.qty) : '1',
+          rate: firstItem.rate ? String(firstItem.rate) : '',
+          amount: firstItem.amount || 0,
+        }));
+      }
+    } catch (err) {
+      console.error("Gagal menarik detail SO", err);
+    }
+  };
 
   const handleItemChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value; const selected = items.find((i: any) => i.item_code === val); const newRate = selected?.standard_rate || 0;
@@ -414,28 +458,47 @@ function CreateInvoiceModal({ onClose, customers, items, onSuccess }: { onClose:
       const selectedItem = items.find((i: any) => i.item_code === form.item_code);
       const invoiceData = { customer: form.customer, posting_date: form.posting_date, company: form.company, currency: 'IDR', items: [{ item_code: form.item_code, item_name: selectedItem?.item_name || form.item_code, qty: parseFloat(form.qty), rate: parseFloat(form.rate), amount: form.amount }] };
       const { apiCreate } = await import('@/lib/api');
-      await apiCreate('Sales Invoice', invoiceData);
+      const res = await apiCreate('Sales Invoice', invoiceData);
+      
+      const newInvName = res?.data?.name || res?.name;
+      if (form.linked_so && newInvName) {
+        onLink(newInvName, form.linked_so);
+      }
+
       alert('✅ Sales Invoice (Faktur) berhasil dibuat sebagai Draft!'); onClose(); if (onSuccess) onSuccess();
     } catch (err: any) { setError(extractFrappeError(err, 'Gagal membuat Sales Invoice')); } finally { setIsSubmitting(false); }
   };
 
   return (
     <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal-content" style={{ width: '100%', maxWidth: '500px', margin: '0 16px' }}>
+      <div className="modal-content" style={{ width: '100%', maxWidth: '540px', margin: '0 16px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
           <div><h2 style={{ fontSize: '18px', fontWeight: 800, color: '#111827' }}>Buat Faktur Baru (Draft)</h2></div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={20} /></button>
         </div>
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          <div><label className="erp-label">Customer Tagihan *</label><select required value={form.customer} onChange={e => setForm(f => ({ ...f, customer: e.target.value }))} className="erp-input"><option value="">Pilih customer...</option>{customers.map(c => <option key={c.name} value={c.name}>{c.customer_name}</option>)}</select></div>
-          <div><label className="erp-label">Tanggal Tagihan *</label><input type="date" required className="erp-input" value={form.posting_date} onChange={e => setForm(f => ({ ...f, posting_date: e.target.value }))} /></div>
+          
+          <div style={{ background: '#eff6ff', padding: '14px', borderRadius: '8px', border: '1px solid #bfdbfe' }}>
+            <label className="erp-label" style={{ color: COLOR_PRIMARY, display: 'flex', alignItems: 'center', gap: '6px' }}><LinkIcon size={14}/> Tarik Data dari Sales Order (Opsional)</label>
+            <select className="erp-input" value={form.linked_so} onChange={handleSOChange}>
+              <option value="">-- Pilih Sales Order yang Siap Ditagih --</option>
+              {orders.map(o => <option key={o.name} value={o.name}>{o.name} - {o.customer_name}</option>)}
+            </select>
+            <p style={{ fontSize: '10px', color: '#3b82f6', marginTop: '6px' }}>*Otomatis mengisi form di bawah dan menaikkan % Amount Billed pada SO saat disubmit.</p>
+          </div>
+
+          <div className="responsive-grid">
+            <div><label className="erp-label">Customer Tagihan *</label><select required value={form.customer} onChange={e => setForm(f => ({ ...f, customer: e.target.value }))} className="erp-input"><option value="">Pilih customer...</option>{customers.map(c => <option key={c.name} value={c.name}>{c.customer_name}</option>)}</select></div>
+            <div><label className="erp-label">Tanggal Tagihan *</label><input type="date" required className="erp-input" value={form.posting_date} onChange={e => setForm(f => ({ ...f, posting_date: e.target.value }))} /></div>
+          </div>
+          
           <div style={{ borderTop: '1px solid #f3f4f6', paddingTop: '12px' }}>
             <p style={{ fontSize: '13px', fontWeight: 700, color: '#374151', marginBottom: '10px' }}>Detail Tagihan</p>
             <div style={{ marginBottom: '10px' }}><label className="erp-label">Produk / Jasa *</label><select required className="erp-input" value={form.item_code} onChange={handleItemChange}><option value="">Pilih Item...</option>{items.map((i: any) => <option key={i.name} value={i.item_code}>{i.item_code} - {i.item_name}</option>)}</select></div>
             <div className="responsive-grid-3">
               <div><label className="erp-label">Qty</label><input type="number" required placeholder="0" step="any" className="erp-input" value={form.qty} onChange={handleQtyChange} /></div>
               <div><label className="erp-label">Rate (Rp)</label><input type="number" required placeholder="0" step="any" className="erp-input" value={form.rate} onChange={e => { setForm(f => ({ ...f, rate: e.target.value, amount: Number(f.qty || 0) * Number(e.target.value) })); }} /></div>
-              <div><label className="erp-label">Total</label><input type="text" readOnly className="erp-input disabled-input" style={{ fontWeight: 700, color: COLOR_PRIMARY }} value={formatRupiah(form.amount)} /></div>
+              <div><label className="erp-label">Total</label><input type="text" readOnly className="erp-input disabled-input" style={{ fontWeight: 700, color: COLOR_PRIMARY }} value={formatUang(form.amount)} /></div>
             </div>
           </div>
           {error && <div className="error-box">{error}</div>}
@@ -491,7 +554,7 @@ function InvoiceDetailModal({ invoice, onClose, onSubmitInvoice }: { invoice: an
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px', marginBottom: '16px' }}>
               <div style={{ background: '#f8f9fb', padding: '10px', borderRadius: '8px' }}><p style={{ fontSize: '11px', color: '#6B7280' }}>Customer</p><p style={{ fontSize: '13px', fontWeight: 700 }}>{fullData?.customer_name}</p></div>
               <div style={{ background: '#f8f9fb', padding: '10px', borderRadius: '8px' }}><p style={{ fontSize: '11px', color: '#6B7280' }}>Due Date</p><p style={{ fontSize: '13px', fontWeight: 700 }}>{formatDate(fullData?.due_date || fullData?.posting_date)}</p></div>
-              <div style={{ background: '#f8f9fb', padding: '10px', borderRadius: '8px' }}><p style={{ fontSize: '11px', color: '#6B7280' }}>Total Tagihan</p><p style={{ fontSize: '14px', fontWeight: 800, color: COLOR_PRIMARY }}>{formatRupiah(fullData?.grand_total)}</p></div>
+              <div style={{ background: '#f8f9fb', padding: '10px', borderRadius: '8px' }}><p style={{ fontSize: '11px', color: '#6B7280' }}>Total Tagihan</p><p style={{ fontSize: '14px', fontWeight: 800, color: COLOR_PRIMARY }}>{formatUang(fullData?.grand_total)}</p></div>
             </div>
             
             <div style={{ overflowX: 'auto', border: '1px solid #f3f4f6', borderRadius: '8px', padding: '1px' }}>
@@ -499,7 +562,7 @@ function InvoiceDetailModal({ invoice, onClose, onSubmitInvoice }: { invoice: an
                 <thead><tr><th>Item Code</th><th>Item Name</th><th style={{ textAlign: 'right' }}>Qty</th><th style={{ textAlign: 'right' }}>Amount</th></tr></thead>
                 <tbody>
                   {(fullData?.items || []).map((item: any, i: number) => (
-                    <tr key={i}><td><span style={{ color: COLOR_SECONDARY, fontWeight: 600 }}>{item.item_code}</span></td><td style={{ whiteSpace: 'normal' }}>{item.item_name}</td><td style={{ textAlign: 'right' }}>{Number(item.qty)} {item.uom}</td><td style={{ textAlign: 'right', fontWeight: 700 }}>{formatRupiah(item.amount)}</td></tr>
+                    <tr key={i}><td><span style={{ color: COLOR_SECONDARY, fontWeight: 600 }}>{item.item_code}</span></td><td style={{ whiteSpace: 'normal' }}>{item.item_name}</td><td style={{ textAlign: 'right' }}>{Number(item.qty)} {item.uom}</td><td style={{ textAlign: 'right', fontWeight: 700 }}>{formatUang(item.amount)}</td></tr>
                   ))}
                 </tbody>
               </table>
@@ -549,21 +612,50 @@ function SellingPageContent() {
   const [showCreateInvoiceModal, setShowCreateInvoiceModal] = useState(false);
   
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
-  const [selectedOrder, setSelectedOrder] = useState<SalesOrder | null>(null);
+  const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
   const [selectedInvoice, setSelectedInvoice] = useState<any | null>(null);
 
-  // LOCAL OVERRIDE (MENGAKALI ERPNEXT AGAR STATUS BERTAHAN WALAUPUN DI-RELOAD)
+  // LOCAL OVERRIDES (SMART BYPASS)
   const [localDocStatus, setLocalDocStatus] = useState<Record<string, number>>({});
+  const [localSOProgress, setLocalSOProgress] = useState<Record<string, { delivered: number, billed: number }>>({});
+  const [invoiceLinks, setInvoiceLinks] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const savedStatus = localStorage.getItem('erp_mock_selling_status');
     if (savedStatus) { try { setLocalDocStatus(JSON.parse(savedStatus)); } catch (e) {} }
+
+    const savedProgress = localStorage.getItem('erp_mock_so_progress');
+    if (savedProgress) { try { setLocalSOProgress(JSON.parse(savedProgress)); } catch (e) {} }
+
+    const savedLinks = localStorage.getItem('erp_mock_invoice_links');
+    if (savedLinks) { try { setInvoiceLinks(JSON.parse(savedLinks)); } catch (e) {} }
   }, []);
 
   const updateDocStatus = (docName: string, status: number) => {
     setLocalDocStatus(prev => {
       const next = { ...prev, [docName]: status };
       localStorage.setItem('erp_mock_selling_status', JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const updateSOProgress = (soName: string, type: 'delivered' | 'billed', value: number) => {
+    setLocalSOProgress(prev => {
+      const current = prev[soName] || { delivered: 0, billed: 0 };
+      const next = { ...prev, [soName]: { ...current, [type]: value } };
+      localStorage.setItem('erp_mock_so_progress', JSON.stringify(next));
+      
+      if (selectedOrder && selectedOrder.name === soName) {
+        setSelectedOrder({ ...selectedOrder, [`per_${type}`]: value });
+      }
+      return next;
+    });
+  };
+
+  const handleLinkInvoice = (invName: string, soName: string) => {
+    setInvoiceLinks(prev => {
+      const next = { ...prev, [invName]: soName };
+      localStorage.setItem('erp_mock_invoice_links', JSON.stringify(next));
       return next;
     });
   };
@@ -580,17 +672,41 @@ function SellingPageContent() {
     return [...customers].sort((a, b) => sortByNewest(a, b, 'creation'));
   }, [customers]);
   
-  // Apply Overrides on Lists
+  // Apply Overrides on Lists (TERMASUK LOGIKA "SELESAI" JIKA 100%)
   const sortedSalesOrders = useMemo(() => {
     return [...salesOrders].sort((a, b) => sortByNewest(a, b, 'transaction_date')).map(so => {
       const localStatus = localDocStatus[so.name];
+      const progress = localSOProgress[so.name] || { delivered: 0, billed: 0 };
+      
+      let finalDelivered = progress.delivered > 0 ? progress.delivered : (so.per_delivered || 0);
+      let finalBilled = progress.billed > 0 ? progress.billed : (so.per_billed || 0);
+      
+      let finalStatus = so.status;
+      let finalDocstatus = so.docstatus;
+
+      if (localStatus !== undefined) {
+         finalDocstatus = localStatus;
+         if (localStatus === 1) finalStatus = 'To Deliver and Bill'; 
+         if (localStatus === 2) finalStatus = 'Cancelled';
+      }
+
+      if (finalDocstatus === 1 && finalDelivered >= 100 && finalBilled >= 100) {
+         finalStatus = 'Completed';
+      }
+
       return {
         ...so,
-        docstatus: localStatus !== undefined ? localStatus : so.docstatus,
-        status: localStatus === 1 ? 'To Deliver and Bill' : so.status
+        docstatus: finalDocstatus,
+        status: finalStatus,
+        per_delivered: finalDelivered,
+        per_billed: finalBilled
       };
     });
-  }, [salesOrders, localDocStatus]);
+  }, [salesOrders, localDocStatus, localSOProgress]);
+
+  const activeSalesOrders = useMemo(() => {
+    return sortedSalesOrders.filter(o => o.docstatus === 1 && o.status !== 'Completed');
+  }, [sortedSalesOrders]);
 
   const sortedSalesInvoices = useMemo(() => {
     return [...invoices].sort((a, b) => sortByNewest(a, b, 'posting_date')).map(si => {
@@ -624,7 +740,6 @@ function SellingPageContent() {
       if (docstatus === 1) await apiUpdate(doctype, docname, { docstatus: 2 });
       await apiDelete(doctype, docname);
       
-      // Bersihkan override
       setLocalDocStatus(prev => {
         const next = { ...prev }; delete next[docname];
         localStorage.setItem('erp_mock_selling_status', JSON.stringify(next)); return next;
@@ -636,27 +751,35 @@ function SellingPageContent() {
   };
 
   const handleSOSubmit = async (so: any) => {
-    if (!confirm(`Yakin ingin Submit Sales Order ini?\n\nPesanan akan dikunci dan siap untuk diteruskan ke tim Produksi.`)) return;
+    if (!confirm(`Yakin ingin Submit Sales Order ini?\n\nPesanan akan dikunci dan berstatus "Siap Kirim" (To Deliver and Bill).`)) return;
     updateDocStatus(so.name, 1);
     try {
       const { apiUpdate } = await import('@/lib/api');
       await apiUpdate('Sales Order', so.name, { docstatus: 1 });
       alert(`✅ Sales Order berhasil di-Submit ke server!`); refetch(); 
     } catch (err: any) { 
-      alert(`⚠️ PEMBERITAHUAN SIMULASI:\n\nSistem menganggap Sales Order ini ✅ BERHASIL DI-SUBMIT.\nSilakan lanjut ke Modul Manufacturing untuk membuat perakitan.`); 
+      alert(`⚠️ PEMBERITAHUAN SIMULASI:\n\nSistem menganggap Sales Order ini ✅ BERHASIL DI-SUBMIT.\nSilakan buat Delivery Note (Gudang) dan Sales Invoice (Faktur) untuk mengubah persentase. `); 
       refetch();
     }
   };
 
+  // LOGIKA REALISTIS: Saat Invoice disubmit, otomatis update persentase Billed di SO yang terhubung
   const handleInvoiceSubmit = async (inv: any) => {
     if (!confirm(`Yakin ingin Submit Faktur ini?\n\nFaktur akan dikunci dan statusnya akan menjadi "Unpaid" (Menunggu Pembayaran).`)) return;
     updateDocStatus(inv.name, 1);
+    
+    // UPDATE SO OTOMATIS
+    const linkedSOName = invoiceLinks[inv.name];
+    if (linkedSOName) {
+      updateSOProgress(linkedSOName, 'billed', 100);
+    }
+
     try {
       const { apiUpdate } = await import('@/lib/api');
       await apiUpdate('Sales Invoice', inv.name, { docstatus: 1 });
       alert(`✅ Faktur berhasil di-Submit ke server!`); fetchInvoices(); 
     } catch (err: any) { 
-      alert(`⚠️ PEMBERITAHUAN SIMULASI:\n\nSistem menganggap Faktur Tagihan ini ✅ BERHASIL DI-SUBMIT menjadi "Unpaid".\nSilakan cek halaman Dashboard untuk melihat panen Revenue Anda!`); 
+      alert(`⚠️ PEMBERITAHUAN SIMULASI:\n\nSistem menganggap Faktur Tagihan ini ✅ BERHASIL DI-SUBMIT menjadi "Unpaid".\nPersentase Amount Billed pada Sales Order (jika ditarik datanya) telah diperbarui otomatis!`); 
       fetchInvoices();
     }
   };
@@ -684,11 +807,9 @@ function SellingPageContent() {
       {/* RENDER MODALS */}
       {showCreateModal && <CreateOrderModal onClose={() => setShowCreateModal(false)} customers={sortedCustomers} items={allItems} onSuccess={() => refetch()} />}
       {showCreateCustomerModal && <CreateCustomerModal onClose={() => setShowCreateCustomerModal(false)} onSuccess={() => refetch()} />}
-      {showCreateInvoiceModal && <CreateInvoiceModal onClose={() => setShowCreateInvoiceModal(false)} customers={sortedCustomers} items={allItems} onSuccess={() => fetchInvoices()} />}
+      {showCreateInvoiceModal && <CreateInvoiceModal onClose={() => setShowCreateInvoiceModal(false)} customers={sortedCustomers} items={allItems} orders={activeSalesOrders} onSuccess={() => fetchInvoices()} onLink={handleLinkInvoice} />}
       
-      {/* Detail/Edit Modal Customer */}
       {selectedCustomer && <DetailCustomerModal customer={selectedCustomer} onClose={() => setSelectedCustomer(null)} onSuccess={() => refetch()} />}
-      
       {selectedOrder && <OrderDetailModal order={selectedOrder} onClose={() => setSelectedOrder(null)} onSubmitOrder={handleSOSubmit} />}
       {selectedInvoice && <InvoiceDetailModal invoice={selectedInvoice} onClose={() => setSelectedInvoice(null)} onSubmitInvoice={handleInvoiceSubmit} />}
 
@@ -726,7 +847,7 @@ function SellingPageContent() {
             )}
           </div>
 
-          {/* TABLE SALES ORDERS (Disesuaikan dengan ERPNext List View) */}
+          {/* TABLE SALES ORDERS (Disesuaikan persis dengan kolom ERPNext) */}
           {activeTab === 'orders' && (
             <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
               <table className="erp-table" style={{ minWidth: '900px' }}>
@@ -747,12 +868,22 @@ function SellingPageContent() {
                   {filteredOrders.map((order, index) => (
                     <tr key={order.name} className="table-row-hover">
                       <td style={{ textAlign: 'center', fontWeight: 600, color: '#6B7280' }}>{index + 1}</td>
-                      <td><div style={{ fontWeight: 700, fontSize: '13px', color: '#111827' }}>{order.customer_name}</div></td>
+                      <td>
+                        <div style={{ fontWeight: 700, fontSize: '13px', color: '#111827' }}>{order.customer_name}</div>
+                      </td>
                       <td><span className={`badge ${getStatusBadgeClass(order.status)}`}>{getStatusLabel(order.status)}</span></td>
-                      <td><div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: '#374151' }}><Calendar size={12} color="#9CA3AF" /> {formatDate(order.delivery_date)}</div></td>
-                      <td style={{ textAlign: 'right', fontWeight: 700, color: COLOR_PRIMARY }}>{formatRupiah(order.grand_total)}</td>
-                      <td style={{ textAlign: 'center', fontWeight: 600, color: '#4B5563' }}>{Number(order.per_delivered || 0)}%</td>
-                      <td style={{ textAlign: 'center', fontWeight: 600, color: '#4B5563' }}>{Number(order.per_billed || 0)}%</td>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: '#374151' }}><Calendar size={12} color="#9CA3AF" /> {formatDate(order.delivery_date)}</div>
+                      </td>
+                      <td style={{ textAlign: 'right', fontWeight: 700, color: COLOR_PRIMARY }}>
+                        {formatUang(order.grand_total)}
+                      </td>
+                      <td style={{ textAlign: 'center', fontWeight: 600, color: '#4B5563' }}>
+                        {Number(order.per_delivered || 0).toFixed(0)}%
+                      </td>
+                      <td style={{ textAlign: 'center', fontWeight: 600, color: '#4B5563' }}>
+                        {Number(order.per_billed || 0).toFixed(0)}%
+                      </td>
                       <td>
                         <div style={{ color: COLOR_SECONDARY, fontWeight: 700, fontSize: '12px' }}>{order.name}</div>
                       </td>
@@ -771,7 +902,7 @@ function SellingPageContent() {
             </div>
           )}
 
-          {/* TABLE CUSTOMERS (SEPERTI TAMPILAN ERPNEXT) */}
+          {/* TABLE CUSTOMERS */}
           {activeTab === 'customers' && (
             <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
               <table className="erp-table" style={{ minWidth: '700px' }}>
@@ -842,6 +973,7 @@ function SellingPageContent() {
                     <th>Invoice ID & Waktu Terbit</th>
                     <th>Customer Tagihan</th>
                     <th style={{ textAlign: 'right' }}>Total Tagihan</th>
+                    <th style={{ textAlign: 'center' }}>Linked SO</th>
                     <th>Status Pembayaran</th>
                     <th style={{ width: '120px', textAlign: 'center' }}>Actions</th>
                   </tr>
@@ -855,7 +987,16 @@ function SellingPageContent() {
                         <div style={{ fontSize: '12px', color: '#6B7280' }}>{formatDate(inv.posting_date)}</div>
                       </td>
                       <td><div style={{ fontSize: '13px', color: '#111827', fontWeight: 600 }}>{inv.customer_name}</div></td>
-                      <td style={{ textAlign: 'right', fontWeight: 800, color: '#111827' }}>{formatRupiah(inv.grand_total)}</td>
+                      <td style={{ textAlign: 'right', fontWeight: 800, color: '#111827' }}>{formatUang(inv.grand_total)}</td>
+                      <td style={{ textAlign: 'center' }}>
+                        {invoiceLinks[inv.name] ? (
+                          <span style={{ background: '#eff6ff', color: COLOR_PRIMARY, padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700 }}>
+                            {invoiceLinks[inv.name]}
+                          </span>
+                        ) : (
+                          <span style={{ color: '#9CA3AF', fontSize: '11px' }}>-</span>
+                        )}
+                      </td>
                       <td>
                         <span className={`badge ${inv.status === 'Paid' ? 'badge-success' : inv.status === 'Unpaid' ? 'badge-warning' : 'badge-gray'}`}>
                           {inv.status || 'Draft'}
@@ -870,7 +1011,7 @@ function SellingPageContent() {
                       </td>
                     </tr>
                   ))}
-                  {filteredInvoices.length === 0 && <tr><td colSpan={6} style={{ textAlign: 'center', padding: '40px', color: '#6B7280' }}>Belum ada Invoice / Faktur Penjualan.</td></tr>}
+                  {filteredInvoices.length === 0 && <tr><td colSpan={7} style={{ textAlign: 'center', padding: '40px', color: '#6B7280' }}>Belum ada Invoice / Faktur Penjualan.</td></tr>}
                 </tbody>
               </table>
             </div>
