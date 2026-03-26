@@ -3,11 +3,19 @@
 import React, { useMemo } from 'react';
 import { useStockData } from '@/hooks/useFrappeData';
 import { Filter, MoreHorizontal } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import { formatRupiah } from '@/lib/utils';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { getWarehousesByCompany } from '@/config/frappe-data';
 
-const CHART_COLOR = '#f472b6'; // Warna Pink khas ERPNext Stock
+const COLOR_PRIMARY = '#054CC7';
+const COLOR_SECONDARY = '#17C3CC';
+
+// Formatter Uang Realistis (Tanpa M)
+const formatUang = (value: number | string | undefined) => {
+  if (value === undefined || value === null) return 'Rp 0';
+  const num = Number(value);
+  if (isNaN(num)) return 'Rp 0';
+  return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(num);
+};
 
 export default function StockHomePage() {
   const { items, isLoading } = useStockData();
@@ -18,8 +26,7 @@ export default function StockHomePage() {
     const totalActiveItems = items.filter((i: any) => !i.disabled).length;
     const totalWarehouses = warehouses.length;
     
-    // Asumsi Stock Value = Standard Rate * (Random Qty 10-50 untuk visualisasi jika Bin kosong)
-    // Di real-case, ini harus fetch dari doctype 'Bin'
+    // Asumsi Stock Value = Standard Rate * 15 (simulasi)
     const totalStockValue = items.reduce((sum: number, item: any) => sum + ((item.standard_rate || 1500000) * 15), 0);
 
     // Grouping item by Item Group
@@ -57,12 +64,12 @@ export default function StockHomePage() {
       <div className="chart-container" style={{ marginBottom: '16px' }}>
         <CardHeader title="Stock Value by Item Group" subtitle="Last synced just now" />
         <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={stats.stockByGroup} margin={{ top: 20, right: 20, left: 20, bottom: 0 }}>
+          <BarChart data={stats.stockByGroup} margin={{ top: 20, right: 30, left: 30, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
             <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} />
-            <YAxis tickFormatter={v => `${(v / 1000000)} M`} tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} />
-            <Tooltip formatter={(value: number) => formatRupiah(value)} cursor={{ fill: '#f3f4f6' }} contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
-            <Bar dataKey="value" name="Total Value" fill={CHART_COLOR} barSize={120} radius={[4, 4, 0, 0]} />
+            <YAxis tickFormatter={v => formatUang(v).replace(/,\d{2}/, '')} tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} width={120} />
+            <Tooltip formatter={(value: number) => formatUang(value)} cursor={{ fill: '#f3f4f6' }} contentStyle={{ borderRadius: '8px', fontSize: '12px', fontFamily: 'Poppins' }} />
+            <Bar dataKey="value" name="Total Value" fill={COLOR_PRIMARY} barSize={120} radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -71,7 +78,7 @@ export default function StockHomePage() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '16px' }}>
         <div className="chart-container" style={{ padding: '16px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><span style={{ fontSize: '12px', fontWeight: 600, color: '#4B5563' }}>Total Stock Value</span><MoreHorizontal size={14} color="#9CA3AF" /></div>
-          <div style={{ fontSize: '24px', fontWeight: 800, color: '#111827' }}>{formatRupiah(stats.totalStockValue)}</div>
+          <div style={{ fontSize: '24px', fontWeight: 800, color: COLOR_PRIMARY }}>{formatUang(stats.totalStockValue)}</div>
         </div>
         <div className="chart-container" style={{ padding: '16px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><span style={{ fontSize: '12px', fontWeight: 600, color: '#4B5563' }}>Total Warehouses</span><MoreHorizontal size={14} color="#9CA3AF" /></div>

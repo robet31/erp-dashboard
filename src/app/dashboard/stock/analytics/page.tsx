@@ -7,12 +7,21 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   AreaChart, Area
 } from 'recharts';
-import { formatRupiah, formatDate } from '@/lib/utils';
+import { formatDate } from '@/lib/utils';
 import { getWarehousesByCompany } from '@/config/frappe-data';
 
-const CHART_COLOR = '#f472b6'; // Pink Stock
+const COLOR_PRIMARY = '#054CC7';
+const COLOR_SECONDARY = '#17C3CC';
 const TREND_COLOR_1 = '#8b5cf6'; // Purple
 const TREND_COLOR_2 = '#0ea5e9'; // Blue
+
+// Formatter Uang Realistis
+const formatUang = (value: number | string | undefined) => {
+  if (value === undefined || value === null) return 'Rp 0';
+  const num = Number(value);
+  if (isNaN(num)) return 'Rp 0';
+  return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(num);
+};
 
 export default function StockAnalyticsPage() {
   const { items, isLoading } = useStockData();
@@ -23,26 +32,26 @@ export default function StockAnalyticsPage() {
     const totalWarehouses = warehouses.length;
     const totalStockValue = items.reduce((sum: number, item: any) => sum + ((item.standard_rate || 1500000) * 15), 0);
 
-    // 1. Warehouse wise Stock Value (Simulasi distribusi value ke gudang-gudang)
+    // 1. Warehouse wise Stock Value
     const whStockValue = warehouses.slice(0, 4).map((w, i) => ({
       name: w.name.split(' - ')[0],
-      value: (totalStockValue / 4) * (1 + (Math.random() * 0.2 - 0.1)) // Randomize sedikit
+      value: (totalStockValue / 4) * (1 + (Math.random() * 0.2 - 0.1)) 
     }));
 
-    // 2. Purchase Receipt Trends (Simulasi Data 6 Bulan Terakhir)
+    // 2. Purchase Receipt Trends
     const months = ['Oct 2025', 'Nov 2025', 'Dec 2025', 'Jan 2026', 'Feb 2026', 'Mar 2026'];
     const receiptTrends = months.map(m => ({ month: m, value: Math.floor(Math.random() * 5) }));
 
     // 3. Delivery Trends
     const deliveryTrends = months.map(m => ({ month: m, value: Math.floor(Math.random() * 4) }));
 
-    // 4. Oldest Items (Ambil dari data asli items)
+    // 4. Oldest Items
     const oldestItems = [...items].sort((a: any, b: any) => new Date(a.creation).getTime() - new Date(b.creation).getTime()).slice(0, 5);
 
-    // 5. Item Shortage Summary (Simulasi nilai negatif)
+    // 5. Item Shortage Summary
     const shortageItems = items.slice(0, 2).map((item: any) => ({
       name: item.item_code,
-      value: -1 * Math.floor(Math.random() * 3 + 1) // Nilai minus antara -1 sd -3
+      value: -1 * Math.floor(Math.random() * 3 + 1) 
     }));
 
     return { totalActiveItems, totalWarehouses, totalStockValue, whStockValue, receiptTrends, deliveryTrends, oldestItems, shortageItems };
@@ -83,7 +92,7 @@ export default function StockAnalyticsPage() {
         </div>
         <div className="chart-container" style={{ padding: '16px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><span style={{ fontSize: '12px', fontWeight: 600, color: '#4B5563' }}>Total Stock Value</span><MoreHorizontal size={14} color="#9CA3AF" /></div>
-          <div style={{ fontSize: '20px', fontWeight: 800, color: '#111827' }}>{formatRupiah(stats.totalStockValue)}</div>
+          <div style={{ fontSize: '20px', fontWeight: 800, color: COLOR_PRIMARY }}>{formatUang(stats.totalStockValue)}</div>
         </div>
       </div>
 
@@ -91,12 +100,12 @@ export default function StockAnalyticsPage() {
       <div className="chart-container" style={{ marginBottom: '16px' }}>
         <CardHeader title="Warehouse wise Stock Value" subtitle="Last synced just now" />
         <ResponsiveContainer width="100%" height={250}>
-          <BarChart data={stats.whStockValue} margin={{ top: 20, right: 20, left: 20, bottom: 0 }}>
+          <BarChart data={stats.whStockValue} margin={{ top: 20, right: 30, left: 30, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
             <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} />
-            <YAxis tickFormatter={v => `${(v / 1000000)} M`} tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} />
-            <Tooltip formatter={(value: number) => formatRupiah(value)} cursor={{ fill: '#f3f4f6' }} contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
-            <Bar dataKey="value" name="Total Value" fill={CHART_COLOR} barSize={60} radius={[4, 4, 0, 0]} />
+            <YAxis tickFormatter={v => formatUang(v).replace(/,\d{2}/, '')} tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} width={120} />
+            <Tooltip formatter={(value: number) => formatUang(value)} cursor={{ fill: '#f3f4f6' }} contentStyle={{ borderRadius: '8px', fontSize: '12px', fontFamily: 'Poppins' }} />
+            <Bar dataKey="value" name="Total Value" fill={COLOR_SECONDARY} barSize={60} radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -113,7 +122,7 @@ export default function StockAnalyticsPage() {
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
               <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#6B7280' }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} />
-              <Tooltip contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
+              <Tooltip contentStyle={{ borderRadius: '8px', fontSize: '12px', fontFamily: 'Poppins' }} />
               <Area type="step" dataKey="value" name="Receipts" fill="url(#colorReceipt)" stroke={TREND_COLOR_1} strokeWidth={2} />
             </AreaChart>
           </ResponsiveContainer>
@@ -129,7 +138,7 @@ export default function StockAnalyticsPage() {
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
               <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#6B7280' }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} />
-              <Tooltip contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
+              <Tooltip contentStyle={{ borderRadius: '8px', fontSize: '12px', fontFamily: 'Poppins' }} />
               <Area type="step" dataKey="value" name="Deliveries" fill="url(#colorDelivery)" stroke={TREND_COLOR_2} strokeWidth={2} />
             </AreaChart>
           </ResponsiveContainer>
@@ -150,7 +159,7 @@ export default function StockAnalyticsPage() {
                     <div style={{ fontSize: '13px', fontWeight: 700, color: '#111827' }}>{item.item_code}</div>
                     <div style={{ fontSize: '11px', color: '#6B7280' }}>Created: {formatDate(item.creation)}</div>
                   </div>
-                  <div style={{ fontSize: '12px', fontWeight: 600, color: CHART_COLOR }}>{item.item_group}</div>
+                  <div style={{ fontSize: '12px', fontWeight: 600, color: COLOR_PRIMARY }}>{item.item_group}</div>
                 </div>
               ))}
             </div>
@@ -167,9 +176,8 @@ export default function StockAnalyticsPage() {
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
               <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} />
-              <Tooltip cursor={{ fill: '#f3f4f6' }} contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
-              {/* Note: Nilai negatif otomatis akan bar-nya terbalik ke bawah */}
-              <Bar dataKey="value" name="Shortage Qty" fill={CHART_COLOR} barSize={80} radius={[0, 0, 4, 4]} />
+              <Tooltip cursor={{ fill: '#f3f4f6' }} contentStyle={{ borderRadius: '8px', fontSize: '12px', fontFamily: 'Poppins' }} />
+              <Bar dataKey="value" name="Shortage Qty" fill={COLOR_SECONDARY} barSize={80} radius={[0, 0, 4, 4]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
