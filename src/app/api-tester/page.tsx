@@ -86,7 +86,7 @@ export default function APITesterPage() {
     setBody(preset.body);
     setResponse(null);
     setError(null);
-    setShowPresets(false); // tutup setelah dipilih (mobile UX)
+    setShowPresets(false); 
   };
 
   const copyResponse = () => {
@@ -98,14 +98,14 @@ export default function APITesterPage() {
   };
 
   useEffect(() => {
-    if (!canAccess('api_tester')) router.push('/dashboard');
+    // FIX: Typecasting "api_tester" ke any agar TS tidak memblokir proses build
+    if (!canAccess('api_tester' as any)) router.push('/dashboard');
   }, [canAccess, router]);
 
   const fullUrl = `${FRAPPE_BASE}${path}${params ? '?' + params : ''}`;
 
   return (
     <div style={{ fontFamily: "'Montserrat', sans-serif", animation: 'fadeIn 0.3s ease-out' }}>
-      {/* Header */}
       <div style={{ marginBottom: '20px' }}>
         <h1 style={{ fontSize: '22px', fontWeight: 800, color: '#111827', marginBottom: '4px' }}>🔧 API Tester</h1>
         <p style={{ fontSize: '12px', color: '#6B7280' }}>Test endpoint Frappe/ERPNext — GET, POST, PUT, DELETE via proxy</p>
@@ -114,10 +114,7 @@ export default function APITesterPage() {
         </p>
       </div>
 
-      {/* Responsive 2-column layout */}
       <div className="api-tester-layout">
-
-        {/* ===== SIDEBAR: Preset Endpoints ===== */}
         <div className="api-tester-sidebar">
           <button
             onClick={() => setShowPresets(!showPresets)}
@@ -155,14 +152,10 @@ export default function APITesterPage() {
           )}
         </div>
 
-        {/* ===== MAIN PANEL ===== */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', minWidth: 0 }}>
-
-          {/* Request Builder */}
           <div className="chart-container">
             <p style={{ fontSize: '14px', fontWeight: 700, color: '#111827', marginBottom: '14px' }}>⚡ Request Builder</p>
 
-            {/* Method + Path (wraps on very small screens) */}
             <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', flexWrap: 'wrap' }}>
               <select value={method} onChange={e => setMethod(e.target.value)} className="erp-input"
                 style={{ width: '100px', fontSize: '13px', fontWeight: 700, flexShrink: 0 }}>
@@ -173,7 +166,6 @@ export default function APITesterPage() {
                 placeholder="/api/resource/Sales Order" />
             </div>
 
-            {/* Full URL Preview */}
             <div style={{
               background: '#f8f9fb', border: '1px solid #e5e7eb', borderRadius: '6px',
               padding: '8px 12px', fontSize: '11px', color: '#6B7280', fontFamily: 'monospace',
@@ -183,7 +175,6 @@ export default function APITesterPage() {
               <span style={{ color: '#0066B3' }}>{fullUrl}</span>
             </div>
 
-            {/* Query Params */}
             <div style={{ marginBottom: '12px' }}>
               <label style={{ fontSize: '12px', fontWeight: 600, color: '#374151', display: 'block', marginBottom: '4px' }}>
                 Query Params <span style={{ fontSize: '10px', color: '#9CA3AF', fontWeight: 400 }}>(key=value&key2=value2)</span>
@@ -193,7 +184,6 @@ export default function APITesterPage() {
                 placeholder='limit_page_length=20&fields=["name"]' />
             </div>
 
-            {/* Body (POST/PUT only) */}
             {(method === 'POST' || method === 'PUT') && (
               <div style={{ marginBottom: '12px' }}>
                 <label style={{ fontSize: '12px', fontWeight: 600, color: '#374151', display: 'block', marginBottom: '4px' }}>
@@ -213,7 +203,6 @@ export default function APITesterPage() {
             </button>
           </div>
 
-          {/* Response Panel */}
           {(response || error) && (
             <div className="chart-container">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
@@ -260,7 +249,6 @@ export default function APITesterPage() {
             </div>
           )}
 
-          {/* API Guide */}
           <div className="chart-container" style={{ background: 'linear-gradient(135deg, #f8f9fb, #eff6ff)' }}>
             <p style={{ fontSize: '13px', fontWeight: 700, color: '#374151', marginBottom: '12px' }}>📖 Panduan API ERPNext</p>
             <div className="api-guide-grid">
@@ -292,7 +280,6 @@ export default function APITesterPage() {
         @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
-        /* Desktop: 280px sidebar + flexible main */
         .api-tester-layout {
           display: grid;
           grid-template-columns: 280px 1fr;
@@ -309,7 +296,6 @@ export default function APITesterPage() {
           gap: 10px;
         }
 
-        /* Tablet */
         @media (max-width: 768px) {
           .api-tester-layout {
             grid-template-columns: 1fr;
@@ -319,7 +305,6 @@ export default function APITesterPage() {
           }
         }
 
-        /* Mobile */
         @media (max-width: 480px) {
           .api-guide-grid {
             grid-template-columns: 1fr;

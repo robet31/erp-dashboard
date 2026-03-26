@@ -1,78 +1,97 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { useManufacturingData } from '@/hooks/useFrappeData';
-import { Clock, Filter, Loader2 } from 'lucide-react';
+import { Clock, Filter, Loader2, Factory, CheckCircle, Activity } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, LineChart, Line, AreaChart, Area, Legend
+  PieChart, Pie, Cell, AreaChart, Area, Legend
 } from 'recharts';
 
 const COLOR_PRIMARY = '#054CC7';
 const COLOR_SECONDARY = '#17C3CC';
-const COLORS = [COLOR_PRIMARY, COLOR_SECONDARY, '#3b82f6', '#9ca3af', '#ef4444'];
+const COLORS = [COLOR_PRIMARY, COLOR_SECONDARY, '#f59e0b', '#9ca3af', '#ef4444'];
+const FIXED_COMPANY = 'Netra Vidya';
 
 export default function ManufacturingAnalyticsPage() {
   const { workOrders, isLoading } = useManufacturingData() as any;
 
-  const [filters, setFilters] = useState<Record<string, string>>({
-    producedQty: 'Monthly', completedOp: 'Monthly', woAnalysis: 'All Time', qiAnalysis: 'All Time',
-    pendingWo: 'All Time', downtime: 'Last Month', woQty: 'Monthly', jobCard: 'Monthly'
-  });
-
-  const handleFilterChange = (chart: string, value: string) => { setFilters(prev => ({ ...prev, [chart]: value })); };
-
+  // KALKULASI 100% DATA REAL DARI ERPNEXT
   const data = useMemo(() => {
-    const wos = workOrders || [];
-    const totalWO = wos.length || 24;
-    const completedWO = wos.filter((wo: any) => wo.status === 'Completed').length || 15;
-    
-    const shortDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    const completedOperations = shortDays.map(d => ({ name: d, qty: Math.floor(Math.random() * 40) + 10 }));
-    const producedQuantity = shortDays.map(d => ({ name: d, qty: Math.floor(Math.random() * 100) + 20 }));
+    // Filter khusus Netra Vidya
+    const wos = (workOrders || []).filter((wo: any) => 
+      wo.company === FIXED_COMPANY || 
+      (wo.name && wo.name.includes('NV')) || 
+      (wo.fg_warehouse && wo.fg_warehouse.includes('NV'))
+    );
 
-    const woAnalysis = [
-      { name: 'Not Started', value: wos.filter((wo: any) => wo.status === 'Not Started').length || 2 },
-      { name: 'Completed', value: completedWO || 2 },
-      { name: 'In Process', value: wos.filter((wo: any) => wo.status === 'In Process').length || 1 },
-      { name: 'Draft', value: wos.filter((wo: any) => wo.status === 'Draft').length || 1 }
-    ];
+    // 1. Metrics Card Asli
+    const totalWO = wos.length;
+    const completedWO = wos.filter((wo: any) => wo.status === 'Completed').length;
+    const ongoingWO = wos.filter((wo: any) => wo.status === 'In Process').length; 
 
-    const qiAnalysis = [ { name: 'Accepted', value: 85 }, { name: 'Rejected', value: 5 }, { name: 'Rework', value: 10 } ];
-    const downtime = [ { machine: 'Machine A', hours: 12 }, { machine: 'Machine B', hours: 8 }, { machine: 'Machine C', hours: 3 }, { machine: 'Machine D', hours: 15 } ];
+    // 2. Pie Chart: Work Order Status
+    const statusCounts: Record<string, number> = {};
+    wos.forEach((wo: any) => {
+      const status = wo.status || 'Draft';
+      statusCounts[status] = (statusCounts[status] || 0) + 1;
+    });
+    const woAnalysis = Object.entries(statusCounts)
+      .map(([name, value]) => ({ name, value }))
+      .filter(d => d.value > 0);
 
-    const fourMonths = ['Dec 2025', 'Jan 2026', 'Feb 2026', 'Mar 2026'];
-    const woQtyAnalysis = fourMonths.map(d => ({ name: d, planned: Math.floor(Math.random() * 50) + 50, actual: Math.floor(Math.random() * 50) + 30 }));
+    // 3. Bar Chart: Planned vs Actual by Item
+    const itemMap: Record<string, { name: string, planned: number, actual: number }> = {};
+    wos.forEach((wo: any) => {
+      const item = wo.production_item || 'Unknown';
+      if (!itemMap[item]) itemMap[item] = { name: item, planned: 0, actual: 0 };
+      
+      itemMap[item].planned += Number(wo.qty || 0);
+      // Di Frappe, jika completed, produced_qty akan terisi. Kalau kosong, pakai patokan status
+      const actualQty = Number(wo.produced_qty) > 0 ? Number(wo.produced_qty) : (wo.status === 'Completed' ? Number(wo.qty) : 0);
+      itemMap[item].actual += actualQty;
+    });
+    const producedByItem = Object.values(itemMap);
 
-    const twelveMonths = ['Jan 2026', 'Feb 2026', 'Mar 2026', 'Apr 2026', 'May 2026', 'Jun 2026', 'Jul 2026', 'Aug 2026', 'Sep 2026', 'Oct 2026', 'Nov 2026', 'Dec 2026'];
-    const jobCardAnalysis = twelveMonths.map(w => ({ name: w.split(' ')[0], completed: Math.floor(Math.random() * 20) + 5, pending: Math.floor(Math.random() * 10) + 1 }));
+    // 4. Area Chart: Trend Work Order per Bulan
+    const monthMap: Record<string, { name: string, total: number, completed: number }> = {};
+    wos.forEach((wo: any) => {
+      if (!wo.creation) return;
+      const m = new Date(wo.creation).toLocaleDateString('id-ID', { month: 'short', year: 'numeric' });
+      if (!monthMap[m]) monthMap[m] = { name: m, total: 0, completed: 0 };
+      
+      monthMap[m].total += 1;
+      if (wo.status === 'Completed') monthMap[m].completed += 1;
+    });
+    // Urutkan berdasarkan waktu
+    const woByMonth = Object.values(monthMap).sort((a, b) => {
+      return new Date(`1 ${a.name}`).getTime() - new Date(`1 ${b.name}`).getTime();
+    });
 
-    const pendingWOsAge = [ { name: '0-30 Days', qty: Math.floor(Math.random() * 5) + 2 }, { name: '30-60 Days', qty: Math.floor(Math.random() * 3) + 1 }, { name: '60-90 Days', qty: Math.floor(Math.random() * 2) }, { name: '90 Above', qty: 0 } ];
-
-    return { totalWO, completedWO, ongoingJC: 8, monthlyQI: 42, completedOperations, producedQuantity, woAnalysis, qiAnalysis, downtime, woQtyAnalysis, jobCardAnalysis, pendingWOsAge };
+    return { totalWO, completedWO, ongoingWO, woAnalysis, producedByItem, woByMonth };
   }, [workOrders]);
 
-  if (isLoading) return <div style={{ textAlign: 'center', padding: '60px' }}><Loader2 className="animate-spin" size={32} color={COLOR_PRIMARY} style={{ margin: '0 auto 16px' }} /><p style={{ color: '#6B7280', fontSize: '13px' }}>Memuat analitik...</p></div>;
+  if (isLoading) return <div style={{ textAlign: 'center', padding: '60px' }}><Loader2 className="animate-spin" size={32} color={COLOR_PRIMARY} style={{ margin: '0 auto 16px' }} /><p style={{ color: '#6B7280', fontSize: '13px' }}>Memuat analitik manufaktur...</p></div>;
 
-  const MetricCard = ({ title, value, color }: { title: string, value: number, color: string }) => (
-    <div className="chart-container" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-      <div style={{ fontSize: '12px', fontWeight: 600, color: '#6B7280' }}>{title}</div>
-      <div style={{ fontSize: '28px', fontWeight: 800, color: color }}>{value}</div>
+  const MetricCard = ({ title, value, color, icon }: any) => (
+    <div className="chart-container" style={{ padding: '20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div>
+        <div style={{ fontSize: '12px', fontWeight: 600, color: '#6B7280', marginBottom: '8px' }}>{title}</div>
+        <div style={{ fontSize: '28px', fontWeight: 800, color: color }}>{value}</div>
+      </div>
+      <div style={{ width: '48px', height: '48px', background: `${color}15`, borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: color }}>
+        {icon}
+      </div>
     </div>
   );
 
-  const ChartHeader = ({ title, time, chartKey, filterOptions }: { title: string, time?: string, chartKey: string, filterOptions: string[] }) => (
-    <div className="mobile-flex-col" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+  const ChartHeader = ({ title, subtitle }: { title: string, subtitle?: string }) => (
+    <div className="mobile-flex-col" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
       <div>
         <h3 style={{ fontSize: '14px', fontWeight: 700, color: '#111827' }}>{title}</h3>
-        {time && <p style={{ fontSize: '10px', color: '#10b981', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}><Clock size={10} /> Last synced {time}</p>}
+        {subtitle && <p style={{ fontSize: '11px', color: '#6B7280', marginTop: '2px' }}>{subtitle}</p>}
       </div>
-      <div className="mobile-full-width" style={{ display: 'flex', alignItems: 'center', background: '#f3f4f6', borderRadius: '6px', padding: '4px 8px' }}>
-        <Filter size={12} color="#6B7280" style={{ marginRight: '6px' }} />
-        <select value={filters[chartKey]} onChange={(e) => handleFilterChange(chartKey, e.target.value)} style={{ background: 'transparent', border: 'none', fontSize: '12px', color: '#4B5563', fontWeight: 600, outline: 'none', cursor: 'pointer', fontFamily: 'Poppins', width: '100%' }}>
-          {filterOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-        </select>
-      </div>
+      <span style={{ fontSize: '11px', color: '#6B7280', background: '#f3f4f6', padding: '4px 10px', borderRadius: '6px', fontWeight: 600 }}>Data Real {FIXED_COMPANY}</span>
     </div>
   );
 
@@ -81,126 +100,83 @@ export default function ManufacturingAnalyticsPage() {
       
       {/* ROW 1: METRICS */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '16px' }}>
-        <MetricCard title="Monthly Total Work Order" value={data.totalWO} color="#111827" />
-        <MetricCard title="Monthly Completed Work Order" value={data.completedWO} color={COLOR_PRIMARY} />
-        <MetricCard title="Ongoing Job Card" value={data.ongoingJC} color="#f59e0b" />
-        <MetricCard title="Monthly Quality Inspection" value={data.monthlyQI} color={COLOR_SECONDARY} />
+        <MetricCard title="Total Work Orders" value={data.totalWO} color="#111827" icon={<Factory size={24} />} />
+        <MetricCard title="Completed Work Orders" value={data.completedWO} color={COLOR_PRIMARY} icon={<CheckCircle size={24} />} />
+        <MetricCard title="WIP / In Process" value={data.ongoingWO} color="#f59e0b" icon={<Activity size={24} />} />
       </div>
 
-      {/* ROW 2: MAIN CHARTS */}
+      {/* ROW 2: PIE & AREA CHART */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '16px', marginBottom: '16px' }}>
+        
+        {/* PIE CHART: Status Produksi */}
         <div className="chart-container">
-          <ChartHeader title="Produced Quantity" time="1 minute ago" chartKey="producedQty" filterOptions={['Daily', 'Weekly', 'Monthly']} />
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={data.producedQuantity} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-              <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#6B7280', fontFamily: 'Poppins' }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: '#6B7280', fontFamily: 'Poppins' }} axisLine={false} tickLine={false} />
-              <Tooltip cursor={{ fill: '#f3f4f6' }} contentStyle={{fontFamily: 'Poppins', borderRadius: '8px', fontSize: '12px'}}/>
-              <Bar dataKey="qty" fill={COLOR_PRIMARY} radius={[4, 4, 0, 0]} barSize={40} />
-            </BarChart>
-          </ResponsiveContainer>
+          <ChartHeader title="Work Order Status Analysis" subtitle="Distribusi status seluruh perintah kerja" />
+          {data.woAnalysis.length > 0 ? (
+            <ResponsiveContainer width="100%" height={250}>
+              <PieChart>
+                <Pie data={data.woAnalysis} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
+                  {data.woAnalysis.map((entry, i) => {
+                     // Custom color based on status
+                     let cellColor = '#9ca3af';
+                     if (entry.name === 'Completed') cellColor = COLOR_PRIMARY;
+                     if (entry.name === 'In Process') cellColor = '#f59e0b';
+                     if (entry.name === 'Draft') cellColor = '#6B7280';
+                     return <Cell key={i} fill={cellColor} />;
+                  })}
+                </Pie>
+                <Tooltip contentStyle={{fontFamily: 'Poppins', borderRadius: '8px', fontSize: '12px'}}/>
+                <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px', fontFamily: 'Poppins', paddingTop: '10px' }} />
+              </PieChart>
+            </ResponsiveContainer>
+          ) : (
+            <div style={{ height: '250px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9CA3AF', fontSize: '13px', background: '#f8fafc', borderRadius: '8px' }}>Belum ada data Work Order</div>
+          )}
         </div>
+
+        {/* AREA CHART: Trend WO by Month */}
         <div className="chart-container">
-          <ChartHeader title="Completed Operation" time="1 minute ago" chartKey="completedOp" filterOptions={['Daily', 'Weekly', 'Monthly']} />
-          <ResponsiveContainer width="100%" height={250}>
-            <LineChart data={data.completedOperations} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-              <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#6B7280', fontFamily: 'Poppins' }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: '#6B7280', fontFamily: 'Poppins' }} axisLine={false} tickLine={false} />
-              <Tooltip contentStyle={{fontFamily: 'Poppins', borderRadius: '8px', fontSize: '12px'}}/>
-              <Line type="monotone" dataKey="qty" stroke={COLOR_SECONDARY} strokeWidth={3} dot={{ r: 4, fill: COLOR_SECONDARY, stroke: '#fff' }} />
-            </LineChart>
-          </ResponsiveContainer>
+          <ChartHeader title="Production Volume Trend" subtitle="Jumlah perintah kerja per bulan" />
+          {data.woByMonth.length > 0 ? (
+            <ResponsiveContainer width="100%" height={250}>
+              <AreaChart data={data.woByMonth} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="colorTrend" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={COLOR_SECONDARY} stopOpacity={0.3} />
+                    <stop offset="95%" stopColor={COLOR_SECONDARY} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#6B7280', fontFamily: 'Poppins' }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: '#6B7280', fontFamily: 'Poppins' }} axisLine={false} tickLine={false} />
+                <Tooltip cursor={{ fill: '#f3f4f6' }} contentStyle={{fontFamily: 'Poppins', borderRadius: '8px', fontSize: '12px'}}/>
+                <Area type="monotone" dataKey="total" name="Total WO" stroke={COLOR_SECONDARY} strokeWidth={3} fill="url(#colorTrend)" activeDot={{ r: 6, fill: COLOR_SECONDARY }} />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+             <div style={{ height: '250px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9CA3AF', fontSize: '13px', background: '#f8fafc', borderRadius: '8px' }}>Belum ada histori produksi per bulan</div>
+          )}
         </div>
+
       </div>
 
-      {/* ROW 3: ANALYSIS PIES & PENDING */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px', marginBottom: '16px' }}>
-        <div className="chart-container">
-          <ChartHeader title="Work Order Analysis" chartKey="woAnalysis" filterOptions={['All Time', 'This Year', 'This Month']} />
-          <ResponsiveContainer width="100%" height={200}>
-            <PieChart>
-              <Pie data={data.woAnalysis} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
-                {data.woAnalysis.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-              </Pie>
-              <Tooltip contentStyle={{fontFamily: 'Poppins', borderRadius: '8px', fontSize: '12px'}}/>
-              <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{ fontSize: '11px', fontFamily: 'Poppins' }} />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-        
-        <div className="chart-container">
-          <ChartHeader title="Quality Inspection Analysis" chartKey="qiAnalysis" filterOptions={['All Time', 'This Year', 'This Month']} />
-          <ResponsiveContainer width="100%" height={200}>
-            <PieChart>
-              <Pie data={data.qiAnalysis} cx="50%" cy="50%" outerRadius={80} dataKey="value">
-                {data.qiAnalysis.map((_, i) => <Cell key={i} fill={[ COLOR_SECONDARY, '#ef4444', '#f59e0b' ][i]} />)}
-              </Pie>
-              <Tooltip contentStyle={{fontFamily: 'Poppins', borderRadius: '8px', fontSize: '12px'}}/>
-              <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{ fontSize: '11px', fontFamily: 'Poppins' }} />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-        
-        <div className="chart-container">
-          <ChartHeader title="Pending Work Order" chartKey="pendingWo" filterOptions={['All Time', 'This Year']} />
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={data.pendingWOsAge} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-              <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#6B7280', fontFamily: 'Poppins' }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: '#6B7280', fontFamily: 'Poppins' }} axisLine={false} tickLine={false} />
-              <Tooltip cursor={{ fill: '#f3f4f6' }} contentStyle={{fontFamily: 'Poppins', borderRadius: '8px', fontSize: '12px'}}/>
-              <Bar dataKey="qty" fill="#f59e0b" radius={[4, 4, 0, 0]} barSize={35} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      {/* ROW 4: DOWNTIME, WO QTY & JOB CARD ANALYSIS */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px' }}>
-        <div className="chart-container">
-          <ChartHeader title="Last Month Downtime Analysis" chartKey="downtime" filterOptions={['Last Month', 'This Month']} />
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={data.downtime} layout="vertical" margin={{ top: 0, right: 10, left: 20, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f3f4f6" />
-              <XAxis type="number" tick={{ fontSize: 11, fill: '#6B7280', fontFamily: 'Poppins' }} axisLine={false} tickLine={false} />
-              <YAxis dataKey="machine" type="category" tick={{ fontSize: 11, fill: '#111827', fontWeight: 600, fontFamily: 'Poppins' }} axisLine={false} tickLine={false} />
-              <Tooltip formatter={(v) => [`${v} Hours`, 'Downtime']} contentStyle={{fontFamily: 'Poppins', borderRadius: '8px', fontSize: '12px'}}/>
-              <Bar dataKey="hours" fill="#ef4444" radius={[0, 4, 4, 0]} barSize={20} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-        
-        <div className="chart-container">
-          <ChartHeader title="Work Order Qty Analysis" chartKey="woQty" filterOptions={['Quarterly', 'Monthly', 'Yearly']} />
-          <ResponsiveContainer width="100%" height={220}>
-            <AreaChart data={data.woQtyAnalysis} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+      {/* ROW 3: PLANNED VS ACTUAL BAR CHART */}
+      <div className="chart-container">
+        <ChartHeader title="Planned vs Actual Production (By Item)" subtitle="Perbandingan target kuantitas dengan hasil aktual" />
+        {data.producedByItem.length > 0 ? (
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={data.producedByItem} margin={{ top: 20, right: 30, left: -20, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
               <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#6B7280', fontFamily: 'Poppins' }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 11, fill: '#6B7280', fontFamily: 'Poppins' }} axisLine={false} tickLine={false} />
-              <Tooltip contentStyle={{fontFamily: 'Poppins', borderRadius: '8px', fontSize: '12px'}}/>
-              <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: '11px', fontFamily: 'Poppins' }} />
-              <Area type="monotone" dataKey="planned" name="Planned" stroke="#9CA3AF" fill="#f3f4f6" strokeWidth={2} />
-              <Area type="monotone" dataKey="actual" name="Actual" stroke={COLOR_PRIMARY} fill={COLOR_PRIMARY} fillOpacity={0.2} strokeWidth={2} />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-
-        <div className="chart-container">
-          <ChartHeader title="Job Card Analysis" chartKey="jobCard" filterOptions={['Yearly', 'Monthly']} />
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={data.jobCardAnalysis} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-              <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#6B7280', fontFamily: 'Poppins' }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: '#6B7280', fontFamily: 'Poppins' }} axisLine={false} tickLine={false} />
-              <Tooltip cursor={{ fill: '#f3f4f6' }} contentStyle={{fontFamily: 'Poppins', borderRadius: '8px', fontSize: '12px'}}/>
-              <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: '11px', fontFamily: 'Poppins' }} />
-              <Bar dataKey="completed" name="Completed" stackId="a" fill="#10b981" radius={[0, 0, 0, 0]} barSize={20} />
-              <Bar dataKey="pending" name="Pending/Open" stackId="a" fill="#f59e0b" radius={[4, 4, 0, 0]} barSize={20} />
+              <Tooltip cursor={{ fill: '#f3f4f6' }} contentStyle={{fontFamily: 'Poppins', borderRadius: '8px', fontSize: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}}/>
+              <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px', fontFamily: 'Poppins', paddingBottom: '10px' }} />
+              <Bar dataKey="planned" name="Target (Planned)" fill="#e5e7eb" radius={[4, 4, 0, 0]} barSize={40} />
+              <Bar dataKey="actual" name="Telah Diproduksi (Actual)" fill={COLOR_PRIMARY} radius={[4, 4, 0, 0]} barSize={40} />
             </BarChart>
           </ResponsiveContainer>
-        </div>
+        ) : (
+          <div style={{ height: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9CA3AF', fontSize: '13px', background: '#f8fafc', borderRadius: '8px' }}>Belum ada data target perakitan item</div>
+        )}
       </div>
 
       <style>{`

@@ -13,7 +13,7 @@ const COLOR_SECONDARY = '#17C3CC';
 const DONUT_COLORS = ['#10b981', COLOR_PRIMARY, '#f59e0b', '#6B7280', '#ef4444'];
 const ITEM_COLORS = [COLOR_PRIMARY, COLOR_SECONDARY, '#8b5cf6', '#f59e0b', '#10b981'];
 
-const formatUang = (value: number | string | undefined) => {
+const formatUang = (value: number | string | undefined | any) => {
   if (value === undefined || value === null) return 'Rp 0';
   const num = Number(value);
   if (isNaN(num)) return 'Rp 0';
@@ -22,10 +22,9 @@ const formatUang = (value: number | string | undefined) => {
 
 export default function SellingAnalyticsPage() {
   const { salesOrders, customers, isLoading } = useSellingData();
-  const { items } = useStockData(); // Ambil item sungguhan untuk Item-wise sales
+  const { items } = useStockData(); 
   const { revenueTrend } = useDashboardData();
 
-  // STATE UNTUK SMART BYPASS
   const [localDocStatus, setLocalDocStatus] = useState<Record<string, number>>({});
   const [localSOProgress, setLocalSOProgress] = useState<Record<string, { delivered: number, billed: number }>>({});
 
@@ -44,9 +43,8 @@ export default function SellingAnalyticsPage() {
     }));
   }, [revenueTrend]);
 
-  // TERAPKAN SMART BYPASS KE DATA SALES ORDER
   const patchedSalesOrders = useMemo(() => {
-    return salesOrders.map(so => {
+    return (salesOrders as any[]).map((so: any) => {
       const localStatus = localDocStatus[so.name];
       const progress = localSOProgress[so.name] || { delivered: 0, billed: 0 };
       
@@ -68,15 +66,14 @@ export default function SellingAnalyticsPage() {
   }, [salesOrders, localDocStatus, localSOProgress]);
 
   const stats = useMemo(() => {
-    const totalSalesAmount = patchedSalesOrders.reduce((sum, order) => sum + (order.grand_total || 0), 0);
+    const totalSalesAmount = patchedSalesOrders.reduce((sum: number, order: any) => sum + (order.grand_total || 0), 0);
     
-    // Logika perhitungan realistis
-    const soToDeliver = patchedSalesOrders.filter(o => o.docstatus === 1 && o.per_delivered < 100 && o.status !== 'Completed').length;
-    const soToBill = patchedSalesOrders.filter(o => o.docstatus === 1 && o.per_billed < 100 && o.status !== 'Completed').length;
+    const soToDeliver = patchedSalesOrders.filter((o: any) => o.docstatus === 1 && o.per_delivered < 100 && o.status !== 'Completed').length;
+    const soToBill = patchedSalesOrders.filter((o: any) => o.docstatus === 1 && o.per_billed < 100 && o.status !== 'Completed').length;
     const activeCustomers = customers.filter(c => !c.disabled).length;
 
     const customerSales: Record<string, number> = {};
-    patchedSalesOrders.forEach(so => {
+    patchedSalesOrders.forEach((so: any) => {
       if(so.customer_name && so.grand_total) {
         customerSales[so.customer_name] = (customerSales[so.customer_name] || 0) + so.grand_total;
       }
@@ -84,7 +81,6 @@ export default function SellingAnalyticsPage() {
     
     const topCustomers = Object.entries(customerSales).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 5);
 
-    // DINAMIS: Item-wise Annual Sales berdasarkan produk asli di database
     let itemWiseSales: any[] = [];
     const activeItems = items.filter((i: any) => i.is_stock_item).map((i: any) => i.item_code);
     
@@ -152,8 +148,8 @@ export default function SellingAnalyticsPage() {
             </defs>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
             <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} />
-            <YAxis tickFormatter={v => formatUang(v).replace(/,\d{2}/, '')} tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} />
-            <Tooltip formatter={(value: number) => formatUang(value)} contentStyle={{ borderRadius: '8px', fontSize: '12px', fontFamily: 'Poppins' }} />
+            <YAxis tickFormatter={(v: any) => formatUang(v).replace(/,\d{2}/, '')} tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} />
+            <Tooltip formatter={(value: any) => formatUang(value)} contentStyle={{ borderRadius: '8px', fontSize: '12px', fontFamily: 'Poppins' }} />
             <Area type="monotone" dataKey="revenue" name="Total Sales" fill="url(#colorSalesDash)" stroke={COLOR_PRIMARY} strokeWidth={3} dot={{ r: 4, fill: COLOR_PRIMARY }} />
           </AreaChart>
         </ResponsiveContainer>
@@ -169,9 +165,9 @@ export default function SellingAnalyticsPage() {
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={stats.topCustomers} layout="vertical" margin={{ top: 0, right: 20, left: 40, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f3f4f6" />
-                <XAxis type="number" tickFormatter={v => formatUang(v)} tick={{ fontSize: 10, fill: '#6B7280' }} axisLine={false} tickLine={false} />
+                <XAxis type="number" tickFormatter={(v: any) => formatUang(v)} tick={{ fontSize: 10, fill: '#6B7280' }} axisLine={false} tickLine={false} />
                 <YAxis dataKey="name" type="category" tick={{ fontSize: 11, fill: '#374151', fontWeight: 600 }} axisLine={false} tickLine={false} />
-                <Tooltip formatter={(value: number) => formatUang(value)} cursor={{ fill: '#f3f4f6' }} contentStyle={{ borderRadius: '8px', fontSize: '12px', fontFamily: 'Poppins' }} />
+                <Tooltip formatter={(value: any) => formatUang(value)} cursor={{ fill: '#f3f4f6' }} contentStyle={{ borderRadius: '8px', fontSize: '12px', fontFamily: 'Poppins' }} />
                 <Bar dataKey="value" name="Total Beli" fill={COLOR_SECONDARY} radius={[0, 4, 4, 0]} barSize={20} />
               </BarChart>
             </ResponsiveContainer>
@@ -188,11 +184,11 @@ export default function SellingAnalyticsPage() {
               <ResponsiveContainer width="50%" height="100%">
                 <PieChart>
                   <Pie data={[
-                    { name: 'Selesai', value: patchedSalesOrders.filter(o => o.status === 'Completed').length },
-                    { name: 'Proses', value: patchedSalesOrders.filter(o => o.status === 'In Process').length },
-                    { name: 'Siap Kirim', value: patchedSalesOrders.filter(o => o.status === 'To Deliver and Bill').length },
-                    { name: 'Draft', value: patchedSalesOrders.filter(o => o.status === 'Draft').length },
-                    { name: 'Batal', value: patchedSalesOrders.filter(o => o.status === 'Cancelled').length }
+                    { name: 'Selesai', value: patchedSalesOrders.filter((o: any) => o.status === 'Completed').length },
+                    { name: 'Proses', value: patchedSalesOrders.filter((o: any) => o.status === 'In Process').length },
+                    { name: 'Siap Kirim', value: patchedSalesOrders.filter((o: any) => o.status === 'To Deliver and Bill').length },
+                    { name: 'Draft', value: patchedSalesOrders.filter((o: any) => o.status === 'Draft').length },
+                    { name: 'Batal', value: patchedSalesOrders.filter((o: any) => o.status === 'Cancelled').length }
                   ].filter(d => d.value > 0)} cx="50%" cy="50%" innerRadius={45} outerRadius={70} paddingAngle={2} dataKey="value" stroke="none">
                     {DONUT_COLORS.map((color, index) => <Cell key={`cell-${index}`} fill={color} />)}
                   </Pie>
@@ -201,7 +197,7 @@ export default function SellingAnalyticsPage() {
               </ResponsiveContainer>
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px', paddingLeft: '16px' }}>
                 {['Completed', 'To Deliver and Bill', 'Draft'].map((status, i) => {
-                  const count = patchedSalesOrders.filter(o => o.status === status).length;
+                  const count = patchedSalesOrders.filter((o: any) => o.status === status).length;
                   return (
                     <div key={status} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', alignItems: 'center' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -228,8 +224,8 @@ export default function SellingAnalyticsPage() {
             <BarChart data={stats.itemWiseSales} margin={{ top: 10, right: 10, left: 30, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
               <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} />
-              <YAxis tickFormatter={v => formatUang(v).replace(/,\d{2}/, '')} tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} />
-              <Tooltip formatter={(value: number) => formatUang(value)} cursor={{ fill: '#f3f4f6' }} contentStyle={{ borderRadius: '8px', fontSize: '12px', fontFamily: 'Poppins' }} />
+              <YAxis tickFormatter={(v: any) => formatUang(v).replace(/,\d{2}/, '')} tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} />
+              <Tooltip formatter={(value: any) => formatUang(value)} cursor={{ fill: '#f3f4f6' }} contentStyle={{ borderRadius: '8px', fontSize: '12px', fontFamily: 'Poppins' }} />
               <Bar dataKey="value" name="Sales Revenue" radius={[4, 4, 0, 0]} barSize={40}>
                 {stats.itemWiseSales.map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={ITEM_COLORS[index % ITEM_COLORS.length]} />

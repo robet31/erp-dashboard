@@ -25,7 +25,7 @@ function SidebarContent() {
   const { user, logout, canAccess } = useAuth();
   const { isOpen, closeSidebar } = useSidebar();
 
-  useEffect(() => { closeSidebar(); }, [pathname, currentTab]); // Auto-close di mobile saat pindah halaman
+  useEffect(() => { closeSidebar(); }, [pathname, currentTab]); 
 
   if (!user) return null;
 
@@ -100,32 +100,15 @@ function SidebarContent() {
       
       <style>{`
         .main-sidebar {
-          width: 250px;
-          min-width: 250px;
-          height: 100vh;
-          background: #ffffff;
-          border-right: 1px solid #e5e7eb;
-          display: flex;
-          flex-direction: column;
-          font-family: 'Poppins', sans-serif;
-          transition: transform 0.3s ease;
-          z-index: 90;
+          width: 250px; min-width: 250px; height: 100vh; background: #ffffff; border-right: 1px solid #e5e7eb; display: flex; flex-direction: column; font-family: 'Poppins', sans-serif; transition: transform 0.3s ease; z-index: 90;
         }
         .nav-item:hover { background: #f3f4f6 !important; color: #054CC7 !important; }
         .nav-item:hover span:first-child { color: #054CC7 !important; }
         .close-sidebar-btn { display: none; width: 32px; height: 32px; align-items: center; justify-content: center; flex-shrink: 0; background: #f3f4f6; border-radius: 8px; border: none; cursor: pointer; }
         
         @media (max-width: 768px) {
-          .main-sidebar {
-            position: fixed;
-            left: 0;
-            top: 0;
-            transform: translateX(-100%);
-          }
-          .main-sidebar.is-open {
-            transform: translateX(0);
-            box-shadow: 4px 0 24px rgba(0,0,0,0.15);
-          }
+          .main-sidebar { position: fixed; left: 0; top: 0; transform: translateX(-100%); }
+          .main-sidebar.is-open { transform: translateX(0); box-shadow: 4px 0 24px rgba(0,0,0,0.15); }
           .close-sidebar-btn { display: flex; }
         }
       `}</style>
