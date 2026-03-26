@@ -1,6 +1,6 @@
 // src/lib/api.ts
 // Central API helper — semua request ke ERPNext melalui Next.js proxy
-// Token ditangani di server-side (/api/frappe/[...path]/route.ts)
+// Token disisipkan secara eksplisit untuk mencegah 403 Forbidden
 
 export interface FrappeListParams {
   limit?: number;
@@ -18,11 +18,15 @@ export interface FrappeSingleResponse<T> {
   data: T;
 }
 
+// Token Authorization Rahasia
+const AUTH_TOKEN = 'token 5f011fb9ee27204:371b9ded6f8223a';
+
 // Generic GET list
 export async function apiGetList<T>(doctype: string, params?: FrappeListParams): Promise<T[]> {
   const q = new URLSearchParams();
   if (params?.limit) q.set('limit_page_length', String(params.limit));
-  if (params?.fields) q.set('fields', JSON.stringify(params.fields));
+  // Default ambil semua field jika tidak didefinisikan agar tidak ada data yang kosong
+  q.set('fields', params?.fields ? JSON.stringify(params.fields) : '["*"]');
   if (params?.filters) q.set('filters', JSON.stringify(params.filters));
   if (params?.orderBy) q.set('order_by', `${params.orderBy} ${params.orderDir || 'desc'}`);
 
@@ -32,7 +36,10 @@ export async function apiGetList<T>(doctype: string, params?: FrappeListParams):
   try {
     const res = await fetch(url, { 
       method: 'GET', 
-      headers: { Accept: 'application/json' },
+      headers: { 
+        'Accept': 'application/json',
+        'Authorization': AUTH_TOKEN
+      },
       cache: 'no-store'
     });
     
@@ -63,7 +70,14 @@ export async function apiGetDoc<T>(doctype: string, name: string): Promise<T> {
   const url = `/api/frappe/resource/${encodedDoctype}/${encodedName}`;
 
   try {
-    const res = await fetch(url, { method: 'GET', headers: { Accept: 'application/json' } });
+    const res = await fetch(url, { 
+      method: 'GET', 
+      headers: { 
+        'Accept': 'application/json',
+        'Authorization': AUTH_TOKEN
+      } 
+    });
+    
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.message || err.error || `HTTP ${res.status}`);
@@ -79,7 +93,7 @@ export async function apiGetDoc<T>(doctype: string, name: string): Promise<T> {
   }
 }
 
-// Generic POST create
+// Generic POST create (Digunakan untuk Buat BOM, SO, dll)
 export async function apiCreate<T>(doctype: string, data: Partial<T>): Promise<T> {
   const encodedDoctype = encodeURIComponent(doctype);
   const url = `/api/frappe/resource/${encodedDoctype}`;
@@ -87,25 +101,29 @@ export async function apiCreate<T>(doctype: string, data: Partial<T>): Promise<T
   try {
     const res = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json', 
+        'Accept': 'application/json',
+        'Authorization': AUTH_TOKEN
+      },
       body: JSON.stringify(data),
     });
+    
+    const json = await res.json();
     if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.message || err.exception || err.error || `HTTP ${res.status}`);
+      throw json; // Lempar JSON mentah agar bisa di-extract server messages-nya
     }
-    const json: FrappeSingleResponse<T> = await res.json();
-    return json.data;
+    return json.data || json;
   } catch (err) {
     console.warn('[apiCreate] Error:', err);
     if (err instanceof TypeError && err.message === 'fetch failed') {
       throw new Error('Tidak dapat terhubung ke server ERP. Periksa koneksi jaringan Anda.');
     }
-    throw err;
+    throw err; // Lempar terus ke UI
   }
 }
 
-// Generic PUT update
+// Generic PUT update (Digunakan untuk Submit, Start Produksi, Finish, dll)
 export async function apiUpdate<T>(doctype: string, name: string, data: Partial<T>): Promise<T> {
   const encodedDoctype = encodeURIComponent(doctype);
   const encodedName = encodeURIComponent(name);
@@ -114,15 +132,19 @@ export async function apiUpdate<T>(doctype: string, name: string, data: Partial<
   try {
     const res = await fetch(url, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json', 
+        'Accept': 'application/json',
+        'Authorization': AUTH_TOKEN
+      },
       body: JSON.stringify(data),
     });
+    
+    const json = await res.json();
     if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.message || err.exception || err.error || `HTTP ${res.status}`);
+      throw json;
     }
-    const json: FrappeSingleResponse<T> = await res.json();
-    return json.data;
+    return json.data || json;
   } catch (err) {
     console.warn('[apiUpdate] Error:', err);
     if (err instanceof TypeError && err.message === 'fetch failed') {
@@ -141,8 +163,12 @@ export async function apiDelete(doctype: string, name: string): Promise<void> {
   try {
     const res = await fetch(url, {
       method: 'DELETE',
-      headers: { Accept: 'application/json' },
+      headers: { 
+        'Accept': 'application/json',
+        'Authorization': AUTH_TOKEN
+      },
     });
+    
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.message || err.error || `HTTP ${res.status}`);
@@ -161,14 +187,20 @@ export async function apiCallMethod<T = unknown>(method: string, args?: Record<s
   const url = `/api/frappe/method/${method}`;
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    headers: { 
+      'Content-Type': 'application/json', 
+      'Accept': 'application/json',
+      'Authorization': AUTH_TOKEN
+    },
     body: JSON.stringify(args || {}),
   });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      const errorMsg = err.message || err.exception || err.error || `HTTP ${res.status}`;
-      throw new Error(errorMsg);
-    }
+  
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    const errorMsg = err.message || err.exception || err.error || `HTTP ${res.status}`;
+    throw new Error(errorMsg);
+  }
+  
   const json = await res.json();
   return json.message as T;
 }

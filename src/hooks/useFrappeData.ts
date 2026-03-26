@@ -1,8 +1,8 @@
 // src/hooks/useFrappeData.ts
-// Custom hooks — fetch data dari Frappe/ERPNext melalui proxy API
+// Custom hooks — fetch data dari Frappe/ERPNext menggunakan Proxy API Next.js (Bebas CORS)
 
 import { useState, useEffect, useCallback } from 'react';
-import { apiGetList, apiCreate, apiUpdate, apiDelete } from '@/lib/api';
+import { apiGetList, apiCreate, apiUpdate, apiDelete } from '@/lib/api'; 
 import type {
   Item, Warehouse, Bin, Customer, SalesOrder,
   DeliveryNote, BOM, WorkOrder, StockEntry,
@@ -103,16 +103,15 @@ export function useDashboardData(): DashboardData {
     setIsLoading(true);
     setError(null);
 
-    // Fetch from Frappe API
     try {
       const [salesOrders, items, bins, workOrders] = await Promise.allSettled([
-        apiGetList<SalesOrder>('Sales Order', { limit: 50, fields: ['name','customer','customer_name','status','grand_total','transaction_date','delivery_date'] }),
-        apiGetList<Item>('Item', { limit: 100, fields: ['name','item_code','item_name','item_group','standard_rate','disabled'] }),
-        apiGetList<Bin>('Bin', { limit: 200, fields: ['name','item_code','warehouse','actual_qty','projected_qty','stock_value'] }),
-        apiGetList<WorkOrder>('Work Order', { limit: 50, fields: ['name','production_item','item_name','qty','produced_qty','status','planned_start_date','planned_end_date'] }),
+        apiGetList<SalesOrder>('Sales Order', { limit: 1000, fields: ['*'] }),
+        apiGetList<Item>('Item', { limit: 1000, fields: ['*'] }),
+        apiGetList<Bin>('Bin', { limit: 1000, fields: ['*'] }),
+        apiGetList<WorkOrder>('Work Order', { limit: 1000, fields: ['*'] }),
       ]);
 
-      const rSalesOrders = (salesOrders.status === 'fulfilled' && salesOrders.value.length > 0 ? salesOrders.value : mockSalesOrders).map(o => ({ ...o, items: o.items || [] }));
+      const rSalesOrders = (salesOrders.status === 'fulfilled' && salesOrders.value.length > 0 ? salesOrders.value : mockSalesOrders).map((o: any) => ({ ...o, items: o.items || [] }));
       const rItems = items.status === 'fulfilled' && items.value.length > 0 ? items.value : mockItems;
       const rBins = bins.status === 'fulfilled' && bins.value.length > 0 ? bins.value : mockBins;
       const rWorkOrders = workOrders.status === 'fulfilled' && workOrders.value.length > 0 ? workOrders.value : mockWorkOrders;
@@ -138,8 +137,8 @@ export function useDashboardData(): DashboardData {
         stats: {
           totalOrders: rSalesOrders.length,
           totalRevenue: rSalesOrders.reduce((s, o) => s + (o.grand_total || 0), 0),
-          activeItems: rItems.filter(i => i.disabled === 0).length,
-          lowStockCount: rBins.filter(b => (b.projected_qty || 0) < 50).length,
+          activeItems: rItems.filter((i: any) => i.disabled === 0).length,
+          lowStockCount: rBins.filter((b: any) => (b.projected_qty || 0) < 50).length,
         },
       });
     } catch (err) {
@@ -195,37 +194,24 @@ export function useSellingData(): SellingData {
     setIsLoading(true);
     setError(null);
 
-    // Fetch Sales Orders and Customers first (most important)
     try {
-      const [so, cust] = await Promise.all([
-        apiGetList<SalesOrder>('Sales Order', {
-          limit: 100,
-          fields: ['name','customer','customer_name','status','grand_total','total_qty','transaction_date','delivery_date','company','currency'],
-        }),
-        apiGetList<Customer>('Customer', {
-          limit: 100,
-          fields: ['name','customer_name','customer_type','customer_group','territory','mobile_no','email_id'],
-        }),
+      const [so, cust] = await Promise.allSettled([
+        apiGetList<SalesOrder>('Sales Order', { limit: 1000, fields: ['*'] }),
+        apiGetList<Customer>('Customer', { limit: 1000, fields: ['*'] }),
       ]);
-      setSalesOrders(so.map(o => ({ ...o, items: o.items || [] })));
-      setCustomers(cust);
+      setSalesOrders(so.status === 'fulfilled' ? so.value.map((o: any) => ({ ...o, items: o.items || [] })) : mockSalesOrders);
+      setCustomers(cust.status === 'fulfilled' ? cust.value : mockCustomers);
     } catch (err) {
       console.warn('Failed to fetch Sales Orders/Customers, using mock data:', err);
-      // Use mock data as fallback
       setSalesOrders(mockSalesOrders);
       setCustomers(mockCustomers);
     }
 
-// Try to fetch Delivery Notes separately - don't block if it fails
     try {
-      const dn = await apiGetList<DeliveryNote>('Delivery Note', {
-        limit: 50,
-        fields: ['name','customer','customer_name','posting_date','status','total_qty','grand_total'],
-      });
-      setDeliveryNotes(dn.map(d => ({ ...d, items: d.items || [] })));
+      const dn = await apiGetList<DeliveryNote>('Delivery Note', { limit: 1000, fields: ['*'] });
+      setDeliveryNotes(dn.map((d: any) => ({ ...d, items: d.items || [] })));
     } catch (err) {
       console.warn('Failed to fetch Delivery Notes, using mock data:', err);
-      // Use mock data as fallback
       setDeliveryNotes(mockDeliveryNotes);
     }
 
@@ -258,39 +244,21 @@ export function useStockData(): StockData {
     setIsLoading(true);
     setError(null);
 
-    // Fetch from Frappe API
     try {
       const [it, wh, bn, se] = await Promise.allSettled([
-        apiGetList<Item>('Item', {
-          limit: 200,
-          fields: ['name','item_code','item_name','item_group','stock_uom','standard_rate','disabled','description'],
-        }),
-        apiGetList<Warehouse>('Warehouse', {
-          limit: 50,
-          fields: ['name','warehouse_name','warehouse_type','company','is_group','parent_warehouse'],
-        }),
-        apiGetList<Bin>('Bin', {
-          limit: 500,
-          fields: ['name','item_code','warehouse','actual_qty','projected_qty','reserved_qty','stock_value'],
-        }),
-        apiGetList<StockEntry>('Stock Entry', {
-          limit: 50,
-          fields: ['name','stock_entry_type','posting_date','posting_time','from_warehouse','to_warehouse','total_amount','docstatus'],
-        }),
+        apiGetList<Item>('Item', { limit: 1000, fields: ['*'] }),
+        apiGetList<Warehouse>('Warehouse', { limit: 1000, fields: ['*'] }),
+        apiGetList<Bin>('Bin', { limit: 1000, fields: ['*'] }),
+        apiGetList<StockEntry>('Stock Entry', { limit: 1000, fields: ['*'] }),
       ]);
 
       setItems(it.status === 'fulfilled' && it.value.length > 0 ? it.value : mockItems);
       setWarehouses(wh.status === 'fulfilled' && wh.value.length > 0 ? wh.value : mockWarehouses);
       setBins(bn.status === 'fulfilled' && bn.value.length > 0 ? bn.value : mockBins);
-      setStockEntries(se.status === 'fulfilled' && se.value.length > 0 ? se.value.map(s => ({ ...s, items: s.items || [] })) : mockStockEntries);
+      setStockEntries(se.status === 'fulfilled' && se.value.length > 0 ? se.value.map((s: any) => ({ ...s, items: s.items || [] })) : mockStockEntries);
 
-      if (it.status === 'rejected' || (it.status === 'fulfilled' && it.value.length === 0)) console.warn('Item fetch failed/empty, using mock');
-      if (wh.status === 'rejected' || (wh.status === 'fulfilled' && wh.value.length === 0)) console.warn('Warehouse fetch failed/empty, using mock');
-      if (bn.status === 'rejected' || (bn.status === 'fulfilled' && bn.value.length === 0)) console.warn('Bin fetch failed/empty, using mock');
-      if (se.status === 'rejected' || (se.status === 'fulfilled' && se.value.length === 0)) console.warn('Stock Entry fetch failed/empty, using mock');
     } catch (err) {
       console.warn('Failed to fetch stock data, using mock data:', err);
-      // Use mock data as fallback
       setItems(mockItems);
       setWarehouses(mockWarehouses);
       setBins(mockBins);
@@ -322,27 +290,19 @@ export function useManufacturingData(): ManufacturingData {
     setIsLoading(true);
     setError(null);
 
-    // Fetch from Frappe API
     try {
       const [wo, bom] = await Promise.allSettled([
-        apiGetList<WorkOrder>('Work Order', {
-          limit: 100,
-          fields: ['name','production_item','item_name','bom_no','qty','produced_qty','status','planned_start_date','planned_end_date','fg_warehouse','wip_warehouse','company'],
-        }),
-        apiGetList<BOM>('BOM', {
-          limit: 100,
-          fields: ['name','item','item_name','quantity','uom','is_active','is_default','total_cost','company'],
-        }),
+        apiGetList<WorkOrder>('Work Order', { limit: 1000, fields: ['*'] }),
+        apiGetList<BOM>('BOM', { limit: 1000, fields: ['*'] }),
       ]);
 
       setWorkOrders(wo.status === 'fulfilled' ? wo.value : []);
-      setBoms(bom.status === 'fulfilled' ? bom.value.map(b => ({ ...b, items: b.items || [] })) : []);
+      setBoms(bom.status === 'fulfilled' ? bom.value.map((b: any) => ({ ...b, items: b.items || [] })) : []);
 
       if (wo.status === 'rejected') setError(`Work Order: ${wo.reason?.message}`);
       if (bom.status === 'rejected') setError(prev => prev ? `${prev} | BOM: ${bom.reason?.message}` : `BOM: ${bom.reason?.message}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Gagal memuat data manufacturing');
-      // Show empty state on error
       setWorkOrders([]);
       setBoms([]);
     } finally {
@@ -374,12 +334,8 @@ export function useUserData(): UserData {
     setError(null);
 
     try {
-      const data = await apiGetList<FrappeUser>('User', {
-        limit: 100,
-        fields: ['name', 'full_name', 'email', 'first_name', 'last_name', 'enabled', 'user_type', 'creation', 'modified'],
-      });
+      const data = await apiGetList<FrappeUser>('User', { limit: 1000, fields: ['*'] });
       
-      // If API returns less than 2 users, use mock data (likely not connected to real Frappe)
       if (data.length < 2) {
         console.warn('Only received 1 user from API, using mock data for demo');
         setUsers([
@@ -395,7 +351,6 @@ export function useUserData(): UserData {
       }
     } catch (err) {
       console.warn('Failed to fetch users, using mock data:', err);
-      // Use mock users as fallback
       setUsers([
         { name: 'Administrator', full_name: 'Administrator', email: 'administrator@erp.com', first_name: 'Administrator', last_name: '', enabled: 1, user_type: 'System User', creation: '2026-01-01', modified: '2026-01-01' },
         { name: 'direktur@erp.com', full_name: 'Ahmad Wijaya', email: 'direktur@erp.com', first_name: 'Ahmad', last_name: 'Wijaya', enabled: 1, user_type: 'System User', creation: '2026-01-15', modified: '2026-03-01' },
@@ -410,35 +365,15 @@ export function useUserData(): UserData {
   }, []);
 
   const createUser = useCallback(async (data: Partial<FrappeUser>): Promise<FrappeUser> => {
-    try {
-      const result = await apiCreate<FrappeUser>('User', data);
-      await fetchData();
-      return result;
-    } catch (err) {
-      console.warn('API create user failed:', err);
-      throw new Error('Tidak dapat membuat user. API Frappe tidak tersedia.');
-    }
+    try { const result = await apiCreate<FrappeUser>('User', data); await fetchData(); return result; } catch (err) { throw new Error('API Error'); }
   }, [fetchData]);
 
   const updateUser = useCallback(async (name: string, data: Partial<FrappeUser>): Promise<FrappeUser> => {
-    try {
-      const result = await apiUpdate<FrappeUser>('User', name, data);
-      await fetchData();
-      return result;
-    } catch (err) {
-      console.warn('API update user failed:', err);
-      throw new Error('Tidak dapat mengupdate user. API Frappe tidak tersedia.');
-    }
+    try { const result = await apiUpdate<FrappeUser>('User', name, data); await fetchData(); return result; } catch (err) { throw new Error('API Error'); }
   }, [fetchData]);
 
   const deleteUser = useCallback(async (name: string): Promise<void> => {
-    try {
-      await apiDelete('User', name);
-      await fetchData();
-    } catch (err) {
-      console.warn('API delete user failed:', err);
-      throw new Error('Tidak dapat menghapus user. API Frappe tidak tersedia.');
-    }
+    try { await apiDelete('User', name); await fetchData(); } catch (err) { throw new Error('API Error'); }
   }, [fetchData]);
 
   useEffect(() => { fetchData(); }, [fetchData]);

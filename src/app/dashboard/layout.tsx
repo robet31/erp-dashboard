@@ -6,7 +6,7 @@ import { useAuth } from '@/providers/auth-provider';
 import { Sidebar } from '@/components/sidebar';
 import { Topbar } from '@/components/topbar';
 
-// Shared context for sidebar open state
+// Shared context untuk status buka/tutup sidebar di layar mobile
 export const SidebarContext = createContext<{
   isOpen: boolean;
   toggleSidebar: () => void;
@@ -22,13 +22,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const { isAuthenticated, isLoading } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  // Proteksi rute: jika belum login, lempar ke halaman login
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
       router.push('/login');
     }
   }, [isAuthenticated, isLoading, router]);
 
-  // Close sidebar on route change / resize
+  // Tutup sidebar jika ukuran layar berubah menjadi desktop
   useEffect(() => {
     const handleResize = () => {
       if (window.innerWidth > 768) setSidebarOpen(false);
@@ -37,6 +38,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // Tampilan loading sebelum dashboard muncul
   if (isLoading) {
     return (
       <div style={{
@@ -58,6 +60,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   if (!isAuthenticated) return null;
 
+  // Value yang akan disalurkan ke Topbar & Sidebar
   const sidebarCtx = {
     isOpen: sidebarOpen,
     toggleSidebar: () => setSidebarOpen(p => !p),
@@ -73,19 +76,32 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         background: '#f8f9fb',
         fontFamily: "'Montserrat', sans-serif",
       }}>
-        {/* Mobile Overlay */}
+        
+        {/* Mobile Overlay: Latar belakang gelap saat menu hp terbuka */}
         {sidebarOpen && (
           <div
             className="sidebar-mobile-overlay open"
             onClick={() => setSidebarOpen(false)}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              backgroundColor: 'rgba(17, 24, 39, 0.6)', // Warna abu-abu transparan
+              backdropFilter: 'blur(2px)',
+              zIndex: 80, // Harus di bawah index sidebar (90)
+              transition: 'opacity 0.3s ease',
+            }}
           />
         )}
 
         <Sidebar />
+        
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
           <Topbar />
+          
           <main style={{ flex: 1, overflow: 'auto', padding: '20px 24px' }}>
-            {children}
+            <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
+              {children}
+            </div>
           </main>
         </div>
       </div>
