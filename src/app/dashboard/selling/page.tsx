@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useEffect, Suspense, useRef } from 'react';
+import React, { useState, useMemo, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/providers/auth-provider';
 import { useSellingData, useStockData } from '@/hooks/useFrappeData';
@@ -50,6 +50,17 @@ const extractFrappeError = (err: any, fallbackMsg: string = 'Terjadi kesalahan s
   if (lowerErr.includes('stock')) return 'Stok di gudang tidak mencukupi untuk transaksi ini.';
   
   return errorMsg;
+};
+
+// ==========================================
+// FUNGSI SAKTI: AMBIL STOK REAL-TIME
+// ==========================================
+const getSimulatedStock = (itemCode: string, warehouse: string, originalBins: any[], localLedger: Record<string, number>) => {
+  const key = `${itemCode}_${warehouse}`;
+  const bin = originalBins.find((b: any) => b.item_code === itemCode && b.warehouse === warehouse);
+  const originalQty = bin ? Number(bin.actual_qty) : 0;
+  const mockAdjustment = localLedger[key] || 0;
+  return originalQty + mockAdjustment;
 };
 
 // ==========================================
@@ -306,61 +317,48 @@ function DetailCustomerModal({ customer, onClose, onSuccess }: { customer: any; 
 }
 
 // ==========================================
-// 2. MODALS FOR SALES ORDER (CEGAH MINUS)
+// 2. MODAL SALES ORDER (DENGAN VALIDASI STOK KETAT)
 // ==========================================
-function CreateOrderModal({ onClose, customers, items, onSuccess }: { onClose: () => void; customers: Customer[]; items: any[]; onSuccess?: () => void }) {
-  const [form, setForm] = useState({ 
-    customer: '', company: FIXED_COMPANY, 
-    po_no: '', 
-    transaction_date: new Date().toISOString().split('T')[0], 
-    delivery_date: new Date().toISOString().split('T')[0], 
-    warehouse: 'Finished Goods - NV', item_code: '', qty: '', rate: '', amount: 0 
-  });
+function CreateOrderModal({ onClose, customers, items, originalBins, localLedger, onSuccess }: any) {
+  const [form, setForm] = useState({ customer: '', po_no: '', transaction_date: new Date().toISOString().split('T')[0], delivery_date: new Date().toISOString().split('T')[0], warehouse: 'Finished Goods - NV', item_code: '', qty: '', rate: '', amount: 0 });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const warehouses = useMemo(() => getWarehousesByCompany(FIXED_COMPANY), []);
 
+  const availableStock = useMemo(() => {
+    if (!form.item_code || !form.warehouse) return 0;
+    return getSimulatedStock(form.item_code, form.warehouse, originalBins, localLedger);
+  }, [form.item_code, form.warehouse, originalBins, localLedger]);
+
+  const isStockShort = Number(form.qty || 0) > availableStock;
+
   const handleItemChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const val = e.target.value; const selected = items.find((i: any) => i.item_code === val); const newRate = selected?.standard_rate || 0;
-    setForm(f => ({ ...f, item_code: val, rate: String(newRate), amount: newRate * Number(f.qty || 0) }));
+    const val = e.target.value; const selected = items.find((i: any) => i.item_code === val);
+    setForm(f => ({ ...f, item_code: val, rate: String(selected?.standard_rate || 0), amount: (selected?.standard_rate || 0) * Number(f.qty || 0) }));
   };
 
-  // VALIDASI ANTI MINUS (REAL-TIME)
   const handleQtyChange = (e: React.ChangeEvent<HTMLInputElement>) => { 
     const val = e.target.value; 
-    if (val.includes('-') || Number(val) < 0) {
-      setError('❌ Ditolak: Quantity tidak boleh bernilai minus!');
-      return;
-    }
-    setError('');
-    setForm(f => ({ ...f, qty: val, amount: Number(val) * Number(f.rate || 0) })); 
+    if (val.includes('-') || Number(val) < 0) return setError('❌ Ditolak: Quantity tidak boleh minus!');
+    setError(''); setForm(f => ({ ...f, qty: val, amount: Number(val) * Number(f.rate || 0) })); 
   };
 
   const handleRateChange = (e: React.ChangeEvent<HTMLInputElement>) => { 
     const val = e.target.value; 
-    if (val.includes('-') || Number(val) < 0) {
-      setError('❌ Ditolak: Harga (Rate) tidak boleh bernilai minus!');
-      return;
-    }
-    setError('');
-    setForm(f => ({ ...f, rate: val, amount: Number(f.qty || 0) * Number(val) })); 
+    if (val.includes('-') || Number(val) < 0) return setError('❌ Ditolak: Harga (Rate) tidak boleh bernilai minus!');
+    setError(''); setForm(f => ({ ...f, rate: val, amount: Number(f.qty || 0) * Number(val) })); 
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); 
-    if (Number(form.qty) <= 0) return setError('Quantity harus lebih dari 0.');
-    if (Number(form.rate) <= 0) return setError('Harga (Rate) harus lebih dari 0.');
+    if (isStockShort) return setError(`❌ Stok Kurang! Anda butuh ${form.qty} unit, tapi stok di gudang hanya ada ${availableStock} unit. Produksi dulu di Pabrik.`);
+    if (Number(form.qty) <= 0 || Number(form.rate) <= 0) return setError('Nilai Qty dan Harga harus lebih dari 0.');
     
     setIsSubmitting(true); setError('');
     try {
       const selectedItem = items.find((i: any) => i.item_code === form.item_code);
       const salesOrderData = { 
-        customer: form.customer, 
-        po_no: form.po_no,
-        transaction_date: form.transaction_date, 
-        delivery_date: form.delivery_date, 
-        company: form.company, 
-        currency: 'IDR', 
+        customer: form.customer, po_no: form.po_no, transaction_date: form.transaction_date, delivery_date: form.delivery_date, company: FIXED_COMPANY, currency: 'IDR', 
         items: [{ item_code: form.item_code, item_name: selectedItem?.item_name || form.item_code, qty: parseFloat(form.qty), rate: parseFloat(form.rate), warehouse: form.warehouse, amount: form.amount }] 
       };
       const { apiCreate } = await import('@/lib/api');
@@ -373,34 +371,45 @@ function CreateOrderModal({ onClose, customers, items, onSuccess }: { onClose: (
     <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="modal-content" style={{ width: '100%', maxWidth: '600px', margin: '0 16px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-          <div><h2 style={{ fontSize: '18px', fontWeight: 800, color: '#111827' }}>Sales Order Baru (Draft)</h2></div>
+          <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#111827' }}>Sales Order Baru (Draft)</h2>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={20} /></button>
         </div>
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           <div className="responsive-grid">
-            <div><label className="erp-label">Customer *</label><select required value={form.customer} onChange={e => setForm(f => ({ ...f, customer: e.target.value }))} className="erp-input"><option value="">Pilih customer...</option>{customers.map(c => <option key={c.name} value={c.name}>{c.customer_name}</option>)}</select></div>
-            <div><label className="erp-label">Customer PO No.</label><input type="text" className="erp-input" value={form.po_no} onChange={e => setForm(f => ({ ...f, po_no: e.target.value }))} placeholder="Nomor PO Pelanggan (Opsional)" /></div>
+            <div className="form-group"><label className="erp-label">Customer *</label><select required value={form.customer} onChange={e => setForm(f => ({ ...f, customer: e.target.value }))} className="erp-input"><option value="">Pilih customer...</option>{customers.map((c:any) => <option key={c.name} value={c.name}>{c.customer_name}</option>)}</select></div>
+            <div className="form-group"><label className="erp-label">Customer PO No.</label><input type="text" className="erp-input" value={form.po_no} onChange={e => setForm(f => ({ ...f, po_no: e.target.value }))} placeholder="Opsional" /></div>
           </div>
           <div className="responsive-grid">
-            <div><label className="erp-label">Transaction Date *</label><input type="date" required className="erp-input" value={form.transaction_date} onChange={e => setForm(f => ({ ...f, transaction_date: e.target.value }))} /></div>
-            <div><label className="erp-label">Delivery Date *</label><input type="date" required className="erp-input" value={form.delivery_date} onChange={e => setForm(f => ({ ...f, delivery_date: e.target.value }))} /></div>
+            <div className="form-group"><label className="erp-label">Transaction Date *</label><input type="date" required className="erp-input" value={form.transaction_date} onChange={e => setForm(f => ({ ...f, transaction_date: e.target.value }))} /></div>
+            <div className="form-group"><label className="erp-label">Delivery Date *</label><input type="date" required className="erp-input" value={form.delivery_date} onChange={e => setForm(f => ({ ...f, delivery_date: e.target.value }))} /></div>
           </div>
           <div style={{ borderTop: '1px solid #f3f4f6', paddingTop: '12px' }}>
-            <p style={{ fontSize: '13px', fontWeight: 700, color: '#374151', marginBottom: '10px' }}>Item Laptop</p>
+            <p style={{ fontSize: '13px', fontWeight: 700, color: '#374151', marginBottom: '10px' }}>Item Pesanan & Pengecekan Stok</p>
             <div className="responsive-grid" style={{ marginBottom: '10px' }}>
-              <div><label className="erp-label">Warehouse *</label><select required className="erp-input" value={form.warehouse} onChange={e => setForm(f => ({ ...f, warehouse: e.target.value }))}><option value="">Pilih Gudang...</option>{warehouses.filter(w => w.type === 'FG' || !w.is_group).map(w => <option key={w.name} value={w.name}>{w.name}</option>)}</select></div>
-              <div><label className="erp-label">Model Laptop *</label><select required className="erp-input" value={form.item_code} onChange={handleItemChange}><option value="">Pilih Item...</option>{items.map((i: any) => <option key={i.name} value={i.item_code}>{i.item_code} - {i.item_name}</option>)}</select></div>
+              <div className="form-group"><label className="erp-label">Warehouse (Gudang FG) *</label><select required className="erp-input" value={form.warehouse} onChange={e => setForm(f => ({ ...f, warehouse: e.target.value }))}><option value="">Pilih Gudang...</option>{warehouses.filter(w => w.type === 'FG' || !w.is_group).map(w => <option key={w.name} value={w.name}>{w.name}</option>)}</select></div>
+              <div className="form-group"><label className="erp-label">Model Laptop *</label><select required className="erp-input" value={form.item_code} onChange={handleItemChange}><option value="">Pilih Item...</option>{items.map((i: any) => <option key={i.name} value={i.item_code}>{i.item_code} - {i.item_name}</option>)}</select></div>
             </div>
+            
+            {/* INDIKATOR STOK REAL-TIME */}
+            {form.item_code && (
+              <div style={{ background: isStockShort ? '#fee2e2' : '#f0fdf4', border: `1px solid ${isStockShort ? '#ef4444' : '#22c55e'}`, padding: '10px', borderRadius: '8px', marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '12px', fontWeight: 600, color: isStockShort ? '#b91c1c' : '#166534' }}>Stok Tersedia di Gudang:</span>
+                <span style={{ fontSize: '16px', fontWeight: 800, color: isStockShort ? '#ef4444' : '#16a34a' }}>{availableStock} Unit</span>
+              </div>
+            )}
+
             <div className="responsive-grid-3">
-              <div><label className="erp-label">Quantity *</label><input type="number" step="any" min="1" required placeholder="0" className="erp-input" value={form.qty} onChange={handleQtyChange} /></div>
-              <div><label className="erp-label">Rate (Rp) *</label><input type="number" step="any" min="1" required placeholder="0" className="erp-input" value={form.rate} onChange={handleRateChange} /></div>
-              <div><label className="erp-label">Amount</label><input type="text" readOnly className="erp-input disabled-input" style={{ fontWeight: 700, color: COLOR_PRIMARY }} value={formatUang(form.amount)} /></div>
+              <div className="form-group"><label className="erp-label">Quantity *</label><input type="number" step="any" min="1" required className="erp-input" value={form.qty} onChange={handleQtyChange} /></div>
+              <div className="form-group"><label className="erp-label">Rate (Rp) *</label><input type="number" step="any" min="1" required className="erp-input" value={form.rate} onChange={handleRateChange} /></div>
+              <div className="form-group"><label className="erp-label">Amount</label><input type="text" readOnly className="erp-input disabled-input" style={{ fontWeight: 700, color: COLOR_PRIMARY }} value={formatUang(form.amount)} /></div>
             </div>
           </div>
           {error && <div className="error-box"><AlertCircle size={16}/> {error}</div>}
-          <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+          <div style={{ display: 'flex', gap: '10px', marginTop: '10px', justifyContent: 'flex-end', borderTop: '1px solid #e5e7eb', paddingTop: '16px' }}>
             <button type="button" onClick={onClose} className="btn btn-secondary mobile-btn" disabled={isSubmitting}>Batal</button>
-            <button type="submit" className="btn btn-primary mobile-btn" disabled={isSubmitting} style={{ background: COLOR_PRIMARY, borderColor: COLOR_PRIMARY }}>{isSubmitting ? 'Menyimpan...' : 'Simpan Draft SO'}</button>
+            <button type="submit" className="btn btn-primary mobile-btn" disabled={isSubmitting || isStockShort} style={{ background: isStockShort ? '#9CA3AF' : COLOR_PRIMARY, borderColor: isStockShort ? '#9CA3AF' : COLOR_PRIMARY }}>
+              {isStockShort ? 'Stok Tidak Cukup' : isSubmitting ? 'Memproses...' : 'Simpan Draft SO'}
+            </button>
           </div>
         </form>
       </div>
@@ -620,7 +629,7 @@ function CreateInvoiceModal({ onClose, customers, items, orders, onSuccess, onLi
             </div>
           </div>
           {error && <div className="error-box"><AlertCircle size={16}/> {error}</div>}
-          <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+          <div style={{ display: 'flex', gap: '10px', marginTop: '10px', justifyContent: 'flex-end', borderTop: '1px solid #e5e7eb', paddingTop: '16px' }}>
             <button type="button" onClick={onClose} className="btn btn-secondary mobile-btn" disabled={isSubmitting}>Batal</button>
             <button type="submit" className="btn btn-primary mobile-btn" disabled={isSubmitting} style={{ background: COLOR_PRIMARY, borderColor: COLOR_PRIMARY }}>{isSubmitting ? 'Memproses...' : 'Simpan Draft'}</button>
           </div>
@@ -702,7 +711,7 @@ function InvoiceDetailModal({ invoice, onClose, onSubmitInvoice }: { invoice: an
 // ==========================================
 function SellingPageContent() {
   const { salesOrders, customers, isLoading, error, refetch } = useSellingData();
-  const { items: allItems } = useStockData();
+  const { items: allItems, bins: originalBins } = useStockData();
   const [invoices, setInvoices] = useState<any[]>([]);
 
   const fetchInvoices = async () => {
@@ -737,6 +746,7 @@ function SellingPageContent() {
   const [localDocStatus, setLocalDocStatus] = useState<Record<string, number>>({});
   const [localSOProgress, setLocalSOProgress] = useState<Record<string, { delivered: number, billed: number }>>({});
   const [invoiceLinks, setInvoiceLinks] = useState<Record<string, string>>({});
+  const [localLedger, setLocalLedger] = useState<Record<string, number>>({});
 
   useEffect(() => {
     const savedStatus = localStorage.getItem('erp_mock_selling_status');
@@ -747,6 +757,9 @@ function SellingPageContent() {
 
     const savedLinks = localStorage.getItem('erp_mock_invoice_links');
     if (savedLinks) { try { setInvoiceLinks(JSON.parse(savedLinks)); } catch (e) {} }
+    
+    const stockLedger = localStorage.getItem('erp_mock_stock_ledger');
+    if (stockLedger) { try { setLocalLedger(JSON.parse(stockLedger)); } catch (e) {} }
   }, []);
 
   const updateDocStatus = (docName: string, status: number) => {
@@ -922,7 +935,7 @@ function SellingPageContent() {
       )}
 
       {/* RENDER MODALS */}
-      {showCreateModal && <CreateOrderModal onClose={() => setShowCreateModal(false)} customers={sortedCustomers} items={allItems} onSuccess={() => refetch()} />}
+      {showCreateModal && <CreateOrderModal onClose={() => setShowCreateModal(false)} customers={sortedCustomers} items={allItems} originalBins={originalBins} localLedger={localLedger} onSuccess={() => refetch()} />}
       {showCreateCustomerModal && <CreateCustomerModal onClose={() => setShowCreateCustomerModal(false)} onSuccess={() => refetch()} />}
       {showCreateInvoiceModal && <CreateInvoiceModal onClose={() => setShowCreateInvoiceModal(false)} customers={sortedCustomers} items={allItems} orders={activeSalesOrders} onSuccess={() => fetchInvoices()} onLink={handleLinkInvoice} />}
       
@@ -1138,10 +1151,15 @@ function SellingPageContent() {
 
       <style>{`
         .erp-label { font-size: 12px; font-weight: 600; color: #374151; display: block; margin-bottom: 6px; }
+        .erp-input { width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; color: #111827; outline: none; transition: border-color 0.2s; font-family: 'Poppins', sans-serif; }
+        .erp-input:focus { border-color: ${COLOR_PRIMARY}; box-shadow: 0 0 0 2px ${COLOR_PRIMARY}15; }
         .disabled-input { background-color: #f3f4f6; cursor: not-allowed; color: #6B7280; }
-        .error-box { background: #fee2e2; border-radius: 6px; padding: 10px; color: #991b1b; font-size: 12px; }
+        .error-box { background: #fee2e2; border-radius: 6px; padding: 10px; color: #991b1b; font-size: 12px; margin-top: 10px; display: flex; align-items: center; gap: 8px; }
+        .section-title { font-size: 13px; font-weight: 700; color: ${COLOR_PRIMARY}; border-bottom: 1px solid #e5e7eb; padding-bottom: 8px; margin-bottom: 16px; display: flex; align-items: center; gap: 6px; }
+        .form-group { margin-bottom: 14px; }
         .responsive-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
         .responsive-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+        .modal-footer { display: flex; gap: 10px; margin-top: 24px; justify-content: flex-end; border-top: 1px solid #e5e7eb; padding-top: 16px; }
         
         .table-row-hover:hover { background-color: #f8fafc !important; }
         

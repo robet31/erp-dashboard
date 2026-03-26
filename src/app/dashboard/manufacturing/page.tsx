@@ -34,6 +34,17 @@ const formatCreationTime = (dateStr?: string) => {
 };
 
 // ==========================================
+// FUNGSI SAKTI: AMBIL STOK REAL-TIME
+// ==========================================
+const getSimulatedStock = (itemCode: string, warehouse: string, originalBins: any[], localLedger: Record<string, number>) => {
+  const key = `${itemCode}_${warehouse}`;
+  const bin = originalBins.find((b: any) => b.item_code === itemCode && b.warehouse === warehouse);
+  const originalQty = bin ? Number(bin.actual_qty) : 0;
+  const mockAdjustment = localLedger[key] || 0;
+  return originalQty + mockAdjustment;
+};
+
+// ==========================================
 // 1. MODAL CREATE BOM
 // ==========================================
 function CreateBOMModal({ onClose, items, onSuccess }: any) {
@@ -140,21 +151,35 @@ function CreateBOMModal({ onClose, items, onSuccess }: any) {
 }
 
 // ==========================================
-// 2. MODAL CREATE WORK ORDER
+// 2. MODAL CREATE WORK ORDER (DENGAN VALIDASI STOK KETAT)
 // ==========================================
-function CreateWorkOrderModal({ onClose, boms, onSuccess }: any) {
+function CreateWorkOrderModal({ onClose, boms, originalBins, localLedger, onSuccess }: any) {
   const [form, setForm] = useState({ bom_no: '', qty: '1', source_warehouse: 'Stores - NV', wip_warehouse: 'Work In Progress - NV', fg_warehouse: 'Finished Goods - NV' });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const warehouses = getWarehousesByCompany(FIXED_COMPANY);
 
+  // LOGIKA CEK STOK BAHAN BAKU BERDASARKAN BOM
+  const selectedBom = useMemo(() => boms.find((b: any) => b.name === form.bom_no), [boms, form.bom_no]);
+  
+  const requiredMaterials = useMemo(() => {
+    if (!selectedBom || !selectedBom.items) return [];
+    return selectedBom.items.map((rm: any) => {
+      const required = rm.qty * Number(form.qty || 0);
+      const available = getSimulatedStock(rm.item_code, form.source_warehouse, originalBins, localLedger);
+      return { ...rm, required, available, isShort: available < required };
+    });
+  }, [selectedBom, form.qty, form.source_warehouse, originalBins, localLedger]);
+
+  const hasShortage = requiredMaterials.some(rm => rm.isShort);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.bom_no) return setError("Pilih BOM terlebih dahulu.");
+    if (hasShortage) return setError("❌ Tidak bisa membuat Work Order! Ada komponen bahan baku yang tidak cukup di gudang.");
     if (Number(form.qty) <= 0) return setError("Qty harus lebih besar dari 0");
+    
     setIsSubmitting(true); setError('');
     try {
-      const selectedBom = boms.find((b: any) => b.name === form.bom_no);
       const woData = { production_item: selectedBom?.item, bom_no: form.bom_no, qty: parseFloat(form.qty), company: FIXED_COMPANY, source_warehouse: form.source_warehouse, wip_warehouse: form.wip_warehouse, fg_warehouse: form.fg_warehouse, use_multi_level_bom: 0 };
       const { apiCreate } = await import('@/lib/api');
       await apiCreate('Work Order', woData);
@@ -164,7 +189,7 @@ function CreateWorkOrderModal({ onClose, boms, onSuccess }: any) {
 
   return (
     <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal-content" style={{ width: '100%', maxWidth: '520px', margin: '0 16px' }}>
+      <div className="modal-content" style={{ width: '100%', maxWidth: '560px', margin: '0 16px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px', alignItems: 'center' }}>
           <div>
             <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#111827', margin: 0 }}>Buat Work Order Baru</h2>
@@ -180,21 +205,49 @@ function CreateWorkOrderModal({ onClose, boms, onSuccess }: any) {
               {boms.map((b: any) => <option key={b.name} value={b.name}>{b.name} (Bikin {b.item})</option>)}
             </select>
           </div>
-          <div>
-            <label className="erp-label">Qty Target Produksi *</label>
-            <input type="number" required min="1" className="erp-input" value={form.qty} onChange={e => setForm(f => ({ ...f, qty: e.target.value }))} />
-            <p style={{ fontSize: '10px', color: '#6B7280', marginTop: '4px' }}>Pabrik disuruh merakit berapa unit kali ini?</p>
+          <div className="responsive-grid">
+            <div>
+              <label className="erp-label">Qty Target Produksi *</label>
+              <input type="number" required min="1" className="erp-input" value={form.qty} onChange={e => { if(!e.target.value.includes('-')) setForm(f => ({ ...f, qty: e.target.value }))}} />
+            </div>
+            <div>
+              <label className="erp-label">Gudang Bahan Baku (Source)</label>
+              <select className="erp-input" value={form.source_warehouse} onChange={e => setForm(f => ({ ...f, source_warehouse: e.target.value }))}>{warehouses.map(w => <option key={w.name} value={w.name}>{w.name}</option>)}</select>
+            </div>
           </div>
-          <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '15px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <p style={{ fontWeight: 700, fontSize: '13px', color: COLOR_PRIMARY, margin: 0 }}>Pengaturan Gudang Produksi</p>
-            <div><label className="erp-label">Gudang Bahan Baku (Source)</label><select className="erp-input" value={form.source_warehouse} onChange={e => setForm(f => ({ ...f, source_warehouse: e.target.value }))}>{warehouses.map(w => <option key={w.name} value={w.name}>{w.name}</option>)}</select></div>
-            <div><label className="erp-label">Gudang Produksi (WIP)</label><select className="erp-input" value={form.wip_warehouse} onChange={e => setForm(f => ({ ...f, wip_warehouse: e.target.value }))}>{warehouses.map(w => <option key={w.name} value={w.name}>{w.name}</option>)}</select></div>
-            <div><label className="erp-label">Gudang Barang Jadi (Target FG)</label><select className="erp-input" value={form.fg_warehouse} onChange={e => setForm(f => ({ ...f, fg_warehouse: e.target.value }))}>{warehouses.map(w => <option key={w.name} value={w.name}>{w.name}</option>)}</select></div>
+          
+          <div style={{ display: 'none' }}>
+            <select className="erp-input" value={form.wip_warehouse} onChange={e => setForm(f => ({ ...f, wip_warehouse: e.target.value }))}>{warehouses.map(w => <option key={w.name} value={w.name}>{w.name}</option>)}</select>
+            <select className="erp-input" value={form.fg_warehouse} onChange={e => setForm(f => ({ ...f, fg_warehouse: e.target.value }))}>{warehouses.map(w => <option key={w.name} value={w.name}>{w.name}</option>)}</select>
           </div>
+
+          {/* TABLE PENGECEKAN STOK BAHAN BAKU */}
+          {selectedBom && (
+            <div style={{ marginTop: '4px', border: '1px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden' }}>
+              <div style={{ background: '#f9fafb', padding: '8px 12px', fontSize: '12px', fontWeight: 700, borderBottom: '1px solid #e5e7eb' }}>Pengecekan Ketersediaan Bahan Baku</div>
+              <table className="erp-table" style={{ width: '100%', fontSize: '11px', margin: 0 }}>
+                <thead><tr><th style={{padding: '8px'}}>Komponen</th><th style={{textAlign:'center', padding: '8px'}}>Dibutuhkan</th><th style={{textAlign:'center', padding: '8px'}}>Tersedia</th><th style={{textAlign:'center', padding: '8px'}}>Status</th></tr></thead>
+                <tbody>
+                  {requiredMaterials.map((rm, i) => (
+                    <tr key={i} style={{ background: rm.isShort ? '#fee2e2' : 'white' }}>
+                      <td style={{ fontWeight: 600, padding: '8px' }}>{rm.item_code}</td>
+                      <td style={{ textAlign: 'center', padding: '8px' }}>{rm.required}</td>
+                      <td style={{ textAlign: 'center', fontWeight: 800, color: rm.isShort ? '#b91c1c' : '#15803d', padding: '8px' }}>{rm.available}</td>
+                      <td style={{ textAlign: 'center', padding: '8px' }}>{rm.isShort ? '❌ Kurang' : '✅ Aman'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
           {error && <div className="error-box"><AlertCircle size={16}/>{error}</div>}
+          
           <div className="mobile-btn-group" style={{ display: 'flex', gap: '10px', marginTop: '16px', borderTop: '1px solid #e5e7eb', paddingTop: '16px' }}>
             <button type="button" onClick={onClose} className="btn btn-secondary mobile-btn" style={{ flex: 1 }}>Batal</button>
-            <button type="submit" className="btn btn-primary mobile-btn" style={{ flex: 2, background: COLOR_SECONDARY, borderColor: COLOR_SECONDARY }} disabled={isSubmitting}>{isSubmitting ? 'Memproses...' : 'Buat Work Order'}</button>
+            <button type="submit" className="btn btn-primary mobile-btn" style={{ flex: 2, background: hasShortage ? '#9CA3AF' : COLOR_SECONDARY, borderColor: hasShortage ? '#9CA3AF' : COLOR_SECONDARY }} disabled={isSubmitting || hasShortage}>
+              {hasShortage ? 'Stok Bahan Baku Kurang' : 'Buat Work Order'}
+            </button>
           </div>
         </form>
       </div>
@@ -265,7 +318,7 @@ function ManufacturingPageContent() {
   useEffect(() => { setActiveTab(tabParam || 'workorders'); }, [tabParam]);
 
   const { boms, workOrders, isLoading, error, refetch } = useManufacturingData() as any;
-  const { items } = useStockData();
+  const { bins: originalBins } = useStockData();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreateBOM, setShowCreateBOM] = useState(false);
@@ -275,12 +328,16 @@ function ManufacturingPageContent() {
   const [localWOStatus, setLocalWOStatus] = useState<Record<string, string>>({});
   const [activeTimers, setActiveTimers] = useState<Record<string, number>>({});
   const [activeJobCard, setActiveJobCard] = useState<any>(null);
+  
+  const [localLedger, setLocalLedger] = useState<Record<string, number>>({});
 
   useEffect(() => {
     const savedStatus = localStorage.getItem('erp_mock_wo_status');
     if (savedStatus) {
       try { setLocalWOStatus(JSON.parse(savedStatus)); } catch (e) {}
     }
+    const stockLedger = localStorage.getItem('erp_mock_stock_ledger');
+    if (stockLedger) { try { setLocalLedger(JSON.parse(stockLedger)); } catch (e) {} }
   }, []);
 
   const updateWOStatus = (woName: string, status: string) => {
@@ -393,20 +450,33 @@ function ManufacturingPageContent() {
     } catch (err) { refetch(); }
   };
 
+  // LOGIKA CANGGIH: PENAMBAHAN FG SEKALIGUS PENGURANGAN RAW MATERIAL SAAT SELESAI
   const handleJCFinish = async (jc: any, producedQty: number) => {
     updateWOStatus(jc.original_wo.name, 'Completed');
     setActiveTimers(prev => { const next = { ...prev }; delete next[jc.name]; return next; });
     setActiveJobCard(null); 
     
-    // THE MAGIC LINK: MENAMBAHKAN STOK BARANG JADI KE GUDANG (SMART STOCK LEDGER)
     const currentLedger = JSON.parse(localStorage.getItem('erp_mock_stock_ledger') || '{}');
-    const fgWarehouse = jc.fg_warehouse;
-    const itemCode = jc.production_item;
-    const key = `${itemCode}_${fgWarehouse}`;
-    currentLedger[key] = (currentLedger[key] || 0) + producedQty;
-    localStorage.setItem('erp_mock_stock_ledger', JSON.stringify(currentLedger));
+    
+    // 1. KURANGI BAHAN BAKU BERDASARKAN BOM
+    const relatedBom = boms.find((b: any) => b.name === jc.original_wo.bom_no);
+    if (relatedBom && relatedBom.items) {
+        relatedBom.items.forEach((rm: any) => {
+            const requiredToDeduct = rm.qty * producedQty;
+            const rmKey = `${rm.item_code}_${jc.original_wo.source_warehouse}`;
+            currentLedger[rmKey] = (currentLedger[rmKey] || 0) - requiredToDeduct;
+        });
+    }
 
-    alert(`🎉 BINGO! Produksi Selesai!\n\n${producedQty} unit ${itemCode} berhasil dirakit.\nStok otomatis ditambahkan ke gudang ${fgWarehouse}!\nSilakan infokan tim Gudang (Stock) untuk melakukan pengiriman (Delivery Note).`);
+    // 2. TAMBAH BARANG JADI (FG)
+    const fgKey = `${jc.production_item}_${jc.fg_warehouse}`;
+    currentLedger[fgKey] = (currentLedger[fgKey] || 0) + producedQty;
+
+    // 3. SIMPAN KE DATABASE LOKAL
+    localStorage.setItem('erp_mock_stock_ledger', JSON.stringify(currentLedger));
+    setLocalLedger(currentLedger);
+
+    alert(`🎉 BINGO! Produksi Selesai!\n\n✔️ ${producedQty} unit ${jc.production_item} berhasil dirakit.\n📉 Bahan baku otomatis dipotong dari gudang sumber.\n📈 Barang Jadi otomatis masuk ke gudang tujuan.`);
     
     try {
       const { apiUpdate } = await import('@/lib/api');
@@ -433,7 +503,9 @@ function ManufacturingPageContent() {
 
       {/* RENDER SEMUA MODALS */}
       {showCreateBOM && <CreateBOMModal items={items} onClose={() => setShowCreateBOM(false)} onSuccess={() => refetch()} />}
-      {showCreateWO && <CreateWorkOrderModal boms={sortedBOMs.filter(b=>b.docstatus===1)} onClose={() => setShowCreateWO(false)} onSuccess={() => refetch()} />}
+      
+      {/* UPDATE PROPS UNTUK CREATE WORK ORDER MODAL */}
+      {showCreateWO && <CreateWorkOrderModal boms={sortedBOMs.filter(b=>b.docstatus===1)} originalBins={originalBins} localLedger={localLedger} onClose={() => setShowCreateWO(false)} onSuccess={() => refetch()} />}
       
       {/* POP-UP TERMINAL JOB CARD */}
       {activeJobCard && (
