@@ -3,9 +3,8 @@ import "./globals.css";
 import { Providers } from "@/providers";
 
 export const metadata: Metadata = {
-  title: "ERP Dashboard | Manufacturing System",
-  description: "Mini Manufacturing ERP System - Selling, Stock & Manufacturing",
-  keywords: "ERP, Manufacturing, Inventory, Sales, Dashboard",
+  title: "Netra Vidya ERP | OEM Assembler",
+  description: "Enterprise Resource Planning System",
 };
 
 export default function RootLayout({
@@ -14,14 +13,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    /**
-     * suppressHydrationWarning ditambahkan pada html dan body 
-     * untuk mencegah error akibat ekstensi browser yang menyuntikkan 
-     * atribut tambahan (seperti cz-shortcut-listen).
-     */
     <html lang="id" suppressHydrationWarning>
+      <head>
+        {/* Import Font Poppins langsung dari Google Fonts */}
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+      </head>
       <body 
-        style={{ fontFamily: "'Montserrat', sans-serif" }} 
+        style={{ fontFamily: "'Poppins', sans-serif", backgroundColor: '#f8f9fb' }} 
         suppressHydrationWarning
       >
         <Providers>

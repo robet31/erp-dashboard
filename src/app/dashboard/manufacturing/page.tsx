@@ -287,9 +287,10 @@ function ManufacturingPageContent() {
     return jc;
   }, [displayWOs]);
 
-  const filteredBOMs = sortedBOMs.filter(b => !searchQuery || b.name.toLowerCase().includes(searchQuery.toLowerCase()) || b.item.toLowerCase().includes(searchQuery.toLowerCase()));
-  const filteredWOs = displayWOs.filter(w => !searchQuery || w.name.toLowerCase().includes(searchQuery.toLowerCase()) || w.production_item.toLowerCase().includes(searchQuery.toLowerCase()));
-  const filteredJCs = simulatedJobCards.filter(j => !searchQuery || j.name.toLowerCase().includes(searchQuery.toLowerCase()) || j.work_order.toLowerCase().includes(searchQuery.toLowerCase()));
+  // PERBAIKAN FILTER: Menambahkan pengaman (b.name || '') agar tidak error toLowerCase() jika data null
+  const filteredBOMs = sortedBOMs.filter((b: any) => !searchQuery || (b.name || '').toLowerCase().includes(searchQuery.toLowerCase()) || (b.item || '').toLowerCase().includes(searchQuery.toLowerCase()));
+  const filteredWOs = displayWOs.filter((w: any) => !searchQuery || (w.name || '').toLowerCase().includes(searchQuery.toLowerCase()) || (w.production_item || '').toLowerCase().includes(searchQuery.toLowerCase()));
+  const filteredJCs = simulatedJobCards.filter((j: any) => !searchQuery || (j.name || '').toLowerCase().includes(searchQuery.toLowerCase()) || (j.work_order || '').toLowerCase().includes(searchQuery.toLowerCase()));
 
   const formatCreationTime = (dateStr?: string) => {
     if (!dateStr) return '';
@@ -414,13 +415,58 @@ function ManufacturingPageContent() {
           </div>
         </div>
 
+        {/* TABEL BOM */}
+        {activeTab === 'bom' && (
+          <div style={{ overflowX: 'auto' }}>
+            <table className="erp-table">
+              <thead>
+                <tr>
+                  <th style={{ width: '40px', textAlign: 'center' }}>No.</th>
+                  <th>BOM ID & Tanggal</th>
+                  <th>Item Produksi</th>
+                  <th style={{ textAlign: 'center' }}>Qty</th>
+                  <th>Status</th>
+                  <th style={{ width: '120px', textAlign: 'center' }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredBOMs.map((bom: any, index: number) => (
+                  <tr key={bom.name}>
+                    <td style={{ textAlign: 'center', fontWeight: 600, color: '#6B7280' }}>{index + 1}</td>
+                    <td>
+                      <div style={{ fontWeight: 700, color: '#0ea5e9', fontSize: '13px' }}>{bom.name}</div>
+                      {bom.creation && <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '2px' }}>Dibuat: {formatCreationTime(bom.creation)}</div>}
+                    </td>
+                    <td>
+                      <div style={{ fontWeight: 600, fontSize: '13px', color: '#111827' }}>{bom.item}</div>
+                    </td>
+                    <td style={{ textAlign: 'center', fontWeight: 700 }}>{bom.quantity || 1}</td>
+                    <td>
+                      <span className={`badge ${bom.is_active ? 'badge-success' : 'badge-gray'}`}>
+                        {bom.is_active ? 'Active' : 'Draft'}
+                      </span>
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                        <a href={`http://34.101.192.135:8080/app/bom/${encodeURIComponent(bom.name)}`} target="_blank" rel="noopener noreferrer" style={{ background: '#f3f4f6', border: '1px solid #e5e7eb', color: '#4B5563', borderRadius: '6px', padding: '6px', display: 'flex' }} title="Buka di ERPNext"><Eye size={14} /></a>
+                        <button onClick={() => handleSmartDelete('BOM', bom.name, bom.docstatus)} style={{ background: '#fee2e2', border: '1px solid #fecaca', color: '#dc2626', borderRadius: '6px', padding: '6px', cursor: 'pointer' }} title="Hapus"><Trash2 size={14} /></button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {filteredBOMs.length === 0 && <tr><td colSpan={6} style={{ textAlign: 'center', padding: '40px', color: '#6B7280' }}>Belum ada Bill of Materials (BOM).</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        )}
+
         {/* TABEL WORK ORDERS */}
         {activeTab === 'workorders' && (
           <div style={{ overflowX: 'auto' }}>
             <table className="erp-table">
               <thead><tr><th style={{ width: '40px', textAlign: 'center' }}>No.</th><th>WO Number & Tanggal</th><th>Item Produksi</th><th style={{ textAlign: 'center' }}>Qty</th><th>Status</th><th style={{ width: '180px', textAlign: 'center' }}>Actions</th></tr></thead>
               <tbody>
-                {filteredWOs.map((wo, index) => (
+                {filteredWOs.map((wo: any, index: number) => (
                   <tr key={wo.name}>
                     <td style={{ textAlign: 'center', fontWeight: 600, color: '#6B7280' }}>{index + 1}</td>
                     <td>
@@ -462,7 +508,7 @@ function ManufacturingPageContent() {
             <table className="erp-table">
               <thead><tr><th style={{ width: '40px', textAlign: 'center' }}>No.</th><th>Job Card ID</th><th>Work Order Ref</th><th>Item Produksi</th><th>Status Tugas</th><th style={{ textAlign: 'center' }}>Terminal Operator</th></tr></thead>
               <tbody>
-                {filteredJCs.map((jc, index) => {
+                {filteredJCs.map((jc: any, index: number) => {
                   const isActive = activeTimers[jc.name] !== undefined;
                   const elapsedSeconds = isActive ? activeTimers[jc.name] : 0;
                   const displayStatus = isActive ? 'Work In Progress' : jc.status;

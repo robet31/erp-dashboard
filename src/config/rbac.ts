@@ -23,7 +23,7 @@ export const ROLES = [
     badge: 'SLS',
     description: 'Kelola Customer, Order & Invoice',
     icon: 'ShoppingCart',
-    color: '#0066B3',
+    color: '#054CC7', // Warna Primary Baru
     modules: ['dashboard', 'selling'] as ModuleKey[],
     permissions: ['create_customer', 'edit_customer', 'create_sales_order', 'edit_sales_order'] as PermissionKey[],
     widgets: [{ id: 'sales_overview', title: 'Sales Overview', type: 'chart' }] as DashboardWidget[]
@@ -34,7 +34,7 @@ export const ROLES = [
     badge: 'GDG',
     description: 'Kelola Stok, Item & Delivery',
     icon: 'Warehouse',
-    color: '#f59e0b',
+    color: '#17C3CC', // Warna Secondary Baru
     modules: ['dashboard', 'stock'] as ModuleKey[],
     permissions: ['create_item', 'create_delivery_note', 'edit_delivery_note'] as PermissionKey[],
     widgets: [{ id: 'stock_overview', title: 'Stock Overview', type: 'stat' }] as DashboardWidget[]
@@ -45,7 +45,7 @@ export const ROLES = [
     badge: 'PRD',
     description: 'Kelola BOM & Work Order',
     icon: 'Factory',
-    color: '#10b981',
+    color: '#054CC7', // Warna Primary Baru
     modules: ['dashboard', 'manufacturing'] as ModuleKey[],
     permissions: ['create_bom', 'create_work_order', 'create_job_card'] as PermissionKey[],
     widgets: [{ id: 'prod_overview', title: 'Production Overview', type: 'chart' }] as DashboardWidget[]
@@ -56,7 +56,7 @@ export const ROLES = [
     badge: 'OPR',
     description: 'Eksekusi Job Card di Pabrik',
     icon: 'Wrench',
-    color: '#6B7280',
+    color: '#17C3CC', // Warna Secondary Baru
     modules: ['dashboard', 'manufacturing'] as ModuleKey[],
     permissions: ['create_job_card'] as PermissionKey[],
     widgets: [{ id: 'job_card_list', title: 'My Job Cards', type: 'list' }] as DashboardWidget[]
@@ -67,7 +67,7 @@ export const ROLES = [
     badge: 'ADM',
     description: 'Akses penuh ke semua modul',
     icon: 'Cog',
-    color: '#7c3aed',
+    color: '#054CC7',
     modules: ['dashboard', 'selling', 'stock', 'manufacturing', 'users'] as ModuleKey[],
     permissions: ['create_customer', 'edit_customer', 'create_sales_order', 'edit_sales_order', 'create_delivery_note', 'edit_delivery_note', 'create_item', 'create_bom', 'create_work_order', 'create_job_card', 'manage_users'] as PermissionKey[],
     widgets: [{ id: 'system_overview', title: 'System Overview', type: 'chart' }] as DashboardWidget[]
