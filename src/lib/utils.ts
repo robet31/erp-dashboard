@@ -116,6 +116,34 @@ export function truncate(str: string, length: number): string {
   return str.length > length ? str.substring(0, length) + '...' : str;
 }
 
+// Shorten name - only shorten if more than 10 chars, filter special chars
+export function shortenName(name: string, maxLength: number = 20): string {
+  if (!name) return '';
+  
+  // Filter only letters, numbers, and spaces
+  const cleanName = name.replace(/[^a-zA-Z0-9\s]/g, '').trim();
+  if (!cleanName) return 'User';
+  
+  const charCount = cleanName.replace(/\s/g, '').length;
+  
+  // Don't shorten if 10 chars or less
+  if (charCount <= 10) return cleanName;
+  
+  const parts = cleanName.split(/\s+/);
+  if (parts.length === 1) {
+    return cleanName.substring(0, maxLength - 2) + '..';
+  }
+  
+  const firstName = parts[0];
+  const lastName = parts[parts.length - 1];
+  const lastInitial = lastName.charAt(0).toUpperCase();
+  
+  const shortName = `${firstName} ${lastInitial}.`;
+  if (shortName.length <= maxLength) return shortName;
+  
+  return firstName.substring(0, maxLength - 2) + '..';
+}
+
 // Generate random color for avatar
 export function getAvatarColor(name: string): string {
   const colors = [

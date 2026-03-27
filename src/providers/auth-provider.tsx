@@ -19,6 +19,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   login: (role: UserRole, email?: string, password?: string) => Promise<void>;
   logout: () => void;
+  updateUser: (updates: Partial<AuthUser>) => void;
   can: (permission: PermissionKey) => boolean;
   canAccess: (module: ModuleKey) => boolean;
   switchRole: (role: UserRole) => void;
@@ -34,7 +35,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Restore session from localStorage
   useEffect(() => {
     const savedUser = localStorage.getItem('erp_user');
-    if (savedUser) {
+    const STORAGE_VERSION = 'v2';
+    const storedVersion = localStorage.getItem('erp_users_version');
+    
+    if (savedUser && storedVersion !== STORAGE_VERSION) {
+      localStorage.removeItem('erp_user');
+      setUser(null);
+    } else if (savedUser) {
       try {
         setUser(JSON.parse(savedUser));
       } catch { /* ignore */ }
@@ -52,26 +59,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     
     // If email provided, check role mapping from user management
     if (_email) {
-      // First check role mapping from user management page
-      const roleMap = JSON.parse(localStorage.getItem('erp_user_roles') || '{}');
-      if (roleMap[_email]) {
-        finalRole = roleMap[_email];
-      }
-      
       const users = JSON.parse(localStorage.getItem('erp_users') || '[]');
       const foundUser = users.find((u: any) => u.email === _email);
       
-      if (foundUser) {
-        const userRole = roleMap[_email] || foundUser.role || role;
+      if (foundUser && foundUser.role) {
+        finalRole = foundUser.role as UserRole;
         authUser = {
           name: foundUser.full_name,
           email: foundUser.email,
           full_name: foundUser.full_name,
-          role: userRole,
+          role: finalRole,
         };
-        finalRole = userRole;
       } else {
-        // Fallback to role config if user not found (e.g. initial login)
         authUser = {
           name: roleConfig.label,
           email: _email,
@@ -120,7 +119,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(() => {
     setUser(null);
     localStorage.removeItem('erp_user');
+    localStorage.removeItem('frappe_sid');
   }, []);
+
+  const updateUser = useCallback((updates: Partial<AuthUser>) => {
+    if (!user) return;
+    const updated = { ...user, ...updates };
+    setUser(updated);
+    localStorage.setItem('erp_user', JSON.stringify(updated));
+  }, [user]);
 
   const switchRole = useCallback((role: UserRole) => {
     if (!user) return;
@@ -152,6 +159,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isAuthenticated: !!user,
       login,
       logout,
+      updateUser,
       can,
       canAccess,
       switchRole,
