@@ -19,7 +19,7 @@ function CreateUserModal({ onClose, editingUser, onSuccess }: { onClose: () => v
     first_name: editingUser?.first_name || editingUser?.full_name?.split(' ')[0] || '',
     last_name: editingUser?.last_name || editingUser?.full_name?.split(' ').slice(1).join(' ') || '',
     enabled: editingUser?.enabled !== undefined ? editingUser.enabled : 1,
-    role: editingUser ? getStoredRole(editingUser.email) : 'sales' as UserRole,
+    role: editingUser ? getStoredRole(editingUser.email) : 'admin_sales' as UserRole,
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -28,9 +28,9 @@ function CreateUserModal({ onClose, editingUser, onSuccess }: { onClose: () => v
   const currentRole = ROLES.find(r => r.id === form.role) || ROLES[2];
 
   function getStoredRole(email: string | undefined): UserRole {
-    if (!email) return 'sales';
+    if (!email) return 'admin_sales';
     const roleMap = JSON.parse(localStorage.getItem('erp_user_roles') || '{}');
-    return roleMap[email] || 'sales';
+    return (roleMap[email] as UserRole) || 'admin_sales';
   }
 
   function saveRoleMapping(email: string, role: UserRole) {
@@ -260,7 +260,7 @@ function CreateUserModal({ onClose, editingUser, onSuccess }: { onClose: () => v
                       key={role.id}
                       type="button"
                       onClick={() => { 
-                        setForm(f => ({ ...f, role: role.id })); 
+                        setForm(f => ({ ...f, role: role.id as UserRole })); 
                         setShowRoleDropdown(false); 
                       }}
                       style={{ 
@@ -537,7 +537,7 @@ export default function UsersPage() {
                   <td style={{ padding: '12px' }}>
                     {(() => {
                       const roleMap = JSON.parse(localStorage.getItem('erp_user_roles') || '{}');
-                      const userRole = roleMap[user.email] || 'sales';
+                      const userRole = roleMap[user.email] || 'admin_sales';
                       const roleConfig = ROLES.find(r => r.id === userRole) || ROLES[2];
                       return (
                         <span style={{ 

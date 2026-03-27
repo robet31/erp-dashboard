@@ -7,7 +7,7 @@ export type PermissionKey =
   | 'create_sales_order' | 'edit_sales_order'
   | 'create_delivery_note' | 'edit_delivery_note'
   | 'create_item' | 'create_bom' | 'create_work_order' | 'create_job_card'
-  | 'manage_users';
+  | 'manage_users' | 'create_user' | 'edit_user' | 'delete_user';
 
 export type DashboardWidget = {
   id: string;
@@ -69,7 +69,7 @@ export const ROLES = [
     icon: 'Cog',
     color: '#054CC7',
     modules: ['dashboard', 'selling', 'stock', 'manufacturing', 'users'] as ModuleKey[],
-    permissions: ['create_customer', 'edit_customer', 'create_sales_order', 'edit_sales_order', 'create_delivery_note', 'edit_delivery_note', 'create_item', 'create_bom', 'create_work_order', 'create_job_card', 'manage_users'] as PermissionKey[],
+    permissions: ['create_customer', 'edit_customer', 'create_sales_order', 'edit_sales_order', 'create_delivery_note', 'edit_delivery_note', 'create_item', 'create_bom', 'create_work_order', 'create_job_card', 'manage_users', 'create_user', 'edit_user', 'delete_user'] as PermissionKey[],
     widgets: [{ id: 'system_overview', title: 'System Overview', type: 'chart' }] as DashboardWidget[]
   }
 ];

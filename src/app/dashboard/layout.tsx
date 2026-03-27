@@ -9,9 +9,11 @@ import { Topbar } from '@/components/topbar';
 // Context untuk buka/tutup sidebar
 export const SidebarContext = createContext<{
   isOpen: boolean;
+  isMinimized: boolean;
   toggleSidebar: () => void;
+  toggleMinimize: () => void;
   closeSidebar: () => void;
-}>({ isOpen: false, toggleSidebar: () => {}, closeSidebar: () => {} });
+}>({ isOpen: false, isMinimized: false, toggleSidebar: () => {}, toggleMinimize: () => {}, closeSidebar: () => {} });
 
 export function useSidebar() {
   return useContext(SidebarContext);
@@ -21,6 +23,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router = useRouter();
   const { isAuthenticated, isLoading } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
+  const [isMinimized, setIsMinimized] = useState(false);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -31,8 +34,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   useEffect(() => {
     const handleResize = () => {
       if (window.innerWidth > 768) setIsOpen(false);
+      if (window.innerWidth < 1024) setIsMinimized(true);
     };
     window.addEventListener('resize', handleResize);
+    handleResize();
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
@@ -51,7 +56,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   if (!isAuthenticated) return null;
 
   return (
-    <SidebarContext.Provider value={{ isOpen, toggleSidebar: () => setIsOpen(!isOpen), closeSidebar: () => setIsOpen(false) }}>
+    <SidebarContext.Provider value={{ isOpen, isMinimized, toggleSidebar: () => setIsOpen(!isOpen), toggleMinimize: () => setIsMinimized(!isMinimized), closeSidebar: () => setIsOpen(false) }}>
       <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: '#f8f9fb', fontFamily: "'Poppins', sans-serif" }}>
         
         {/* OVERLAY MOBILE - Hanya aktif jika sidebar open */}
@@ -90,6 +95,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         }
         @media (max-width: 768px) {
           .mobile-overlay { display: block; }
+          main {
+            padding: 16px !important;
+          }
         }
       `}</style>
     </SidebarContext.Provider>
