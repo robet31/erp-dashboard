@@ -3,7 +3,7 @@ import "./globals.css";
 import { Providers } from "@/providers";
 
 export const metadata: Metadata = {
-  title: "Netra Vidya ERP | OEM Assembler",
+  title: "PT Artavista ERP | OEM Assembler",
   description: "Enterprise Resource Planning System",
 };
 

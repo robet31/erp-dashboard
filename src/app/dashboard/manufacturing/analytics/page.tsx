@@ -8,10 +8,10 @@ import {
   PieChart, Pie, Cell, AreaChart, Area, Legend
 } from 'recharts';
 
-const COLOR_PRIMARY = '#054CC7';
-const COLOR_SECONDARY = '#17C3CC';
+const COLOR_PRIMARY = '#d97706';
+const COLOR_SECONDARY = '#eab308';
 const COLORS = [COLOR_PRIMARY, COLOR_SECONDARY, '#f59e0b', '#9ca3af', '#ef4444'];
-const FIXED_COMPANY = 'Netra Vidya';
+const FIXED_COMPANY = 'PT Artavista';
 
 export default function ManufacturingAnalyticsPage() {
   const { workOrders, isLoading } = useManufacturingData() as any;

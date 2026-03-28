@@ -80,11 +80,11 @@ function CreateUserModal({ onClose, editingUser, onSuccess }: { onClose: () => v
       }
     }
 
-    // Always save to localStorage + sync queue (for demo/offline mode)
+    // Always save to database (or sync queue for demo/offline mode)
     try {
-      const existingUsers = JSON.parse(localStorage.getItem('erp_users') || '[]');
-      
       if (editingUser) {
+        // Edit flow
+        const existingUsers = JSON.parse(localStorage.getItem('erp_users') || '[]');
         const idx = existingUsers.findIndex((u: any) => u.email === editingUser.email);
         if (idx >= 0) {
           existingUsers[idx] = { 
@@ -94,6 +94,7 @@ function CreateUserModal({ onClose, editingUser, onSuccess }: { onClose: () => v
             enabled: form.enabled,
             role: form.role 
           };
+          localStorage.setItem('erp_users', JSON.stringify(existingUsers));
         }
         
         // Add to sync queue if API failed and user exists in ERP
@@ -105,24 +106,26 @@ function CreateUserModal({ onClose, editingUser, onSuccess }: { onClose: () => v
           });
         }
       } else {
-        const exists = existingUsers.find((u: any) => u.email === form.email);
-        if (exists) {
-          setError('Email sudah terdaftar!');
+        // Create flow via Postgres API
+        const createRes = await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            full_name: `${form.first_name} ${form.last_name}`.trim(), 
+            email: form.email, 
+            password: 'password123', // Default
+            role: form.role 
+          })
+        });
+
+        if (!createRes.ok) {
+          const errData = await createRes.json();
+          setError(errData.error || 'Email sudah terdaftar!');
           setIsLoading(false);
           return;
         }
-        existingUsers.push({
-          id: Date.now().toString(),
-          email: form.email,
-          full_name: `${form.first_name} ${form.last_name}`.trim(),
-          first_name: form.first_name,
-          last_name: form.last_name,
-          enabled: form.enabled,
-          role: form.role,
-          created_at: new Date().toISOString(),
-        });
 
-        // Add to sync queue if API failed and user was created successfully
+        // Add to sync queue if ERP sync failed
         if (!apiSuccess && !userNotInERP) {
           addToSyncQueue({
             action: 'create',
@@ -132,15 +135,14 @@ function CreateUserModal({ onClose, editingUser, onSuccess }: { onClose: () => v
         }
       }
       
-      localStorage.setItem('erp_users', JSON.stringify(existingUsers));
       saveRoleMapping(form.email, form.role);
       
       if (apiSuccess) {
-        alert('✅ User berhasil disimpan ke ERP!');
+        alert('✅ User berhasil disimpan ke ERP & Database!');
       } else if (userNotInERP) {
-        alert('⚠️ User disimpan (local saja - tidak ada di ERP, hubungi admin untuk sinkronisasi manual)');
+        alert('⚠️ User disimpan (Database saja - tidak ada di ERP, hubungi admin untuk sinkronisasi manual)');
       } else {
-        alert('⚠️ User berhasil disimpan! (Mode Offline - akan sync ke ERP saat koneksi tersedia)');
+        alert('⚠️ User berhasil disimpan! (Database Mode - akan sync ke ERP saat koneksi tersedia)');
       }
       
       onSuccess();

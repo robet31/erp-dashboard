@@ -3,18 +3,18 @@
 // Data ini diambil dari API Frappe
 
 export const FRAPPE_COMPANIES = [
-  { name: 'Netra Vidya', code: 'NV', short: 'Netra Vidya' },
+  { name: 'PT Artavista', code: 'ARTA', short: 'PT Artavista' },
   { name: 'PT Solusi Berdikari', code: 'PSB', short: 'Solusi Berdikari' },
   { name: 'PT Maju Sejahtera', code: 'PMS', short: 'Maju Sejahtera' },
   { name: 'PT Maju Jaya Abadi', code: 'PMJA', short: 'Maju Jaya' },
 ];
 
 export const FRAPPE_WAREHOUSES = [
-  // Netra Vidya
-  { name: 'Stores - NV', company: 'Netra Vidya', type: 'Stores' },
-  { name: 'Work In Progress - NV', company: 'Netra Vidya', type: 'WIP' },
-  { name: 'Finished Goods - NV', company: 'Netra Vidya', type: 'FG' },
-  { name: 'Goods In Transit - NV', company: 'Netra Vidya', type: 'Transit' },
+  // PT Artavista
+  { name: 'Stores - ARTA', company: 'PT Artavista', type: 'Stores' },
+  { name: 'Work In Progress - ARTA', company: 'PT Artavista', type: 'WIP' },
+  { name: 'Finished Goods - ARTA', company: 'PT Artavista', type: 'FG' },
+  { name: 'Goods In Transit - ARTA', company: 'PT Artavista', type: 'Transit' },
   // PT Solusi Berdikari
   { name: 'Stores - PSB', company: 'PT Solusi Berdikari', type: 'Stores' },
   { name: 'Work In Progress - PSB', company: 'PT Solusi Berdikari', type: 'WIP' },

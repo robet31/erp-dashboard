@@ -14,7 +14,7 @@ const COLOR_PRIMARY = '#054CC7';
 const COLOR_SECONDARY = '#17C3CC';
 const TREND_COLOR_1 = '#8b5cf6'; 
 const TREND_COLOR_2 = '#0ea5e9'; 
-const FIXED_COMPANY = 'Netra Vidya';
+const FIXED_COMPANY = 'PT Artavista';
 
 const formatUang = (value: number | string | undefined | any) => {
   if (!value) return 'Rp 0';

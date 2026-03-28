@@ -52,31 +52,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = useCallback(async (role: UserRole, _email?: string, _password?: string) => {
     setIsLoading(true);
     
-    const roleConfig = getRoleConfig(role);
-    
-    let authUser: AuthUser;
+    let authUser: AuthUser | null = null;
     let finalRole = role;
-    
-    // If email provided, check role mapping from user management
-    if (_email) {
-      const users = JSON.parse(localStorage.getItem('erp_users') || '[]');
-      const foundUser = users.find((u: any) => u.email === _email);
-      
-      if (foundUser && foundUser.role) {
-        finalRole = foundUser.role as UserRole;
-        authUser = {
-          name: foundUser.full_name,
-          email: foundUser.email,
-          full_name: foundUser.full_name,
-          role: finalRole,
-        };
-      } else {
-        authUser = {
-          name: roleConfig.label,
-          email: _email,
-          full_name: roleConfig.label,
-          role: finalRole,
-        };
+    const roleConfig = getRoleConfig(role);
+
+    if (_email && _password) {
+      try {
+        const response = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: _email, password: _password }),
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          finalRole = data.role as UserRole || role;
+          
+          authUser = {
+            name: data.full_name || roleConfig.label,
+            email: data.email || _email,
+            full_name: data.full_name || roleConfig.label,
+            role: finalRole,
+            frappeUser: data.source === 'frappe' ? (data.full_name || _email) : undefined
+          };
+
+          const cookies = response.headers.get('set-cookie');
+          if (cookies) {
+            const sidMatch = cookies.match(/sid=([^;]+)/);
+            if (sidMatch) {
+              localStorage.setItem('frappe_sid', sidMatch[1]);
+            }
+          }
+        } else {
+          setIsLoading(false);
+          throw new Error('Login failed');
+        }
+      } catch (error) {
+        setIsLoading(false);
+        throw error;
       }
     } else {
       authUser = {
@@ -87,32 +100,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       };
     }
 
-    // Try to login to Frappe if credentials provided (optional)
-    if (_email && _password) {
-      try {
-        const response = await fetch('/api/auth/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ usr: _email, pwd: _password }),
-        });
-        if (response.ok) {
-          const data = await response.json();
-          authUser.frappeUser = data.full_name || _email;
-          const cookies = response.headers.get('set-cookie');
-          if (cookies) {
-            const sidMatch = cookies.match(/sid=([^;]+)/);
-            if (sidMatch) {
-              localStorage.setItem('frappe_sid', sidMatch[1]);
-            }
-          }
-        }
-      } catch {
-        // Fallback - continue without Frappe auth
-      }
+    if (authUser) {
+      setUser(authUser);
+      localStorage.setItem('erp_user', JSON.stringify(authUser));
     }
-
-    setUser(authUser);
-    localStorage.setItem('erp_user', JSON.stringify(authUser));
     setIsLoading(false);
   }, []);
 

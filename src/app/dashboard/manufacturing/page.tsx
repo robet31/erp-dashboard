@@ -801,14 +801,14 @@ function ManufacturingPageContent() {
       )}
 
       {/* HEADER PAGE */}
-      <div className="mobile-flex-col" style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
-        <div>
-          <h1 style={{ fontSize: '22px', fontWeight: 800, color: '#111827', marginBottom: '4px' }}>Modul Produksi & Pabrikasi</h1>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
+        <div style={{ flex: '1 1 300px', minWidth: 0 }}>
+          <h1 style={{ fontSize: '22px', fontWeight: 800, color: '#111827', marginBottom: '4px' }}>Modul Produksi &amp; Pabrikasi</h1>
           <p style={{ fontSize: '12px', color: '#6B7280' }}>Atur resep (BOM) hingga Terminal Pengerjaan Operator di lapangan.</p>
         </div>
-        <div className="mobile-full-width" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-          {activeTab === 'bom' && <button className="btn btn-primary btn-sm mobile-full-width action-btn" style={{ background: COLOR_PRIMARY, borderColor: COLOR_PRIMARY }} onClick={() => setShowCreateBOM(true)}><Plus size={14} /> Buat Resep Baru (BOM)</button>}
-          {activeTab === 'workorders' && <button className="btn btn-primary btn-sm mobile-full-width action-btn" style={{ background: COLOR_SECONDARY, borderColor: COLOR_SECONDARY }} onClick={() => setShowCreateWO(true)}><Plus size={14} /> Terbitkan Perintah Kerja (WO)</button>}
+        <div style={{ display: 'flex', gap: '10px', flexShrink: 0, alignItems: 'center' }}>
+          {activeTab === 'bom' && <button className="btn btn-primary btn-sm" style={{ background: COLOR_PRIMARY, borderColor: COLOR_PRIMARY, whiteSpace: 'nowrap' }} onClick={() => setShowCreateBOM(true)}><Plus size={14} /> Buat Resep Baru (BOM)</button>}
+          {activeTab === 'workorders' && <button className="btn btn-primary btn-sm" style={{ background: COLOR_SECONDARY, borderColor: COLOR_SECONDARY, whiteSpace: 'nowrap' }} onClick={() => setShowCreateWO(true)}><Plus size={14} /> Terbitkan Perintah Kerja (WO)</button>}
         </div>
       </div>
 
@@ -878,7 +878,14 @@ function ManufacturingPageContent() {
           {activeTab === 'workorders' && (
             <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
               <table className="erp-table" style={{ minWidth: '800px' }}>
-                <thead><tr><th style={{ width: '40px', textAlign: 'center' }}>No.</th><th>ID Surat Perintah (WO)</th><th>Item yang Diinstruksikan</th><th style={{ textAlign: 'center' }}>Target Qty</th><th>Status Real-Time</th><th style={{ width: '180px', textAlign: 'center' }}>Tindakan</th></tr></thead>
+                <thead><tr>
+                  <th style={{ width: '40px', textAlign: 'center' }}>No.</th>
+                  <th>ID Surat Perintah (WO)</th>
+                  <th>Item yang Diinstruksikan</th>
+                  <th style={{ textAlign: 'center' }}>Target Qty</th>
+                  <th style={{ minWidth: '140px' }}>Status Real-Time</th>
+                  <th style={{ width: '160px', textAlign: 'center' }}>Tindakan</th>
+                </tr></thead>
                 <tbody>
                   {filteredWOs.map((wo: any, index: number) => (
                     <tr key={wo.name} className="table-row-hover">
@@ -892,26 +899,21 @@ function ManufacturingPageContent() {
                         <div style={{ fontSize: '10px', color: '#6B7280' }}>ID Resep Dipakai: {wo.bom_no}</div>
                       </td>
                       <td style={{ textAlign: 'center', fontWeight: 800, fontSize: '15px' }}>{wo.qty} <span style={{fontSize:'10px', color: '#6b7280', fontWeight: 500}}>Unit</span></td>
-                      <td>
-                        <span className={`badge ${wo.status === 'Completed' ? 'badge-success' : wo.status === 'In Process' ? 'badge-info' : wo.status === 'Draft' ? 'badge-gray' : 'badge-warning'}`}>
+                      <td style={{ verticalAlign: 'middle' }}>
+                        <span className={`badge ${wo.status === 'Completed' ? 'badge-success' : wo.status === 'In Process' ? 'badge-info' : wo.status === 'Draft' ? 'badge-gray' : 'badge-warning'}`} style={{ display: 'inline-flex', alignItems: 'center', whiteSpace: 'nowrap' }}>
                           {wo.status === 'Not Started' ? 'Menunggu Dikerjakan' : wo.status === 'In Process' ? 'Sedang Dirakit' : wo.status === 'Completed' ? 'Tuntas / Selesai' : 'Draft / Konsep'}
                         </span>
                       </td>
-                      <td>
-                        <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', flexWrap: 'wrap' }}>
-                          {wo.status === 'Draft' && <button onClick={() => handleWOSubmit(wo)} className="badge badge-warning" style={{ cursor: 'pointer', border: 'none', display: 'flex', gap: '4px', alignItems: 'center' }} title="Sahkan Surat Perintah Ini"><Send size={12}/> Submit</button>}
-                          {wo.status === 'Not Started' && <button onClick={() => handleWOStart(wo)} className="badge badge-purple" style={{ cursor: 'pointer', border: 'none', display: 'flex', gap: '4px', alignItems: 'center', background: COLOR_SECONDARY, color: 'white' }} title="Berikan ke Operator Pabrik"><PlayCircle size={12}/> Serahkan ke Pabrik</button>}
-                          
+                      <td style={{ verticalAlign: 'middle' }}>
+                        <div style={{ display: 'flex', gap: '5px', justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap' }}>
+                          {wo.status === 'Draft' && <button onClick={() => handleWOSubmit(wo)} className="badge badge-warning" style={{ cursor: 'pointer', border: 'none', display: 'inline-flex', gap: '4px', alignItems: 'center', whiteSpace: 'nowrap' }} title="Sahkan Surat Perintah Ini"><Send size={11}/> Submit</button>}
+                          {wo.status === 'Not Started' && <button onClick={() => handleWOStart(wo)} style={{ cursor: 'pointer', border: 'none', display: 'inline-flex', gap: '4px', alignItems: 'center', background: COLOR_SECONDARY, color: 'white', padding: '4px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 600, whiteSpace: 'nowrap' }} title="Berikan ke Operator Pabrik"><PlayCircle size={11}/> Pabrik</button>}
                           {wo.status === 'In Process' && (
-                            <button onClick={() => setActiveTab('jobcards')} style={{ fontSize: '11px', color: COLOR_PRIMARY, fontWeight: 700, background: '#eff6ff', border: '1px solid #bfdbfe', padding: '4px 10px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', transition: 'all 0.2s' }} title="Buka Mode Terminal">
-                              Lihat Terminal Job Card 👉
-                            </button>
+                            <button onClick={() => setActiveTab('jobcards')} style={{ fontSize: '11px', color: COLOR_PRIMARY, fontWeight: 700, background: '#eff6ff', border: '1px solid #bfdbfe', padding: '4px 8px', borderRadius: '6px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}>Terminal →</button>
                           )}
-                          
-                          {wo.status === 'Completed' && <span style={{ fontSize: '11px', color: '#059669', fontWeight: 600, padding: '4px 8px', background: '#ecfdf5', borderRadius: '6px', border: '1px solid #a7f3d0' }}><CheckCircle size={12} style={{display:'inline', verticalAlign:'middle'}}/> Sudah Selesai</span>}
-                          
-                          <button onClick={() => setSelectedWO(wo)} style={{ background: '#e0f2fe', border: 'none', color: COLOR_PRIMARY, borderRadius: '6px', padding: '6px', cursor: 'pointer' }} title="Lihat Rincian Tugas"><Eye size={14} /></button>
-                          <button onClick={() => handleSmartDelete('Work Order', wo.name, wo.docstatus)} style={{ background: '#fee2e2', border: 'none', color: '#dc2626', borderRadius: '6px', padding: '6px', cursor: 'pointer' }} title="Batalkan dan Hapus"><Trash2 size={14} /></button>
+                          {wo.status === 'Completed' && <span style={{ fontSize: '10px', color: '#059669', fontWeight: 600, padding: '3px 7px', background: '#ecfdf5', borderRadius: '6px', border: '1px solid #a7f3d0', display: 'inline-flex', alignItems: 'center', gap: '3px', whiteSpace: 'nowrap' }}><CheckCircle size={11}/> Selesai</span>}
+                          <button onClick={() => setSelectedWO(wo)} style={{ background: '#e0f2fe', border: 'none', color: COLOR_PRIMARY, borderRadius: '6px', padding: '5px', cursor: 'pointer', display: 'inline-flex' }} title="Lihat Rincian Tugas"><Eye size={13} /></button>
+                          <button onClick={() => handleSmartDelete('Work Order', wo.name, wo.docstatus)} style={{ background: '#fee2e2', border: 'none', color: '#dc2626', borderRadius: '6px', padding: '5px', cursor: 'pointer', display: 'inline-flex' }} title="Batalkan dan Hapus"><Trash2 size={13} /></button>
                         </div>
                       </td>
                     </tr>

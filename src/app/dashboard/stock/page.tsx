@@ -12,12 +12,13 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell
 } from 'recharts';
 import { formatNumber, formatDate, getStatusBadgeClass, getStatusLabel } from '@/lib/utils';
+import { EmptyState, TableSkeleton } from '@/components/EmptyState';
 
 // Tema Warna Premium
 const COLOR_PRIMARY = '#054CC7';
 const COLOR_SECONDARY = '#17C3CC';
 const CATEGORY_COLORS = [COLOR_PRIMARY, COLOR_SECONDARY, '#7c3aed', '#d97706', '#0891b2', '#e11d48'];
-const FIXED_COMPANY = 'Netra Vidya';
+const FIXED_COMPANY = 'PT Artavista';
 
 const formatCreationTime = (dateStr?: string) => {
   if (!dateStr) return '';
@@ -477,9 +478,9 @@ function CreateWarehouseModal({ onClose, onSuccess, showToast }: any) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setIsSubmitting(true);
     try {
-      const warehouseName = `${form.warehouse_name} - NV`;
+      const warehouseName = `${form.warehouse_name} - ARTA`;
       const { apiCreate } = await import('@/lib/api');
-      await apiCreate('Warehouse', { name: warehouseName, warehouse_name: form.warehouse_name, company: form.company, is_group: form.is_group ? 1 : 0, parent_warehouse: form.is_group ? '' : `All Warehouses - NV` });
+      await apiCreate('Warehouse', { name: warehouseName, warehouse_name: form.warehouse_name, company: form.company, is_group: form.is_group ? 1 : 0, parent_warehouse: form.is_group ? '' : `All Warehouses - ARTA` });
       showToast('Gudang berhasil didaftarkan!', 'success'); onClose(); if (onSuccess) onSuccess();
     } catch (err: any) { showToast(extractFrappeError(err, 'Gagal membuat Warehouse'), 'error'); } finally { setIsSubmitting(false); }
   };
@@ -589,7 +590,7 @@ function CreateDeliveryNoteModal({ onClose, customers, items, warehouses, orders
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const activeWarehouses = useMemo(() => warehouses.filter((w: any) => !w.is_group && (w.company === FIXED_COMPANY || w.name.includes('NV'))), [warehouses]);
+  const activeWarehouses = useMemo(() => warehouses.filter((w: any) => !w.is_group && (w.company === FIXED_COMPANY || w.name.includes('ARTA'))), [warehouses]);
 
   const availableStock = useMemo(() => {
     if (!form.item_code || !form.warehouse) return 0;
@@ -611,7 +612,7 @@ function CreateDeliveryNoteModal({ onClose, customers, items, warehouses, orders
         setForm(f => ({
           ...f, customer: soData.customer, item_code: firstItem.item_code || '',
           qty: firstItem.qty ? String(firstItem.qty) : '1', rate: firstItem.rate ? String(firstItem.rate) : '0',
-          amount: firstItem.amount || 0, warehouse: firstItem.warehouse || 'Finished Goods - NV',
+          amount: firstItem.amount || 0, warehouse: firstItem.warehouse || 'Finished Goods - ARTA',
         }));
         showToast('Data otomatis ditarik dari pesanan!', 'info');
       }
@@ -848,11 +849,11 @@ function StockPageContent() {
 
   const sortedItems = useMemo(() => { return [...items].sort((a, b) => sortByNewest(a, b)); }, [items]);
   const sortedWarehouses = useMemo(() => {
-    const nvWarehouses = warehouses.filter((w: any) => w.company === 'Netra Vidya' || w.name.includes('- NV') || w.name.toLowerCase().includes('netra vidya'));
+    const nvWarehouses = warehouses.filter((w: any) => w.company === 'PT Artavista' || w.name.includes('- ARTA') || w.name.toLowerCase().includes('pt artavista'));
     return [...nvWarehouses].sort((a, b) => sortByNewest(a, b));
   }, [warehouses]);
   const sortedBins = useMemo(() => {
-    const nvBins = bins.filter((b: any) => b.warehouse.includes(FIXED_COMPANY) || b.warehouse.includes('- NV'));
+    const nvBins = bins.filter((b: any) => b.warehouse.includes(FIXED_COMPANY) || b.warehouse.includes('- ARTA'));
     return [...nvBins].sort((a, b) => sortByNewest(a, b, 'modified'));
   }, [bins]);
   const sortedStockEntries = useMemo(() => {
@@ -976,7 +977,11 @@ function StockPageContent() {
       <Toast show={toast.show} message={toast.msg} type={toast.type} />
       <ConfirmModal show={confirmModal.show} title={confirmModal.title} desc={confirmModal.desc} confirmText={confirmModal.confirmText} onConfirm={confirmModal.action} onCancel={closeConfirm} />
 
-      {(isLoading || isSellingLoading) && <div style={{ textAlign: 'center', padding: '20px', color: '#6B7280' }}>Memuat data dari ERPNext...</div>}
+      {(isLoading || isSellingLoading) && (
+        <div style={{ background: 'white', borderRadius: '16px', padding: '12px', marginBottom: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+          <TableSkeleton rows={6} cols={5} />
+        </div>
+      )}
 
       {showCreateModal && <CreateStockEntryModal onClose={() => setShowCreateModal(false)} warehouses={sortedWarehouses} items={sortedItems} onSuccess={() => refetch()} showToast={showToast} />}
       {showCreateItemModal && <CreateItemModal onClose={() => setShowCreateItemModal(false)} onSuccess={() => refetch()} showToast={showToast} />}
@@ -1067,7 +1072,7 @@ function StockPageContent() {
                             {totalQty} <span style={{ fontSize: '11px', color: '#6B7280', fontWeight: 600 }}>{item.stock_uom}</span>
                           </div>
                           {stockDetails.map((sd, idx) => (
-                             <div key={idx} style={{ fontSize: '10px', color: '#6B7280', marginTop: '4px', fontWeight: 500 }}>{sd.qty} berada di {sd.warehouse.replace(' - NV', '')}</div>
+                             <div key={idx} style={{ fontSize: '10px', color: '#6B7280', marginTop: '4px', fontWeight: 500 }}>{sd.qty} berada di {sd.warehouse.replace(' - ARTA', '')}</div>
                           ))}
                         </td>
 
@@ -1080,7 +1085,17 @@ function StockPageContent() {
                       </tr>
                     );
                   })}
-                  {filteredItems.length === 0 && <tr><td colSpan={7} style={{ textAlign: 'center', padding: '40px', color: '#6B7280', fontSize: '13px' }}>Tidak ada data katalog Item yang ditemukan.</td></tr>}
+                  {!isLoading && filteredItems.length === 0 && (
+                    <tr><td colSpan={7}>
+                      <EmptyState
+                        icon="📦"
+                        title="Belum ada Item di katalog"
+                        description="Klik tombol 'Registrasi Item Baru' di atas untuk menambahkan produk atau bahan baku pertama ke sistem."
+                        action={{ label: 'Tambah Item Pertama', onClick: () => setShowCreateItemModal(true) }}
+                        size="md"
+                      />
+                    </td></tr>
+                  )}
                 </tbody>
               </table>
             </div>

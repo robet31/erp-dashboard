@@ -15,7 +15,7 @@ import { formatRupiah } from '@/lib/utils';
 import Link from 'next/link';
 
 const DONUT_COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444'];
-const FIXED_COMPANY = 'Netra Vidya';
+const FIXED_COMPANY = 'PT Artavista';
 
 function ChartCard({ title, subtitle, icon, color, info, action, children }: any) {
   const [showInfo, setShowInfo] = useState(false);
@@ -85,7 +85,7 @@ export default function DashboardPage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
         <div>
           <h1 style={{ fontSize: '22px', fontWeight: 800, color: '#111827', marginBottom: '4px' }}>Dashboard {(user?.role as unknown as string) === 'direktur' ? 'Direktur' : 'Manajemen'}</h1>
-          <p style={{ fontSize: '13px', color: '#6B7280' }}>Monitor performa bisnis Netra Vidya.</p>
+          <p style={{ fontSize: '13px', color: '#6B7280' }}>Monitor performa bisnis PT Artavista.</p>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
           <button onClick={refetch} style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'white', border: '1px solid #e5e7eb', borderRadius: '10px', padding: '8px 14px', fontSize: '13px', fontWeight: 600, color: '#374151', cursor: 'pointer' }}><RefreshCw size={14} /> Refresh</button>
@@ -95,7 +95,7 @@ export default function DashboardPage() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '20px' }}>
         {widgets.includes('revenue_stats') && (
           <>
-            <StatCard label="Total Orders" value={companySalesOrders.length.toString()} sub={`Khusus Netra Vidya`} positive={true} icon={<ShoppingCart size={22} />} color="#0066B3" bg="linear-gradient(135deg, #eff6ff, #dbeafe)" link="/dashboard/selling?tab=orders" />
+            <StatCard label="Total Orders" value={companySalesOrders.length.toString()} sub={`Khusus PT Artavista`} positive={true} icon={<ShoppingCart size={22} />} color="#0066B3" bg="linear-gradient(135deg, #eff6ff, #dbeafe)" link="/dashboard/selling?tab=orders" />
             <StatCard label="Total Revenue" value={formatRupiah(totalCompanyRevenue)} sub={`Total Keseluruhan`} positive={true} icon={<DollarSign size={22} />} color="#059669" bg="linear-gradient(135deg, #ecfdf5, #d1fae5)" link="/dashboard/selling?tab=orders" />
           </>
         )}
@@ -106,7 +106,7 @@ export default function DashboardPage() {
         {widgets.includes('revenue_stats') && (
           <ChartCard title="Revenue Trend" subtitle="Riwayat Transaksi" icon={<TrendingUp size={16} />} color="#0066B3">
             <div style={{ background: '#eff6ff', color: '#0066B3', padding: '4px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: 700, marginBottom: '12px', display: 'inline-block' }}>
-              {formatRupiah(totalCompanyRevenue)} <span style={{ fontSize: '10px', color: '#6B7280', display: 'block' }}>Total Histori Netra Vidya</span>
+              {formatRupiah(totalCompanyRevenue)} <span style={{ fontSize: '10px', color: '#6B7280', display: 'block' }}>Total Histori PT Artavista</span>
             </div>
             <ResponsiveContainer width="100%" height={200}>
               <AreaChart data={totalCompanyRevenue > 0 ? revenueTrend : []} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
@@ -140,7 +140,7 @@ export default function DashboardPage() {
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
         {widgets.includes('sales_orders') && (
-          <ChartCard title="Order Terbaru" subtitle="Khusus Netra Vidya" icon={<ShoppingCart size={16} />} color="#f59e0b">
+          <ChartCard title="Order Terbaru" subtitle="Khusus PT Artavista" icon={<ShoppingCart size={16} />} color="#f59e0b">
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               {sortedRecentOrders.map((order: any, index: number) => (
                 <div key={order.name} style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid #f3f4f6', background: '#fafafa', display: 'flex', gap: '12px', alignItems: 'center' }}>

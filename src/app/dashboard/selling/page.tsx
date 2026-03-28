@@ -14,9 +14,9 @@ import { formatDate, getStatusBadgeClass, getStatusLabel } from '@/lib/utils';
 import type { SalesOrder, Customer } from '@/lib/frappe-types';
 
 const STATUS_FILTERS = ['Semua', 'Draft', 'To Deliver and Bill', 'Completed', 'Cancelled'];
-const FIXED_COMPANY = 'Netra Vidya';
-const COLOR_PRIMARY = '#054CC7';
-const COLOR_SECONDARY = '#17C3CC';
+const FIXED_COMPANY = 'PT Artavista';
+const COLOR_PRIMARY = '#1d4ed8';
+const COLOR_SECONDARY = '#3b82f6';
 
 const formatUang = (value: number | string | undefined | any) => {
   if (value === undefined || value === null) return 'Rp 0';

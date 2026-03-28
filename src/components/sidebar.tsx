@@ -3,19 +3,52 @@
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/providers/auth-provider';
+import { useAvatar } from '@/providers/avatar-provider';
 import { getRoleConfig } from '@/config/rbac';
-import { Home, PieChart, Users, ShoppingCart, Receipt, Package, Warehouse, ArrowRightLeft, Truck, Layers, Cog, Wrench, X, LayoutDashboard, LogOut, ChevronLeft, ChevronRight } from 'lucide-react';
+import {
+  Home, PieChart, Users, ShoppingCart, Receipt, Package, Warehouse,
+  ArrowRightLeft, Truck, Layers, Cog, Wrench, X, LayoutDashboard,
+  LogOut, ChevronLeft, ChevronRight, Clock, Wifi, WifiOff, Zap
+} from 'lucide-react';
 import { getInitials, shortenName } from '@/lib/utils';
 import { Suspense, useEffect, useState } from 'react';
 import { useSidebar } from '@/app/dashboard/layout';
 
 type NavItem = { href: string; label: string; icon: React.ReactNode; module: 'dashboard' | 'selling' | 'stock' | 'manufacturing' | 'users'; tabId?: string; };
-type NavGroup = { title: string; items: NavItem[]; requiredModule: 'selling' | 'stock' | 'manufacturing' | 'admin'; };
+type NavGroup = { title: string; emoji: string; items: NavItem[]; requiredModule: 'selling' | 'stock' | 'manufacturing' | 'admin'; color: string; };
 
 const NAV_GROUPS: NavGroup[] = [
-  { title: 'Selling', requiredModule: 'selling', items: [ { href: '/dashboard/selling/home', label: 'Home', icon: <Home size={18} />, module: 'selling' }, { href: '/dashboard/selling/analytics', label: 'Dashboard', icon: <PieChart size={18} />, module: 'selling' }, { href: '/dashboard/selling', tabId: 'customers', label: 'Customer', icon: <Users size={18} />, module: 'selling' }, { href: '/dashboard/selling', tabId: 'orders', label: 'Sales Order', icon: <ShoppingCart size={18} />, module: 'selling' }, { href: '/dashboard/selling', tabId: 'invoices', label: 'Sales Invoice', icon: <Receipt size={18} />, module: 'selling' }, ] },
-  { title: 'Inventory', requiredModule: 'stock', items: [ { href: '/dashboard/stock/home', label: 'Home', icon: <Home size={18} />, module: 'stock' }, { href: '/dashboard/stock/analytics', label: 'Dashboard', icon: <LayoutDashboard size={18} />, module: 'stock' }, { href: '/dashboard/stock', tabId: 'stockentry', label: 'Stock Entry', icon: <ArrowRightLeft size={18} />, module: 'stock' }, { href: '/dashboard/stock', tabId: 'items', label: 'Item', icon: <Package size={18} />, module: 'stock' }, { href: '/dashboard/stock', tabId: 'warehouse', label: 'Warehouse', icon: <Warehouse size={18} />, module: 'stock' }, { href: '/dashboard/stock', tabId: 'delivery', label: 'Delivery Note', icon: <Truck size={18} />, module: 'stock' }, ] },
-  { title: 'Manufacturing', requiredModule: 'manufacturing', items: [ { href: '/dashboard/manufacturing/home', label: 'Home', icon: <Home size={18} />, module: 'manufacturing' }, { href: '/dashboard/manufacturing/analytics', label: 'Dashboard', icon: <PieChart size={18} />, module: 'manufacturing' }, { href: '/dashboard/manufacturing', tabId: 'bom', label: 'BOM', icon: <Layers size={18} />, module: 'manufacturing' }, { href: '/dashboard/manufacturing', tabId: 'workorders', label: 'Work Order', icon: <Cog size={18} />, module: 'manufacturing' }, { href: '/dashboard/manufacturing', tabId: 'jobcards', label: 'Job Card', icon: <Wrench size={18} />, module: 'manufacturing' }, ] }
+  {
+    title: 'Selling', emoji: '🛒', color: '#3b82f6', requiredModule: 'selling',
+    items: [
+      { href: '/dashboard/selling/home', label: 'Home', icon: <Home size={17} />, module: 'selling' },
+      { href: '/dashboard/selling/analytics', label: 'Dashboard', icon: <PieChart size={17} />, module: 'selling' },
+      { href: '/dashboard/selling', tabId: 'customers', label: 'Customer', icon: <Users size={17} />, module: 'selling' },
+      { href: '/dashboard/selling', tabId: 'orders', label: 'Sales Order', icon: <ShoppingCart size={17} />, module: 'selling' },
+      { href: '/dashboard/selling', tabId: 'invoices', label: 'Sales Invoice', icon: <Receipt size={17} />, module: 'selling' },
+    ]
+  },
+  {
+    title: 'Inventory', emoji: '📦', color: '#10b981', requiredModule: 'stock',
+    items: [
+      { href: '/dashboard/stock/home', label: 'Home', icon: <Home size={17} />, module: 'stock' },
+      { href: '/dashboard/stock/analytics', label: 'Dashboard', icon: <LayoutDashboard size={17} />, module: 'stock' },
+      { href: '/dashboard/stock', tabId: 'stockentry', label: 'Stock Entry', icon: <ArrowRightLeft size={17} />, module: 'stock' },
+      { href: '/dashboard/stock', tabId: 'items', label: 'Item', icon: <Package size={17} />, module: 'stock' },
+      { href: '/dashboard/stock', tabId: 'warehouse', label: 'Warehouse', icon: <Warehouse size={17} />, module: 'stock' },
+      { href: '/dashboard/stock', tabId: 'delivery', label: 'Delivery Note', icon: <Truck size={17} />, module: 'stock' },
+    ]
+  },
+  {
+    title: 'Manufacturing', emoji: '⚙️', color: '#f59e0b', requiredModule: 'manufacturing',
+    items: [
+      { href: '/dashboard/manufacturing/home', label: 'Home', icon: <Home size={17} />, module: 'manufacturing' },
+      { href: '/dashboard/manufacturing/analytics', label: 'Dashboard', icon: <PieChart size={17} />, module: 'manufacturing' },
+      { href: '/dashboard/manufacturing', tabId: 'bom', label: 'BOM', icon: <Layers size={17} />, module: 'manufacturing' },
+      { href: '/dashboard/manufacturing', tabId: 'workorders', label: 'Work Order', icon: <Cog size={17} />, module: 'manufacturing' },
+      { href: '/dashboard/manufacturing', tabId: 'jobcards', label: 'Job Card', icon: <Wrench size={17} />, module: 'manufacturing' },
+    ]
+  }
 ];
 
 function SidebarContent() {
@@ -23,10 +56,27 @@ function SidebarContent() {
   const searchParams = useSearchParams();
   const currentTab = searchParams ? searchParams.get('tab') : null;
   const { user, logout, canAccess } = useAuth();
+  const { avatarUrl } = useAvatar();
   const { isOpen, isMinimized, toggleSidebar, closeSidebar, toggleMinimize } = useSidebar();
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
+  const [now, setNow] = useState(new Date());
+  const [isOnline, setIsOnline] = useState(true);
 
-  useEffect(() => { closeSidebar(); }, [pathname, currentTab]); 
+  useEffect(() => { closeSidebar(); }, [pathname, currentTab]);
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    setIsOnline(navigator.onLine);
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => { window.removeEventListener('online', handleOnline); window.removeEventListener('offline', handleOffline); };
+  }, []);
 
   if (!user) return null;
 
@@ -43,19 +93,54 @@ function SidebarContent() {
     return pathname === href;
   };
 
+  const dayNames = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+  const dayName = dayNames[now.getDay()];
+  const dateStr = `${now.getDate()} ${monthNames[now.getMonth()]} ${now.getFullYear()}`;
+  const timeStr = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+  // Animate seconds progress
+  const secondsPct = (now.getSeconds() / 59) * 100;
+
   return (
     <>
       <aside className={`main-sidebar ${isOpen ? 'is-open' : ''} ${isMinimized ? 'is-minimized' : ''}`}>
         {/* Header - Logo */}
         <div className="sidebar-header">
-          <img src="/logoartawhite.png" alt="Artavista" className="logo-img" />
+          <div className="sidebar-logo-wrap">
+            <img src="/logoartawhite.png" alt="Artavista" className="logo-img" />
+            {!isMinimized && (
+              <div className="sidebar-brand-pulse">
+                <Zap size={10} />
+              </div>
+            )}
+          </div>
           <button onClick={closeSidebar} className="close-sidebar-btn"><X size={18} /></button>
         </div>
 
         {/* Minimize Toggle Button */}
-        <button className="minimize-btn" onClick={toggleMinimize} title={isMinimized ? 'Perluas sidebar' : 'Miniize sidebar'}>
+        <button className="minimize-btn" onClick={toggleMinimize} title={isMinimized ? 'Perluas sidebar' : 'Minimize sidebar'}>
           {isMinimized ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
         </button>
+
+        {/* Live Clock Widget */}
+        {!isMinimized && (
+          <div className="sidebar-clock">
+            <div className="clock-top">
+              <div className="clock-icon-wrap">
+                <Clock size={13} />
+              </div>
+              <div className="clock-time">{timeStr}</div>
+              <div className={`online-dot ${isOnline ? 'online' : 'offline'}`} title={isOnline ? 'Server Online' : 'Server Offline'}>
+                {isOnline ? <Wifi size={11} /> : <WifiOff size={11} />}
+              </div>
+            </div>
+            <div className="clock-date">{dayName}, {dateStr}</div>
+            <div className="clock-progress-bar">
+              <div className="clock-progress-fill" style={{ width: `${secondsPct}%` }} />
+            </div>
+          </div>
+        )}
 
         {/* Navigation */}
         <nav className="sidebar-nav">
@@ -64,24 +149,34 @@ function SidebarContent() {
             return (
               <div key={groupIdx} className="nav-group">
                 {!isMinimized && (
-                  <div className="nav-group-title">{group.title}</div>
+                  <div className="nav-group-title" style={{ '--group-color': group.color } as React.CSSProperties}>
+                    <span className="nav-group-emoji">{group.emoji}</span>
+                    {group.title}
+                  </div>
+                )}
+                {isMinimized && (
+                  <div className="nav-group-divider" style={{ background: group.color }} title={group.title} />
                 )}
                 <div className="nav-items">
                   {group.items.map((item) => {
                     const active = isActive(item.href, item.tabId);
                     const fullHref = item.tabId ? `${item.href}?tab=${item.tabId}` : item.href;
                     return (
-                      <Link 
-                        key={item.label} 
-                        href={fullHref} 
+                      <Link
+                        key={item.label}
+                        href={fullHref}
                         className={`nav-item ${active ? 'active' : ''}`}
                         onMouseEnter={() => setHoveredItem(item.label)}
                         onMouseLeave={() => setHoveredItem(null)}
                         title={isMinimized ? item.label : undefined}
+                        style={{ '--item-color': group.color } as React.CSSProperties}
                       >
                         <span className="nav-icon">{item.icon}</span>
                         {!isMinimized && <span className="nav-label">{item.label}</span>}
-                        {active && !isMinimized && <div className="active-indicator" />}
+                        {active && !isMinimized && <div className="active-indicator" style={{ background: group.color }} />}
+                        {isMinimized && hoveredItem === item.label && (
+                          <div className="tooltip-label">{item.label}</div>
+                        )}
                       </Link>
                     );
                   })}
@@ -93,47 +188,43 @@ function SidebarContent() {
 
         {/* Footer - User Profile */}
         <div className="sidebar-footer">
-          <div className="user-profile-mini" title={isMinimized ? `${user.full_name} - ${roleConfig.label}` : undefined}>
-            <div className="user-avatar" style={{ background: roleConfig.color }}>{initials}</div>
+          <Link href="/dashboard/profile" className="user-profile-mini" title={isMinimized ? `${user.full_name} - ${roleConfig.label}` : undefined} style={{ textDecoration: 'none' }}>
+            <div className="user-avatar" style={{ background: roleConfig.color, overflow: 'hidden', padding: 0 }}>
+              {avatarUrl ? (
+                <img src={avatarUrl} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }} />
+              ) : (
+                initials
+              )}
+              <div className="avatar-status" />
+            </div>
             {!isMinimized && (
               <div className="user-details">
                 <div className="user-name">{shortenName(user.full_name, 18)}</div>
                 <div className="user-role" style={{ color: roleConfig.color }}>{roleConfig.label}</div>
               </div>
             )}
-          </div>
+          </Link>
           <button onClick={logout} className="logout-btn" title="Keluar Sistem">
-            <LogOut size={18} />
+            <LogOut size={16} />
           </button>
         </div>
-
-        {/* Module Access Tags - Only for Administrator */}
-        {!isMinimized && user?.role === 'administrator' && (
-          <div className="sidebar-module-access">
-            <span className="module-access-label">Akses Modul</span>
-            <div className="module-tags">
-              {canAccess('selling') && <span className="module-tag selling">Selling</span>}
-              {canAccess('stock') && <span className="module-tag stock">Inventory</span>}
-              {canAccess('manufacturing') && <span className="module-tag manufacturing">Manufacturing</span>}
-              {canAccess('users') && <span className="module-tag users">Users</span>}
-            </div>
-          </div>
-        )}
       </aside>
-      
+
       <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap');
+
         .main-sidebar {
           width: 260px;
           min-width: 260px;
           height: 100vh;
           background: #ffffff;
-          border-right: 1px solid #e5e7eb;
           display: flex;
           flex-direction: column;
           font-family: 'Poppins', sans-serif;
-          transition: all 0.3s ease;
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
           z-index: 90;
           position: relative;
+          border-right: 1px solid #e5e7eb;
         }
 
         .main-sidebar.is-minimized {
@@ -141,47 +232,56 @@ function SidebarContent() {
           min-width: 72px;
         }
 
-        .main-sidebar.is-minimized .logo-text-group {
-          display: none;
-        }
-
-        .main-sidebar.is-minimized .logo-container {
-          justify-content: center;
-        }
-
-        .main-sidebar.is-minimized .sidebar-header {
-          justify-content: center;
-          padding: 16px 8px;
-        }
-
+        /* ── HEADER ── */
         .sidebar-header {
-          padding: 16px;
+          padding: 16px 16px 14px;
           border-bottom: 1px solid #f3f4f6;
           display: flex;
-          flex-direction: column;
           align-items: center;
+          justify-content: space-between;
           gap: 8px;
         }
 
+        .sidebar-logo-wrap {
+          position: relative;
+          display: flex;
+          align-items: center;
+        }
+
         .logo-img {
-          width: 140px;
-          height: 42px;
+          width: 230px;
+          height: 54px;
           object-fit: contain;
           border-radius: 10px;
           background: linear-gradient(135deg, #054CC7 0%, #17C3CC 100%);
-          padding: 6px;
-        }
-          color: #d97706;
-        }
-
-        .module-tag.users {
-          background: #f3e8ff;
-          color: #9333ea;
+          padding: 6px 10px;
+          transition: width 0.3s, height 0.3s;
         }
 
         .main-sidebar.is-minimized .logo-img {
-          width: 42px;
-          height: 42px;
+          width: 44px;
+          height: 44px;
+          padding: 8px;
+        }
+
+        .sidebar-brand-pulse {
+          position: absolute;
+          top: -4px;
+          right: -6px;
+          width: 16px;
+          height: 16px;
+          background: linear-gradient(135deg, #17C3CC, #054CC7);
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: white;
+          animation: pulseBrand 2s ease-in-out infinite;
+        }
+
+        @keyframes pulseBrand {
+          0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(23,195,204,0.4); }
+          50% { transform: scale(1.15); box-shadow: 0 0 0 6px rgba(23,195,204,0); }
         }
 
         .minimize-btn {
@@ -192,61 +292,153 @@ function SidebarContent() {
           height: 24px;
           border-radius: 50%;
           background: white;
-          border: 1px solid #e5e7eb;
+          border: 1.5px solid #e5e7eb;
           display: flex;
           align-items: center;
           justify-content: center;
           cursor: pointer;
           z-index: 10;
+          color: #6b7280;
           box-shadow: 0 2px 8px rgba(0,0,0,0.1);
           transition: all 0.2s;
         }
 
         .minimize-btn:hover {
-          background: #f3f4f6;
+          background: #eff6ff;
+          color: #054CC7;
           transform: scale(1.1);
         }
 
-        .sidebar-nav {
-          flex: 1;
-          padding: 16px 12px;
-          overflow-y: auto;
-          overflow-x: hidden;
+        /* ── CLOCK WIDGET ── */
+        .sidebar-clock {
+          margin: 12px 12px 8px;
+          padding: 12px 14px;
+          background: linear-gradient(135deg, #eff6ff 0%, #e0f7ff 100%);
+          border: 1px solid #bfdbfe;
+          border-radius: 14px;
         }
 
+        .clock-top {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 4px;
+        }
+
+        .clock-icon-wrap {
+          width: 22px;
+          height: 22px;
+          border-radius: 6px;
+          background: linear-gradient(135deg, #054CC7, #17C3CC);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: white;
+          flex-shrink: 0;
+        }
+
+        .clock-time {
+          font-size: 17px;
+          font-weight: 800;
+          color: #054CC7;
+          letter-spacing: 0.04em;
+          font-variant-numeric: tabular-nums;
+          flex: 1;
+        }
+
+        .online-dot {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 3px 5px;
+          border-radius: 6px;
+          font-size: 10px;
+          font-weight: 600;
+        }
+        .online-dot.online { background: rgba(16,185,129,0.12); color: #10b981; }
+        .online-dot.offline { background: rgba(239,68,68,0.12); color: #ef4444; }
+
+        .clock-date {
+          font-size: 10px;
+          color: #64748b;
+          font-weight: 500;
+          letter-spacing: 0.03em;
+        }
+
+        .clock-progress-bar {
+          margin-top: 8px;
+          height: 3px;
+          background: rgba(5,76,199,0.1);
+          border-radius: 99px;
+          overflow: hidden;
+        }
+
+        .clock-progress-fill {
+          height: 100%;
+          background: linear-gradient(90deg, #054CC7, #17C3CC);
+          border-radius: 99px;
+          transition: width 1s linear;
+        }
+
+        /* ── NAVIGATION ── */
+        .sidebar-nav {
+          flex: 1;
+          padding: 10px 10px;
+          overflow-y: auto;
+          overflow-x: hidden;
+          scrollbar-width: thin;
+          scrollbar-color: #e5e7eb transparent;
+        }
+
+        .sidebar-nav::-webkit-scrollbar { width: 4px; }
+        .sidebar-nav::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 2px; }
+
         .nav-group {
-          margin-bottom: 20px;
+          margin-bottom: 4px;
         }
 
         .nav-group-title {
-          font-size: 10px;
-          color: #9CA3AF;
+          font-size: 9.5px;
+          color: #9ca3af;
           font-weight: 700;
-          padding: 0 12px;
-          margin-bottom: 10px;
+          padding: 10px 10px 6px;
           text-transform: uppercase;
-          letter-spacing: 0.1em;
+          letter-spacing: 0.12em;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+
+        .nav-group-emoji {
+          font-size: 12px;
+        }
+
+        .nav-group-divider {
+          height: 2px;
+          border-radius: 1px;
+          margin: 10px 8px 8px;
+          opacity: 0.4;
         }
 
         .nav-items {
           display: flex;
           flex-direction: column;
-          gap: 4px;
+          gap: 2px;
         }
 
         .nav-item {
           display: flex;
           align-items: center;
-          color: #4B5563;
+          color: #4b5563;
           background: transparent;
           font-weight: 500;
           position: relative;
           text-decoration: none;
-          padding: 10px 12px;
-          border-radius: 8px;
-          transition: all 0.2s;
+          padding: 9px 10px;
+          border-radius: 10px;
+          transition: all 0.2s ease;
           white-space: nowrap;
-          overflow: hidden;
+          overflow: visible;
         }
 
         .nav-item:hover {
@@ -255,7 +447,7 @@ function SidebarContent() {
         }
 
         .nav-item:hover .nav-icon {
-          color: #054CC7 !important;
+          color: var(--item-color, #054CC7) !important;
         }
 
         .nav-item.active {
@@ -265,21 +457,26 @@ function SidebarContent() {
         }
 
         .nav-item.active .nav-icon {
-          color: #17C3CC;
+          color: var(--item-color, #17C3CC);
         }
 
         .nav-icon {
-          color: #9CA3AF;
-          margin-right: 12px;
+          color: #9ca3af;
+          margin-right: 10px;
           flex-shrink: 0;
           display: flex;
           align-items: center;
           justify-content: center;
+          transition: color 0.2s;
+        }
+
+        .main-sidebar.is-minimized .nav-icon {
+          margin-right: 0;
         }
 
         .nav-label {
           flex: 1;
-          font-size: 13px;
+          font-size: 12.5px;
           overflow: hidden;
           text-overflow: ellipsis;
         }
@@ -289,19 +486,49 @@ function SidebarContent() {
           right: 0;
           top: 50%;
           transform: translateY(-50%);
-          width: 4px;
-          height: 24px;
-          background: #054CC7;
+          width: 3px;
+          height: 20px;
           border-radius: 4px 0 0 4px;
         }
 
+        /* Tooltip for minimized */
+        .tooltip-label {
+          position: absolute;
+          left: calc(100% + 12px);
+          top: 50%;
+          transform: translateY(-50%);
+          background: #1e293b;
+          color: white;
+          font-size: 12px;
+          font-weight: 600;
+          padding: 6px 12px;
+          border-radius: 8px;
+          white-space: nowrap;
+          pointer-events: none;
+          z-index: 200;
+          box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+          border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .tooltip-label::before {
+          content: '';
+          position: absolute;
+          left: -6px;
+          top: 50%;
+          transform: translateY(-50%);
+          border: 6px solid transparent;
+          border-right-color: #1e293b;
+          border-left: none;
+        }
+
+        /* ── FOOTER ── */
         .sidebar-footer {
-          padding: 16px;
+          padding: 12px 12px;
           border-top: 1px solid #f3f4f6;
-          background: #fafafb;
+          background: #fafafa;
           display: flex;
           align-items: center;
-          gap: 12px;
+          gap: 10px;
         }
 
         .user-profile-mini {
@@ -314,16 +541,35 @@ function SidebarContent() {
         }
 
         .user-avatar {
-          width: 38px;
-          height: 38px;
+          width: 36px;
+          height: 36px;
           border-radius: 10px;
           display: flex;
           align-items: center;
           justify-content: center;
           color: white;
-          font-size: 13px;
+          font-size: 12px;
           font-weight: 800;
           flex-shrink: 0;
+          position: relative;
+          box-shadow: 0 0 0 2px rgba(255,255,255,0.6);
+        }
+
+        .avatar-status {
+          position: absolute;
+          bottom: -2px;
+          right: -2px;
+          width: 10px;
+          height: 10px;
+          background: #10b981;
+          border-radius: 50%;
+          border: 2px solid white;
+          animation: statusPulse 2s ease-in-out infinite;
+        }
+
+        @keyframes statusPulse {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0.4); }
+          50% { box-shadow: 0 0 0 4px rgba(16,185,129,0); }
         }
 
         .user-details {
@@ -333,7 +579,7 @@ function SidebarContent() {
         }
 
         .user-name {
-          font-size: 13px;
+          font-size: 12px;
           font-weight: 700;
           color: #111827;
           white-space: nowrap;
@@ -342,17 +588,17 @@ function SidebarContent() {
         }
 
         .user-role {
-          font-size: 11px;
+          font-size: 10px;
           font-weight: 600;
-          margin-top: 2px;
+          margin-top: 1px;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
         }
 
         .logout-btn {
-          width: 38px;
-          height: 38px;
+          width: 34px;
+          height: 34px;
           border-radius: 10px;
           background: #fee2e2;
           border: 1px solid #fecaca;
@@ -370,58 +616,6 @@ function SidebarContent() {
           transform: scale(1.05);
         }
 
-        .sidebar-module-access {
-          padding: 12px 16px;
-          border-top: 1px solid #f3f4f6;
-          background: #fafafb;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 6px;
-        }
-
-        .module-access-label {
-          font-size: 9px;
-          color: #9CA3AF;
-          font-weight: 600;
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-        }
-
-        .module-tags {
-          display: flex;
-          flex-wrap: wrap;
-          justify-content: center;
-          gap: 4px;
-        }
-
-        .module-tag {
-          font-size: 8px;
-          font-weight: 600;
-          padding: 2px 6px;
-          border-radius: 4px;
-        }
-
-        .module-tag.selling {
-          background: #dbeafe;
-          color: #1d4ed8;
-        }
-
-        .module-tag.stock {
-          background: #dcfce7;
-          color: #16a34a;
-        }
-
-        .module-tag.manufacturing {
-          background: #fef3c7;
-          color: #d97706;
-        }
-
-        .module-tag.users {
-          background: #f3e8ff;
-          color: #9333ea;
-        }
-
         .close-sidebar-btn {
           display: none;
           width: 32px;
@@ -434,77 +628,29 @@ function SidebarContent() {
           border: none;
           cursor: pointer;
           color: #374151;
-          margin-left: auto;
         }
 
-        /* Mobile */
+        /* ── MOBILE ── */
         @media (max-width: 768px) {
           .main-sidebar {
             position: fixed;
-            left: 0;
-            top: 0;
-            width: 280px !important;
-            min-width: 280px !important;
+            left: 0; top: 0;
+            width: 274px !important;
+            min-width: 274px !important;
             height: 100vh;
             transform: translateX(-100%);
             z-index: 90;
-            box-shadow: 4px 0 24px rgba(0,0,0,0.15);
+            box-shadow: 4px 0 40px rgba(0,0,0,0.4);
           }
-          .main-sidebar.is-open {
-            transform: translateX(0);
-          }
-          .main-sidebar.is-minimized {
-            width: 280px !important;
-            min-width: 280px !important;
-          }
-          .sidebar-header {
-            padding: 12px 16px;
-            justify-content: space-between;
-          }
-          .logo-img {
-            width: 120px;
-            height: 36px;
-          }
-          .sidebar-module-access {
-            display: none;
-          }
-          .close-sidebar-btn {
-            display: flex;
-            width: 40px;
-            height: 40px;
-            min-width: 40px;
-          }
-          .minimize-btn {
-            display: none;
-          }
-          .nav-item {
-            padding: 14px 16px;
-            min-height: 48px;
-          }
-          .nav-icon {
-            min-width: 24px;
-          }
-          .nav-label {
-            font-size: 14px;
-          }
-          .nav-group-title {
-            padding: 0 16px;
-            font-size: 11px;
-          }
-          .sidebar-footer {
-            padding: 16px;
-            min-height: 72px;
-          }
-          .user-avatar {
-            width: 44px;
-            height: 44px;
-            min-width: 44px;
-          }
-          .logout-btn {
-            width: 44px;
-            height: 44px;
-            min-width: 44px;
-          }
+          .main-sidebar.is-open { transform: translateX(0); }
+          .main-sidebar.is-minimized { width: 274px !important; min-width: 274px !important; }
+          .sidebar-header { padding: 12px 16px; justify-content: space-between; }
+          .logo-img { width: 120px; height: 34px; }
+          .close-sidebar-btn { display: flex; width: 40px; height: 40px; min-width: 40px; }
+          .minimize-btn { display: none; }
+          .nav-item { padding: 12px 14px; min-height: 46px; }
+          .nav-label { font-size: 13px; }
+          .sidebar-clock { display: none; }
         }
       `}</style>
     </>
@@ -513,7 +659,7 @@ function SidebarContent() {
 
 export function Sidebar() {
   return (
-    <Suspense fallback={<div style={{ width: '260px', background: 'white', borderRight: '1px solid #e5e7eb' }} />}>
+    <Suspense fallback={<div style={{ width: '260px', minWidth: '260px', background: '#ffffff', borderRight: '1px solid #e5e7eb', height: '100vh' }} />}>
       <SidebarContent />
     </Suspense>
   );

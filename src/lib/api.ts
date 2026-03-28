@@ -18,14 +18,47 @@ export interface FrappeSingleResponse<T> {
   data: T;
 }
 
-// Token Authorization Rahasia
-const AUTH_TOKEN = 'token 5f011fb9ee27204:371b9ded6f8223a';
+const API_KEY = process.env.NEXT_PUBLIC_FRAPPE_API_KEY || '';
+const API_SECRET = process.env.NEXT_PUBLIC_FRAPPE_API_SECRET || '';
+const AUTH_TOKEN = `token ${API_KEY}:${API_SECRET}`;
 
-// Generic GET list
+// ─── CIRCUIT BREAKER ───────────────────────────────────────────────────────
+// After first server failure, skip retrying for OFFLINE_TTL_MS to avoid
+// flooding logs and blocking renders with 10s timeouts on every page load.
+const _cb = { offline: false, until: 0, count: 0 };
+const OFFLINE_TTL_MS = 60_000; // 60 seconds cooldown
+
+function circuitIsOpen(): boolean {
+  if (_cb.offline && Date.now() < _cb.until) return true; // Still in cooldown
+  if (_cb.offline) {
+    // Cooldown expired — try once more
+    _cb.offline = false;
+    _cb.count = 0;
+  }
+  return false;
+}
+
+function tripCircuit(reason: string) {
+  _cb.offline = true;
+  _cb.count++;
+  _cb.until = Date.now() + OFFLINE_TTL_MS;
+  if (typeof window !== 'undefined') {
+    // Only log once per trip, not per-request
+    console.debug(`[ERP] Server offline (${reason}). Skipping API calls for ${OFFLINE_TTL_MS / 1000}s.`);
+  }
+}
+// ───────────────────────────────────────────────────────────────────────────
+
 export async function apiGetList<T>(doctype: string, params?: FrappeListParams): Promise<T[]> {
+  // ── Circuit breaker: skip request if server is known offline ──
+  if (circuitIsOpen()) {
+    const empty: T[] = [];
+    (empty as any).__offline = true;
+    return empty;
+  }
+
   const q = new URLSearchParams();
   if (params?.limit) q.set('limit_page_length', String(params.limit));
-  // Default ambil semua field jika tidak didefinisikan agar tidak ada data yang kosong
   q.set('fields', params?.fields ? JSON.stringify(params.fields) : '["*"]');
   if (params?.filters) q.set('filters', JSON.stringify(params.filters));
   if (params?.orderBy) q.set('order_by', `${params.orderBy} ${params.orderDir || 'desc'}`);
@@ -34,31 +67,44 @@ export async function apiGetList<T>(doctype: string, params?: FrappeListParams):
   const url = `/api/frappe/resource/${encodedDoctype}${q.toString() ? '?' + q.toString() : ''}`;
 
   try {
-    const res = await fetch(url, { 
-      method: 'GET', 
-      headers: { 
-        'Accept': 'application/json',
-        'Authorization': AUTH_TOKEN
-      },
-      cache: 'no-store'
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json', 'Authorization': AUTH_TOKEN },
+      cache: 'no-store',
     });
-    
+
+    // ── Offline / unreachable server → trip circuit breaker & return [] ──
+    if (res.status === 503 || res.status === 502) {
+      const body = await res.json().catch(() => ({})) as Record<string, unknown>;
+      tripCircuit(`HTTP ${res.status} for ${doctype}`);
+      const empty: T[] = [];
+      (empty as any).__offline = true;
+      (empty as any).__message = body.message || 'Server tidak tersedia';
+      return empty;
+    }
+
+    // ── Real client/server errors → throw so callers know ──
     if (!res.ok) {
-      let errMsg = `HTTP ${res.status}`;
-      try {
-        const errData = await res.json();
-        errMsg = errData.message || errData.error || errData._server_messages || errMsg;
-      } catch { /* ignore parse error */ }
+      const errData = await res.json().catch(() => ({})) as Record<string, unknown>;
+      const errMsg = (errData.message || errData.error || `HTTP ${res.status}`) as string;
       throw new Error(errMsg);
     }
-    
+
+    // ── Success → reset circuit breaker ──
+    _cb.offline = false;
+    _cb.count = 0;
     const json: FrappeListResponse<T> = await res.json();
     return json.data || [];
+
   } catch (err) {
-    console.error('[apiGetList] Error:', err, 'URL:', url);
-    if (err instanceof TypeError) {
-      throw new Error('Tidak dapat terhubung ke server ERP. Periksa koneksi jaringan atau server Frappe.');
+    // Network-level error (fetch failed = no connection at all)
+    if (err instanceof TypeError && (err.message.includes('fetch') || err.message.includes('network'))) {
+      tripCircuit(`Network error for ${doctype}`);
+      const empty: T[] = [];
+      (empty as any).__offline = true;
+      return empty;
     }
+    // Rethrow real errors (4xx, logic errors, etc.)
     throw err;
   }
 }
