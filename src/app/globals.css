@@ -1,5 +1,5 @@
 /* src/app/globals.css */
-@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800;900&display=swap');
 
 * {
   box-sizing: border-box;
@@ -74,7 +74,7 @@ html, body {
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   font-size: 14px;
-  font-family: 'Montserrat', sans-serif;
+  font-family: 'Poppins', sans-serif;
   background: white;
   color: #111827;
   transition: border-color 0.2s, box-shadow 0.2s;
@@ -137,7 +137,7 @@ html, body {
   border-radius: 8px;
   font-size: 13px;
   font-weight: 600;
-  font-family: 'Montserrat', sans-serif;
+  font-family: 'Poppins', sans-serif;
   cursor: pointer;
   transition: all 0.2s ease;
   border: none;
@@ -257,7 +257,7 @@ html, body {
   border: none;
   background: transparent;
   color: #6a7282;
-  font-family: 'Montserrat', sans-serif;
+  font-family: 'Poppins', sans-serif;
 }
 .tab-btn.active { background: #0066B3; color: white; }
 .tab-btn:not(.active):hover { background: #f0f7ff; color: #0066B3; }
@@ -272,7 +272,7 @@ html, body {
   border: 1px solid #e5e7eb;
   background: white;
   color: #6a7282;
-  font-family: 'Montserrat', sans-serif;
+  font-family: 'Poppins', sans-serif;
 }
 .filter-pill.active { background: #0066B3; color: white; border-color: #0066B3; }
 .filter-pill:hover:not(.active) { border-color: #0066B3; color: #0066B3; }
@@ -344,8 +344,9 @@ html, body {
   width: 36px;
   height: 36px;
   border-radius: 8px;
-  background: white;
-  border: 1px solid #e5e7eb;
+  background: var(--bg-card, white);
+  border: 1px solid var(--border-color, #e5e7eb);
+  color: var(--text-primary, #111827);
   cursor: pointer;
   flex-shrink: 0;
 }
@@ -554,13 +555,21 @@ body.dark-mode [class*="-popup"] {
   box-shadow: 0 10px 40px rgba(0,5,18,0.5) !important;
 }
 
-/* ── COMPACT MODE ── */
-body.compact-mode .stat-card          { padding: 10px 12px !important; }
-body.compact-mode .chart-container    { padding: 10px !important; }
-body.compact-mode .erp-table th,
-body.compact-mode .erp-table td       { padding: 6px 10px !important; font-size: 12px !important; }
-body.compact-mode .modal-content      { padding: 14px !important; }
-body.compact-mode .nav-item           { padding: 7px 12px !important; }
+/* ── Helper text dark mode ── */
+body.dark-mode .helper-text { color: #5e7a9e !important; }
+body.dark-mode .section-title { color: #e8f0fe !important; }
+body.dark-mode .form-group label { color: #c7d9f5 !important; }
+body.dark-mode .modal-footer { border-color: #1e3050 !important; }
+body.dark-mode .hamburger-btn { background: #0f1c2e !important; border-color: #1e3050 !important; color: #e8f0fe !important; }
+body.dark-mode .disabled-input { background: #0d1829 !important; color: #5e7a9e !important; }
+
+/* ── Responsive helpers ── */
+.mobile-flex-col { display: flex; }
+.mobile-full-width { display: inline-flex; }
+@media (max-width: 640px) {
+  .mobile-flex-col { flex-direction: column !important; }
+  .mobile-full-width { width: 100% !important; }
+}
 
 
 /* ========================

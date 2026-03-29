@@ -10,7 +10,7 @@ import {
 import { getWarehousesByCompany } from '@/config/frappe-data';
 import { formatDate } from '@/lib/utils';
 
-const FIXED_COMPANY = 'Netra Vidya'; 
+const FIXED_COMPANY = 'Artavista'; 
 const COLOR_PRIMARY = '#054CC7';
 const COLOR_SECONDARY = '#17C3CC';
 
@@ -295,7 +295,7 @@ function DetailBOMModal({ bom, onClose }: any) {
 // 2. MODAL CREATE & PREVIEW WORK ORDER
 // ==========================================
 function CreateWorkOrderModal({ onClose, boms, warehouses, originalBins, localLedger, onSuccess, showToast }: any) {
-  const [form, setForm] = useState({ bom_no: '', qty: '1', source_warehouse: 'Stores - NV', wip_warehouse: 'Work In Progress - NV', fg_warehouse: 'Finished Goods - NV' });
+  const [form, setForm] = useState({ bom_no: '', qty: '1', source_warehouse: 'Stores - A', wip_warehouse: 'Work In Progress - A', fg_warehouse: 'Finished Goods - A' });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -404,21 +404,49 @@ function CreateWorkOrderModal({ onClose, boms, warehouses, originalBins, localLe
   );
 }
 
-function DetailWorkOrderModal({ wo, onClose, onSubmitWO }: any) {
+function DetailWorkOrderModal({ wo, onClose, onSubmitWO, onSuccess, showToast }: any) {
   const [fullData, setFullData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState<any>({});
 
   useEffect(() => {
     const fetchDetail = async () => {
       try {
         const res = await fetch(`/api/frappe/resource/Work Order/${encodeURIComponent(wo.name)}`, { cache: 'no-store' });
         const data = await res.json();
-        if (data.data) setFullData(data.data);
+        if (data.data) {
+          setFullData(data.data);
+          setEditForm({
+            qty: data.data.qty || 1,
+            source_warehouse: data.data.source_warehouse || '',
+            fg_warehouse: data.data.fg_warehouse || '',
+            wip_warehouse: data.data.wip_warehouse || '',
+          });
+        }
       } catch (e) { console.error(e); } finally { setIsLoading(false); }
     };
     fetchDetail();
   }, [wo.name]);
+
+  const handleUpdate = async () => {
+    setIsSubmitting(true);
+    try {
+      const { apiUpdate } = await import('@/lib/api');
+      await apiUpdate('Work Order', wo.name, {
+        qty: Number(editForm.qty),
+        source_warehouse: editForm.source_warehouse,
+        fg_warehouse: editForm.fg_warehouse,
+        wip_warehouse: editForm.wip_warehouse,
+      });
+      if (showToast) showToast('Work Order berhasil diperbarui!', 'success');
+      setIsEditing(false);
+      onClose(); if (onSuccess) onSuccess();
+    } catch (err: any) {
+      if (showToast) showToast(extractFrappeError(err, 'Gagal update Work Order'), 'error');
+    } finally { setIsSubmitting(false); }
+  };
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
@@ -426,6 +454,8 @@ function DetailWorkOrderModal({ wo, onClose, onSubmitWO }: any) {
     setIsSubmitting(false);
     onClose();
   };
+
+  const isDraft = wo.docstatus === 0;
 
   return (
     <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget && !isSubmitting) onClose(); }}>
@@ -440,12 +470,27 @@ function DetailWorkOrderModal({ wo, onClose, onSubmitWO }: any) {
                   <span style={{ fontSize: '12px', color: '#6B7280' }}>Dibuat: {formatDate(fullData?.creation)}</span>
                 </div>
               </div>
-              <button onClick={onClose} disabled={isSubmitting} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={20} color="#6B7280"/></button>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                {isDraft && (
+                  <button onClick={() => setIsEditing(!isEditing)} 
+                    style={{ background: isEditing ? '#fef3c7' : '#eff6ff', border: `1px solid ${isEditing ? '#f59e0b' : '#bfdbfe'}`, borderRadius: '6px', padding: '6px 12px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', color: isEditing ? '#92400e' : COLOR_PRIMARY, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <Wrench size={14} /> {isEditing ? 'Mode Edit' : 'Edit'}
+                  </button>
+                )}
+                <button onClick={onClose} disabled={isSubmitting} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={20} color="#6B7280"/></button>
+              </div>
             </div>
             
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px', marginBottom: '16px' }}>
               <div style={{ background: '#f8f9fb', padding: '12px', borderRadius: '8px', border: '1px solid #e5e7eb' }}><p style={{ fontSize: '11px', color: '#6B7280', fontWeight: 600 }}>Barang yang Diproduksi</p><p style={{ fontSize: '14px', fontWeight: 800, color: COLOR_PRIMARY }}>{fullData?.production_item}</p></div>
-              <div style={{ background: '#f8f9fb', padding: '12px', borderRadius: '8px', border: '1px solid #e5e7eb' }}><p style={{ fontSize: '11px', color: '#6B7280', fontWeight: 600 }}>Total Target Dipesan</p><p style={{ fontSize: '16px', fontWeight: 800, color: '#111827' }}>{fullData?.qty}</p></div>
+              <div style={{ background: '#f8f9fb', padding: '12px', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+                <p style={{ fontSize: '11px', color: '#6B7280', fontWeight: 600 }}>Total Target Dipesan</p>
+                {isEditing ? (
+                  <input type="number" min="1" className="erp-input" style={{ padding: '4px 8px', fontSize: '14px', fontWeight: 800 }} value={editForm.qty} onChange={e => setEditForm((f: any) => ({ ...f, qty: e.target.value }))} />
+                ) : (
+                  <p style={{ fontSize: '16px', fontWeight: 800, color: '#111827' }}>{fullData?.qty}</p>
+                )}
+              </div>
               <div style={{ background: '#ecfdf5', padding: '12px', borderRadius: '8px', border: '1px solid #a7f3d0' }}><p style={{ fontSize: '11px', color: '#047857', fontWeight: 600 }}>Telah Berhasil Dirakit</p><p style={{ fontSize: '16px', fontWeight: 800, color: '#059669' }}>{fullData?.produced_qty || 0}</p></div>
             </div>
             
@@ -454,22 +499,41 @@ function DetailWorkOrderModal({ wo, onClose, onSubmitWO }: any) {
                <div className="responsive-grid" style={{ gap: '10px' }}>
                  <div>
                    <p style={{ fontSize: '11px', color: '#6B7280', fontWeight: 600 }}>Sumber Bahan Baku (Source)</p>
-                   <p style={{ fontSize: '12px', fontWeight: 600, color: '#374151' }}>{fullData?.source_warehouse?.replace(' - NV', '') || '-'}</p>
+                   {isEditing ? (
+                     <input type="text" className="erp-input" style={{ padding: '6px 10px', fontSize: '12px' }} value={editForm.source_warehouse} onChange={e => setEditForm((f: any) => ({ ...f, source_warehouse: e.target.value }))} />
+                   ) : (
+                     <p style={{ fontSize: '12px', fontWeight: 600, color: '#374151' }}>{fullData?.source_warehouse?.replace(' - ARTA', '') || '-'}</p>
+                   )}
                  </div>
                  <div>
                    <p style={{ fontSize: '11px', color: '#6B7280', fontWeight: 600 }}>Penyimpanan Hasil Jadi (FG)</p>
-                   <p style={{ fontSize: '12px', fontWeight: 600, color: '#059669' }}>{fullData?.fg_warehouse?.replace(' - NV', '') || '-'}</p>
+                   {isEditing ? (
+                     <input type="text" className="erp-input" style={{ padding: '6px 10px', fontSize: '12px' }} value={editForm.fg_warehouse} onChange={e => setEditForm((f: any) => ({ ...f, fg_warehouse: e.target.value }))} />
+                   ) : (
+                     <p style={{ fontSize: '12px', fontWeight: 600, color: '#059669' }}>{fullData?.fg_warehouse?.replace(' - ARTA', '') || '-'}</p>
+                   )}
                  </div>
                </div>
             </div>
 
             <div className="modal-footer">
-              {wo.docstatus === 0 && (
-                <button className="btn btn-primary mobile-btn" onClick={handleSubmit} disabled={isSubmitting} style={{ background: COLOR_PRIMARY, borderColor: COLOR_PRIMARY }}>
-                  <Send size={16} /> {isSubmitting ? 'Memproses...' : 'Submit (Sahkan & Teruskan ke Operator)'}
-                </button>
+              {isEditing ? (
+                <>
+                  <button className="btn btn-secondary mobile-btn" onClick={() => setIsEditing(false)} disabled={isSubmitting}>Batal Edit</button>
+                  <button className="btn btn-primary mobile-btn" onClick={handleUpdate} disabled={isSubmitting} style={{ background: COLOR_PRIMARY, borderColor: COLOR_PRIMARY }}>
+                    {isSubmitting ? 'Menyimpan...' : '💾 Simpan Perubahan'}
+                  </button>
+                </>
+              ) : (
+                <>
+                  {isDraft && (
+                    <button className="btn btn-primary mobile-btn" onClick={handleSubmit} disabled={isSubmitting} style={{ background: COLOR_PRIMARY, borderColor: COLOR_PRIMARY }}>
+                      <Send size={16} /> {isSubmitting ? 'Memproses...' : 'Submit (Sahkan & Teruskan ke Operator)'}
+                    </button>
+                  )}
+                  <button className="btn btn-secondary mobile-btn" onClick={onClose} disabled={isSubmitting}>Tutup Preview</button>
+                </>
               )}
-              <button className="btn btn-secondary mobile-btn" onClick={onClose} disabled={isSubmitting}>Tutup Preview</button>
             </div>
           </>
         )}
@@ -628,7 +692,7 @@ function ManufacturingPageContent() {
           name: `JC-${wo.name.replace('MFG-WO-', '').replace('WO-', '')}-01`,
           work_order: wo.name,
           production_item: wo.production_item,
-          fg_warehouse: wo.fg_warehouse || 'Finished Goods - NV',
+          fg_warehouse: wo.fg_warehouse || 'Finished Goods - A',
           status: wo.status === 'Completed' ? 'Completed' : (wo.status === 'In Process' ? 'Work In Progress' : 'Open'),
           qty: wo.qty,
           creation: wo.creation,
@@ -789,7 +853,7 @@ function ManufacturingPageContent() {
       {showCreateWO && <CreateWorkOrderModal boms={sortedBOMs.filter((b:any)=>b.docstatus===1 || b.is_active)} warehouses={warehouses} originalBins={originalBins} localLedger={localLedger} onClose={() => setShowCreateWO(false)} onSuccess={() => refetch()} showToast={showToast} />}
       
       {selectedBOM && <DetailBOMModal bom={selectedBOM} onClose={() => setSelectedBOM(null)} />}
-      {selectedWO && <DetailWorkOrderModal wo={selectedWO} onClose={() => setSelectedWO(null)} onSubmitWO={handleWOSubmit} />}
+      {selectedWO && <DetailWorkOrderModal wo={selectedWO} onClose={() => setSelectedWO(null)} onSubmitWO={handleWOSubmit} onSuccess={() => refetch()} showToast={showToast} />}
 
       {activeJobCard && (
         <ActiveJobCardModal 
@@ -809,6 +873,7 @@ function ManufacturingPageContent() {
         <div style={{ display: 'flex', gap: '10px', flexShrink: 0, alignItems: 'center' }}>
           {activeTab === 'bom' && <button className="btn btn-primary btn-sm" style={{ background: COLOR_PRIMARY, borderColor: COLOR_PRIMARY, whiteSpace: 'nowrap' }} onClick={() => setShowCreateBOM(true)}><Plus size={14} /> Buat Resep Baru (BOM)</button>}
           {activeTab === 'workorders' && <button className="btn btn-primary btn-sm" style={{ background: COLOR_SECONDARY, borderColor: COLOR_SECONDARY, whiteSpace: 'nowrap' }} onClick={() => setShowCreateWO(true)}><Plus size={14} /> Terbitkan Perintah Kerja (WO)</button>}
+          {activeTab === 'jobcards' && <button className="btn btn-primary btn-sm" style={{ background: '#f59e0b', borderColor: '#f59e0b', whiteSpace: 'nowrap' }} onClick={() => setShowCreateWO(true)}><Plus size={14} /> Tambah Job Card (via WO)</button>}
         </div>
       </div>
 

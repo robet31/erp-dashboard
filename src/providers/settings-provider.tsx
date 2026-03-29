@@ -5,10 +5,12 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 export type AppLanguage = 'id' | 'en';
 export type FontSize = 'sm' | 'md' | 'lg';
 
+export type DataDensity = 'comfortable' | 'cozy' | 'compact';
+
 export interface AppSettings {
   language: AppLanguage;
   darkMode: boolean;
-  compactMode: boolean;
+  dataDensity: DataDensity;
   fontSize: FontSize;
   notifications: boolean;
   emailNotifications: boolean;
@@ -20,7 +22,7 @@ export interface AppSettings {
 const DEFAULT_SETTINGS: AppSettings = {
   language: 'id',
   darkMode: false,
-  compactMode: false,
+  dataDensity: 'comfortable',
   fontSize: 'md',
   notifications: true,
   emailNotifications: true,
@@ -56,8 +58,11 @@ export const TRANSLATIONS = {
     accountInfo: 'Info Akun',
     darkMode: 'Mode Gelap',
     darkModeDesc: 'Aktifkan tema gelap untuk mengurangi ketegangan mata',
-    compactMode: 'Mode Kompak',
-    compactModeDesc: 'Tampilkan lebih banyak data dengan spacing lebih kecil',
+    dataDensity: 'Kepadatan Data',
+    dataDensityDesc: 'Atur seberapa padat tampilan konten',
+    densityComfortable: 'Nyaman',
+    densityCozy: 'Sedang',
+    densityCompact: 'Padat',
     language: 'Bahasa Antarmuka',
     languageDesc: 'Pilih bahasa yang digunakan di sistem',
     fontSize: 'Ukuran Font',
@@ -127,11 +132,62 @@ export const TRANSLATIONS = {
     bcInventory: 'Inventaris',
     bcManufacturing: 'Produksi',
     bcHome: 'Beranda',
-    bcAnalytics: 'Analitik',
+    bcAnalytics: 'Dashboard',
     bcData: 'Data',
     bcProfile: 'Profil',
     bcSettings: 'Pengaturan',
     bcUsers: 'Pengguna',
+    // Tab-specific breadcrumb labels
+    bcCustomer: 'Pelanggan',
+    bcSalesOrder: 'Pesanan Penjualan',
+    bcSalesInvoice: 'Faktur Penjualan',
+    bcStockEntry: 'Mutasi Stok',
+    bcItem: 'Barang',
+    bcWarehouse: 'Gudang',
+    bcDeliveryNote: 'Surat Jalan',
+    bcBOM: 'Bill of Materials',
+    bcWorkOrder: 'Perintah Kerja',
+    bcJobCard: 'Kartu Kerja',
+    // Dashboard page
+    dashTitle: 'Dashboard Overview',
+    dashSubtitle: 'Monitor performa bisnis Artavista secara real-time.',
+    totalOrders: 'Total Pesanan',
+    totalRevenue: 'Total Pendapatan',
+    activeProducts: 'Produk Aktif',
+    lowStock: 'Stok Rendah',
+    revenueTrend: 'Tren Pendapatan',
+    revenueTrendDesc: 'Riwayat Transaksi',
+    productionStatus: 'Status Produksi',
+    productionStatusDesc: 'Dashboard Work Orders',
+    stockByCategory: 'Stok per Kategori',
+    stockByCategoryDesc: 'Nilai stok by item group',
+    recentOrders: 'Order Terbaru',
+    recentOrdersDesc: 'Sales Orders Terbaru',
+    customer: 'Pelanggan',
+    date: 'Tanggal',
+    total: 'Total',
+    status: 'Status',
+    seeAllOrders: 'Semua Sales Order',
+    noOrdersYet: 'Belum ada pesanan',
+    completed: 'Selesai',
+    inProcess: 'Dalam Proses',
+    waiting: 'Menunggu',
+    needsRestock: 'Butuh restock!',
+    itemCatalog: 'Katalog Item',
+    allSalesOrders: 'Semua Sales Order',
+    refresh: 'Refresh',
+    // Selling page
+    sellingTitle: 'Modul Penjualan',
+    sellingSubtitle: 'Kelola Transaksi & Database Pelanggan Anda',
+    // Stock page
+    stockTitle: 'Modul Inventaris',
+    stockSubtitle: 'Kelola Stok, Gudang & Mutasi Barang',
+    // Manufacturing page
+    mfgTitle: 'Modul Produksi',
+    mfgSubtitle: 'Kelola Work Order, BOM & Proses Produksi',
+    // Users page
+    usersTitle: 'Kelola User',
+    usersSubtitle: 'Manajemen akun user dan role akses sistem',
   },
   en: {
     dashboard: 'Dashboard',
@@ -156,8 +212,11 @@ export const TRANSLATIONS = {
     accountInfo: 'Account Info',
     darkMode: 'Dark Mode',
     darkModeDesc: 'Enable dark theme to reduce eye strain',
-    compactMode: 'Compact Mode',
-    compactModeDesc: 'Show more data with smaller spacing',
+    dataDensity: 'Data Density',
+    dataDensityDesc: 'Adjust how dense the content is displayed',
+    densityComfortable: 'Comfortable',
+    densityCozy: 'Cozy',
+    densityCompact: 'Compact',
     language: 'Interface Language',
     languageDesc: 'Choose the language used in the system',
     fontSize: 'Font Size',
@@ -227,11 +286,62 @@ export const TRANSLATIONS = {
     bcInventory: 'Inventory',
     bcManufacturing: 'Manufacturing',
     bcHome: 'Home',
-    bcAnalytics: 'Analytics',
+    bcAnalytics: 'Dashboard',
     bcData: 'Data',
     bcProfile: 'Profile',
     bcSettings: 'Settings',
     bcUsers: 'Users',
+    // Tab-specific breadcrumb labels
+    bcCustomer: 'Customer',
+    bcSalesOrder: 'Sales Order',
+    bcSalesInvoice: 'Sales Invoice',
+    bcStockEntry: 'Stock Entry',
+    bcItem: 'Item',
+    bcWarehouse: 'Warehouse',
+    bcDeliveryNote: 'Delivery Note',
+    bcBOM: 'Bill of Materials',
+    bcWorkOrder: 'Work Order',
+    bcJobCard: 'Job Card',
+    // Dashboard page
+    dashTitle: 'Dashboard Overview',
+    dashSubtitle: 'Monitor Artavista business performance in real-time.',
+    totalOrders: 'Total Orders',
+    totalRevenue: 'Total Revenue',
+    activeProducts: 'Active Products',
+    lowStock: 'Low Stock',
+    revenueTrend: 'Revenue Trend',
+    revenueTrendDesc: 'Transaction History',
+    productionStatus: 'Production Status',
+    productionStatusDesc: 'Work Orders Dashboard',
+    stockByCategory: 'Stock by Category',
+    stockByCategoryDesc: 'Stock value by item group',
+    recentOrders: 'Recent Orders',
+    recentOrdersDesc: 'Latest Sales Orders',
+    customer: 'Customer',
+    date: 'Date',
+    total: 'Total',
+    status: 'Status',
+    seeAllOrders: 'All Sales Orders',
+    noOrdersYet: 'No orders yet',
+    completed: 'Completed',
+    inProcess: 'In Process',
+    waiting: 'Waiting',
+    needsRestock: 'Needs restock!',
+    itemCatalog: 'Item Catalog',
+    allSalesOrders: 'All Sales Orders',
+    refresh: 'Refresh',
+    // Selling page
+    sellingTitle: 'Selling Module',
+    sellingSubtitle: 'Manage Transactions & Customer Database',
+    // Stock page
+    stockTitle: 'Inventory Module',
+    stockSubtitle: 'Manage Stock, Warehouse & Material Movements',
+    // Manufacturing page
+    mfgTitle: 'Manufacturing Module',
+    mfgSubtitle: 'Manage Work Orders, BOM & Production Processes',
+    // Users page
+    usersTitle: 'User Management',
+    usersSubtitle: 'Manage user accounts and system access roles',
   },
 } as const;
 
@@ -290,14 +400,22 @@ function applySettingsToDOM(s: AppSettings) {
     root.style.setProperty('--topbar-bg',    '#ffffff');
   }
 
-  // ── Compact mode ──
-  if (s.compactMode) {
-    document.body.classList.add('compact-mode');
+  // ── Data density ──
+  if (s.dataDensity === 'compact') {
+    document.body.classList.add('density-compact');
+    document.body.classList.remove('density-cozy', 'density-comfortable');
     root.style.setProperty('--spacing-md',   '10px');
     root.style.setProperty('--spacing-lg',   '14px');
-    root.style.setProperty('--card-padding', '10px');
+    root.style.setProperty('--card-padding', '12px');
+  } else if (s.dataDensity === 'cozy') {
+    document.body.classList.add('density-cozy');
+    document.body.classList.remove('density-compact', 'density-comfortable');
+    root.style.setProperty('--spacing-md',   '14px');
+    root.style.setProperty('--spacing-lg',   '18px');
+    root.style.setProperty('--card-padding', '16px');
   } else {
-    document.body.classList.remove('compact-mode');
+    document.body.classList.add('density-comfortable');
+    document.body.classList.remove('density-compact', 'density-cozy');
     root.style.setProperty('--spacing-md',   '16px');
     root.style.setProperty('--spacing-lg',   '24px');
     root.style.setProperty('--card-padding', '20px');

@@ -201,14 +201,26 @@ export default function SettingsPage() {
               </div>
 
               <div className="sp-card" style={{ marginBottom: 16 }}>
-                {/* Compact Mode */}
+                {/* Data Density */}
                 <div className="sp-item">
                   <div className="sp-item-icon" style={{ background: '#eff6ff', color: '#3b82f6' }}><Layout size={17} /></div>
                   <div className="sp-item-text">
-                    <span className="sp-item-label">{t.compactMode}</span>
-                    <span className="sp-item-desc">{t.compactModeDesc}</span>
+                    <span className="sp-item-label">{t.dataDensity}</span>
+                    <span className="sp-item-desc">{t.dataDensityDesc}</span>
                   </div>
-                  <Toggle checked={draft.compactMode} onChange={() => updateDraft({ compactMode: !draft.compactMode })} />
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    {(['comfortable', 'cozy', 'compact'] as const).map(d => (
+                      <button
+                        key={d}
+                        type="button"
+                        className={`sp-font-btn ${draft.dataDensity === d ? 'sp-font-btn-active' : ''}`}
+                        onClick={() => updateDraft({ dataDensity: d })}
+                        style={{ width: 'auto', padding: '4px 10px', fontSize: 11 }}
+                      >
+                        {t[d === 'comfortable' ? 'densityComfortable' : d === 'cozy' ? 'densityCozy' : 'densityCompact']}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 {/* Language */}

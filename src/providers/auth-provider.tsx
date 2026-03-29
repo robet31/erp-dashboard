@@ -32,21 +32,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Restore session from localStorage
+  // Restore session from localStorage (no version invalidation that causes logout on refresh)
   useEffect(() => {
-    const savedUser = localStorage.getItem('erp_user');
-    const STORAGE_VERSION = 'v2';
-    const storedVersion = localStorage.getItem('erp_users_version');
-    
-    if (savedUser && storedVersion !== STORAGE_VERSION) {
+    try {
+      const savedUser = localStorage.getItem('erp_user');
+      if (savedUser) {
+        const parsed = JSON.parse(savedUser);
+        // Validate minimal structure before restoring
+        if (parsed && parsed.role && parsed.email) {
+          setUser(parsed);
+        }
+      }
+    } catch {
+      // Corrupt data — clear it
       localStorage.removeItem('erp_user');
-      setUser(null);
-    } else if (savedUser) {
-      try {
-        setUser(JSON.parse(savedUser));
-      } catch { /* ignore */ }
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   }, []);
 
   const login = useCallback(async (role: UserRole, _email?: string, _password?: string) => {

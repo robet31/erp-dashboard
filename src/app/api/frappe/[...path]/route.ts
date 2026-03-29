@@ -11,9 +11,9 @@ const API_SECRET = process.env.FRAPPE_API_SECRET || '';
 // Berguna saat server ERPNext sedang mati agar tidak ada log timeout yang berisik.
 const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK_DATA === 'true';
 
-// Timeout bertingkat: 5s connect timeout, fallback 503 → mock data
-const CONNECT_TIMEOUT_MS = 5_000;   // 5s — cukup untuk detect server down
-const READ_TIMEOUT_MS    = 15_000;  // 15s untuk response besar (stock list, dll)
+// Timeout: 15s untuk server cloud (GCP) yang mungkin perlu wake-up time
+const CONNECT_TIMEOUT_MS = 15_000;  // 15s — cloud server bisa sedikit lambat
+const READ_TIMEOUT_MS    = 30_000;  // 30s untuk data besar (tidak digunakan tapi dokumentasi)
 
 // Rate-limiting primitive (per proses, reset tiap deploy)
 const _reqMap = new Map<string, number>();
@@ -203,11 +203,11 @@ async function proxyToFrappe(request: NextRequest, pathSegments: string[], metho
       data = { message: text };
     }
 
-    // Cache-control header for successful GETs
-    const respHeaders: Record<string, string> = { ...CORS_HEADERS };
-    if (method === 'GET' && response.status === 200) {
-      respHeaders['Cache-Control'] = 'public, s-maxage=30, stale-while-revalidate=60';
-    }
+    // No caching — always return fresh data for real-time sync
+    const respHeaders: Record<string, string> = { 
+      ...CORS_HEADERS,
+      'Cache-Control': 'no-store, no-cache, must-revalidate',
+    };
 
     return NextResponse.json(data, { status: response.status, headers: respHeaders });
 

@@ -18,7 +18,7 @@ import { EmptyState, TableSkeleton } from '@/components/EmptyState';
 const COLOR_PRIMARY = '#054CC7';
 const COLOR_SECONDARY = '#17C3CC';
 const CATEGORY_COLORS = [COLOR_PRIMARY, COLOR_SECONDARY, '#7c3aed', '#d97706', '#0891b2', '#e11d48'];
-const FIXED_COMPANY = 'PT Artavista';
+const FIXED_COMPANY = 'Artavista';
 
 const formatCreationTime = (dateStr?: string) => {
   if (!dateStr) return '';
@@ -478,9 +478,9 @@ function CreateWarehouseModal({ onClose, onSuccess, showToast }: any) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setIsSubmitting(true);
     try {
-      const warehouseName = `${form.warehouse_name} - ARTA`;
+      const warehouseName = `${form.warehouse_name} - A`;
       const { apiCreate } = await import('@/lib/api');
-      await apiCreate('Warehouse', { name: warehouseName, warehouse_name: form.warehouse_name, company: form.company, is_group: form.is_group ? 1 : 0, parent_warehouse: form.is_group ? '' : `All Warehouses - ARTA` });
+      await apiCreate('Warehouse', { name: warehouseName, warehouse_name: form.warehouse_name, company: form.company, is_group: form.is_group ? 1 : 0, parent_warehouse: form.is_group ? '' : `All Warehouses - A` });
       showToast('Gudang berhasil didaftarkan!', 'success'); onClose(); if (onSuccess) onSuccess();
     } catch (err: any) { showToast(extractFrappeError(err, 'Gagal membuat Warehouse'), 'error'); } finally { setIsSubmitting(false); }
   };
@@ -590,7 +590,7 @@ function CreateDeliveryNoteModal({ onClose, customers, items, warehouses, orders
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const activeWarehouses = useMemo(() => warehouses.filter((w: any) => !w.is_group && (w.company === FIXED_COMPANY || w.name.includes('ARTA'))), [warehouses]);
+  const activeWarehouses = useMemo(() => warehouses.filter((w: any) => !w.is_group && (w.company === FIXED_COMPANY || w.company === 'Artavista' || w.name.includes('- A'))), [warehouses]);
 
   const availableStock = useMemo(() => {
     if (!form.item_code || !form.warehouse) return 0;
@@ -612,7 +612,7 @@ function CreateDeliveryNoteModal({ onClose, customers, items, warehouses, orders
         setForm(f => ({
           ...f, customer: soData.customer, item_code: firstItem.item_code || '',
           qty: firstItem.qty ? String(firstItem.qty) : '1', rate: firstItem.rate ? String(firstItem.rate) : '0',
-          amount: firstItem.amount || 0, warehouse: firstItem.warehouse || 'Finished Goods - ARTA',
+          amount: firstItem.amount || 0, warehouse: firstItem.warehouse || 'Finished Goods - A',
         }));
         showToast('Data otomatis ditarik dari pesanan!', 'info');
       }
@@ -849,11 +849,11 @@ function StockPageContent() {
 
   const sortedItems = useMemo(() => { return [...items].sort((a, b) => sortByNewest(a, b)); }, [items]);
   const sortedWarehouses = useMemo(() => {
-    const nvWarehouses = warehouses.filter((w: any) => w.company === 'PT Artavista' || w.name.includes('- ARTA') || w.name.toLowerCase().includes('pt artavista'));
+    const nvWarehouses = warehouses.filter((w: any) => w.company === 'Artavista' || w.name.includes('- A'));
     return [...nvWarehouses].sort((a, b) => sortByNewest(a, b));
   }, [warehouses]);
   const sortedBins = useMemo(() => {
-    const nvBins = bins.filter((b: any) => b.warehouse.includes(FIXED_COMPANY) || b.warehouse.includes('- ARTA'));
+    const nvBins = bins.filter((b: any) => b.warehouse.includes('- A'));
     return [...nvBins].sort((a, b) => sortByNewest(a, b, 'modified'));
   }, [bins]);
   const sortedStockEntries = useMemo(() => {
@@ -959,13 +959,40 @@ function StockPageContent() {
     );
   };
 
+  const draftEntries = sortedStockEntries.filter((se: any) => se.docstatus === 0).length;
+  const submittedEntries = sortedStockEntries.filter((se: any) => se.docstatus === 1).length;
+  const physicalWarehouses = sortedWarehouses.filter((w: any) => !w.is_group).length;
+  const groupWarehouses = sortedWarehouses.filter((w: any) => w.is_group).length;
+  const stockItems = sortedItems.filter((i: any) => i.is_stock_item === 1).length;
+  const totalBinQty = sortedBins.reduce((s: number, b: any) => s + (Number(b.actual_qty) || 0), 0);
+
   const getPageInfo = () => {
     switch(activeTab) {
-      case 'items': return { title: 'Master Produk (Katalog)', desc: 'Daftar resmi seluruh produk dan bahan yang dikelola ERP', stats: [{ label: 'Total Item Terdaftar', value: sortedItems.length, sub: 'Global', icon: <Package size={22} />, color: COLOR_PRIMARY, bg: '#eff6ff' }] };
-      case 'warehouse': return { title: 'Lokasi Gudang', desc: 'Pengaturan tempat penyimpanan fisik barang', stats: [{ label: 'Total Gudang', value: sortedWarehouses.length, sub: 'Cabang & Pusat', icon: <Warehouse size={22} />, color: '#7c3aed', bg: '#f5f3ff' }] };
-      case 'bin': return { title: 'Stock Level (Sisa Fisik)', desc: 'Laporan ketersediaan barang murni dari Server (Real-time)', stats: [{ label: 'Peringatan Stok Tipis', value: lowStockCount, sub: '< 15 unit (Butuh Restock)', icon: <AlertTriangle size={22} />, color: '#d97706', bg: '#fffbeb' }, { label: 'Estimasi Nilai Aset Gudang', value: formatUang(totalStockValue), sub: 'Rupiah', icon: <TrendingUp size={22} />, color: '#059669', bg: '#ecfdf5' }] };
-      case 'stockentry': return { title: 'Penerimaan Gudang', desc: 'Mutasi barang masuk dari Supplier atau Pabrik', stats: [{ label: 'Total Transaksi Masuk', value: sortedStockEntries.length, sub: 'Dokumen mutasi', icon: <ArrowRight size={22} />, color: COLOR_PRIMARY, bg: '#eff6ff' }] };
-      case 'delivery': return { title: 'Surat Jalan (Kirim Keluar)', desc: 'Pengiriman ke customer atau pengembalian (Retur)', stats: [{ label: 'Total Surat Jalan Dibuat', value: sortedDeliveryNotes.length, sub: 'Dokumen kirim', icon: <Truck size={22} />, color: COLOR_SECONDARY, bg: '#e0f2fe' }] };
+      case 'items': return { title: 'Master Produk (Katalog)', desc: 'Daftar resmi seluruh produk dan bahan yang dikelola ERP', stats: [
+        { label: 'Total Item Terdaftar', value: `${sortedItems.length} Item`, sub: 'Semua kategori', icon: <Package size={22} />, color: COLOR_PRIMARY, bg: '#eff6ff' },
+        { label: 'Item Bisa di-Stok', value: `${stockItems} Item`, sub: 'Maintain Stock aktif', icon: <TrendingUp size={22} />, color: '#059669', bg: '#ecfdf5' },
+        { label: 'Kategori Terdaftar', value: `${stockByCategory.length} Grup`, sub: 'Products, Raw Material, dll', icon: <AlertTriangle size={22} />, color: '#d97706', bg: '#fffbeb' },
+      ] };
+      case 'warehouse': return { title: 'Lokasi Gudang', desc: 'Pengaturan tempat penyimpanan fisik barang', stats: [
+        { label: 'Total Gudang', value: `${sortedWarehouses.length} Gudang`, sub: 'Cabang & Pusat', icon: <Warehouse size={22} />, color: '#7c3aed', bg: '#f5f3ff' },
+        { label: 'Gudang Fisik', value: `${physicalWarehouses} Lokasi`, sub: 'Bisa menyimpan barang', icon: <ArrowRight size={22} />, color: COLOR_PRIMARY, bg: '#eff6ff' },
+        { label: 'Gudang Grup (Induk)', value: `${groupWarehouses} Grup`, sub: 'Menaungi gudang anak', icon: <Package size={22} />, color: '#d97706', bg: '#fffbeb' },
+      ] };
+      case 'bin': return { title: 'Stock Level (Sisa Fisik)', desc: 'Laporan ketersediaan barang murni dari Server (Real-time)', stats: [
+        { label: 'Peringatan Stok Tipis', value: `${lowStockCount} Record`, sub: '< 10 unit (Butuh Restock)', icon: <AlertTriangle size={22} />, color: '#d97706', bg: '#fffbeb' },
+        { label: 'Estimasi Nilai Aset', value: formatUang(totalStockValue), sub: 'Total nilai gudang', icon: <TrendingUp size={22} />, color: '#059669', bg: '#ecfdf5' },
+        { label: 'Total Unit Tersimpan', value: `${formatNumber(totalBinQty)} Unit`, sub: 'Di semua gudang', icon: <Package size={22} />, color: COLOR_PRIMARY, bg: '#eff6ff' },
+      ] };
+      case 'stockentry': return { title: 'Penerimaan Gudang', desc: 'Mutasi barang masuk dari Supplier atau Pabrik', stats: [
+        { label: 'Total Transaksi Masuk', value: `${sortedStockEntries.length} Dok`, sub: 'Dokumen mutasi', icon: <ArrowRight size={22} />, color: COLOR_PRIMARY, bg: '#eff6ff' },
+        { label: 'Draft (Belum Sah)', value: `${draftEntries} Dok`, sub: 'Menunggu pengesahan', icon: <AlertTriangle size={22} />, color: '#d97706', bg: '#fffbeb' },
+        { label: 'Disahkan (Submitted)', value: `${submittedEntries} Dok`, sub: 'Stok sudah masuk gudang', icon: <TrendingUp size={22} />, color: '#059669', bg: '#ecfdf5' },
+      ] };
+      case 'delivery': return { title: 'Surat Jalan (Kirim Keluar)', desc: 'Pengiriman ke customer atau pengembalian (Retur)', stats: [
+        { label: 'Total Surat Jalan', value: `${sortedDeliveryNotes.length} Dok`, sub: 'Dokumen pengiriman', icon: <Truck size={22} />, color: COLOR_SECONDARY, bg: '#e0f2fe' },
+        { label: 'Draft', value: `${sortedDeliveryNotes.filter((d: any) => d.docstatus === 0).length} Dok`, sub: 'Belum disahkan', icon: <AlertTriangle size={22} />, color: '#d97706', bg: '#fffbeb' },
+        { label: 'Terkirim (Submitted)', value: `${sortedDeliveryNotes.filter((d: any) => d.docstatus === 1).length} Dok`, sub: 'Stok sudah terpotong', icon: <TrendingUp size={22} />, color: '#059669', bg: '#ecfdf5' },
+      ] };
       default: return { title: 'Inventory', desc: 'Modul Gudang', stats: [] };
     }
   };
@@ -1072,7 +1099,7 @@ function StockPageContent() {
                             {totalQty} <span style={{ fontSize: '11px', color: '#6B7280', fontWeight: 600 }}>{item.stock_uom}</span>
                           </div>
                           {stockDetails.map((sd, idx) => (
-                             <div key={idx} style={{ fontSize: '10px', color: '#6B7280', marginTop: '4px', fontWeight: 500 }}>{sd.qty} berada di {sd.warehouse.replace(' - ARTA', '')}</div>
+                             <div key={idx} style={{ fontSize: '10px', color: '#6B7280', marginTop: '4px', fontWeight: 500 }}>{sd.qty} berada di {sd.warehouse.replace(' - A', '')}</div>
                           ))}
                         </td>
 
@@ -1143,7 +1170,7 @@ function StockPageContent() {
                         <div style={{ fontSize: '10px', color: '#9CA3AF', fontFamily: 'monospace', marginTop: '2px' }}>ID: {bin.name}</div>
                       </td>
                       <td>
-                        <span style={{ background: '#f3f4f6', padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: '#374151' }}>{bin.warehouse.replace(' - NV', '')}</span>
+                        <span style={{ background: '#f3f4f6', padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: '#374151' }}>{bin.warehouse.replace(' - A', '')}</span>
                       </td>
                       <td style={{ textAlign: 'right', fontWeight: 800, fontSize: '18px', color: '#111827' }}>
                         {formatNumber(bin.actual_qty)}
@@ -1183,7 +1210,7 @@ function StockPageContent() {
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <Warehouse size={14} color="#059669"/>
-                          <span style={{ fontSize: '13px', color: '#111827', fontWeight: 600 }}>{se.to_warehouse ? se.to_warehouse.replace(' - NV', '') : '-'}</span>
+                          <span style={{ fontSize: '13px', color: '#111827', fontWeight: 600 }}>{se.to_warehouse ? se.to_warehouse.replace(' - A', '') : '-'}</span>
                         </div>
                       </td>
                       <td>

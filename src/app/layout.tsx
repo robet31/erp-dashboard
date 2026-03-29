@@ -3,7 +3,7 @@ import "./globals.css";
 import { Providers } from "@/providers";
 
 export const metadata: Metadata = {
-  title: "PT Artavista ERP | OEM Assembler",
+  title: "Artavista ERP | OEM Assembler",
   description: "Enterprise Resource Planning System",
 };
 

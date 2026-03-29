@@ -105,7 +105,7 @@ export default function APITesterPage() {
   const fullUrl = `${FRAPPE_BASE}${path}${params ? '?' + params : ''}`;
 
   return (
-    <div style={{ fontFamily: "'Montserrat', sans-serif", animation: 'fadeIn 0.3s ease-out' }}>
+    <div style={{ fontFamily: "'Poppins', sans-serif", animation: 'fadeIn 0.3s ease-out' }}>
       <div style={{ marginBottom: '20px' }}>
         <h1 style={{ fontSize: '22px', fontWeight: 800, color: '#111827', marginBottom: '4px' }}>🔧 API Tester</h1>
         <p style={{ fontSize: '12px', color: '#6B7280' }}>Test endpoint Frappe/ERPNext — GET, POST, PUT, DELETE via proxy</p>
@@ -121,7 +121,7 @@ export default function APITesterPage() {
             style={{
               width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
               background: 'white', border: '1px solid #e5e7eb', borderRadius: '8px',
-              padding: '10px 14px', cursor: 'pointer', fontFamily: "'Montserrat', sans-serif",
+              padding: '10px 14px', cursor: 'pointer', fontFamily: "'Poppins', sans-serif",
               fontSize: '13px', fontWeight: 700, color: '#374151', marginBottom: '8px'
             }}
           >
@@ -137,7 +137,7 @@ export default function APITesterPage() {
                     style={{
                       background: 'white', border: '1px solid #e5e7eb', borderRadius: '8px',
                       padding: '10px 12px', cursor: 'pointer', textAlign: 'left', width: '100%',
-                      fontFamily: "'Montserrat', sans-serif", transition: 'all 0.15s'
+                      fontFamily: "'Poppins', sans-serif", transition: 'all 0.15s'
                     }}
                     onMouseEnter={e => { e.currentTarget.style.borderColor = '#0066B3'; e.currentTarget.style.background = '#f8fafc'; }}
                     onMouseLeave={e => { e.currentTarget.style.borderColor = '#e5e7eb'; e.currentTarget.style.background = 'white'; }}
@@ -225,7 +225,7 @@ export default function APITesterPage() {
                     background: copied ? '#d1fae5' : 'white', border: '1px solid #e5e7eb',
                     borderRadius: '6px', padding: '5px 10px', cursor: 'pointer',
                     fontSize: '12px', fontWeight: 600, color: copied ? '#065f46' : '#374151',
-                    fontFamily: "'Montserrat', sans-serif"
+                    fontFamily: "'Poppins', sans-serif"
                   }}>
                     {copied ? <><Check size={12} /> Tersalin!</> : <><Copy size={12} /> Salin JSON</>}
                   </button>

@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Menu, Search, Bell, Settings, LogOut, User, ChevronDown, X, Clock, ChevronRight, CheckCircle2 } from 'lucide-react';
+import { Menu, Search, Bell, Settings, LogOut, User, ChevronDown, X, Clock, ChevronRight, CheckCircle2, RefreshCw } from 'lucide-react';
 import { useAuth } from '@/providers/auth-provider';
 import { useSettings } from '@/providers/settings-provider';
 import { useAvatar } from '@/providers/avatar-provider';
@@ -93,13 +93,95 @@ export function Topbar() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
   const [now, setNow] = useState(new Date());
+  // ─── Dynamic notifications from ERP data ────────────────────────────────────
   const [showNotif, setShowNotif] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(3);
-  const [notifications, setNotifications] = useState([
-    { id: 1, title: 'Work Order Selesai', msg: 'WO-2024-001 telah selesai diproduksi', time: '5 mnt lalu', color: '#10b981', read: false },
-    { id: 2, title: 'Stok Menipis', msg: 'Item bahan baku tersisa < 10 unit', time: '1 jam lalu', color: '#f59e0b', read: false },
-    { id: 3, title: 'Sales Order Baru', msg: 'SO-2024-099 dari Customer Budi Santoso', time: '2 jam lalu', color: '#3b82f6', read: false },
-  ]);
+  const [notifications, setNotifications] = useState<{id: number; title: string; msg: string; time: string; color: string; read: boolean; link?: string}[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  // Generate role-aware notifications from real data
+  useEffect(() => {
+    if (!user) return;
+    const role = user.role;
+    
+    async function fetchNotifications() {
+      const notifs: {id: number; title: string; msg: string; time: string; color: string; read: boolean; link?: string}[] = [];
+      let id = 1;
+      
+      try {
+        // Fetch stock bins for low-stock alerts (relevant to admin_gudang, administrator)
+        if (['administrator', 'admin_gudang', 'manajer_produksi'].includes(role)) {
+          const binsRes = await fetch('/api/frappe/resource/Bin?limit_page_length=0&fields=["item_code","warehouse","actual_qty"]');
+          if (binsRes.ok) {
+            const binsData = await binsRes.json();
+            const lowStock = (binsData.data || []).filter((b: any) => b.actual_qty > 0 && b.actual_qty < 10);
+            if (lowStock.length > 0) {
+              notifs.push({ id: id++, title: role === 'admin_gudang' ? 'Peringatan Stok Rendah' : 'Low Stock Alert', msg: `${lowStock.length} item memiliki stok < 10 unit di gudang. Segera lakukan restock.`, time: 'Real-time', color: '#f59e0b', read: false, link: '/dashboard/stock?tab=items' });
+              // Top 3 lowest items
+              lowStock.sort((a: any, b: any) => a.actual_qty - b.actual_qty).slice(0, 2).forEach((item: any) => {
+                notifs.push({ id: id++, title: `Stok Kritis: ${item.item_code}`, msg: `Sisa ${item.actual_qty} unit di ${item.warehouse}`, time: 'Real-time', color: '#ef4444', read: false, link: '/dashboard/stock?tab=items' });
+              });
+            }
+          }
+        }
+
+        // Fetch sales orders (relevant to admin_sales, administrator)
+        if (['administrator', 'admin_sales'].includes(role)) {
+          const soRes = await fetch('/api/frappe/resource/Sales Order?limit_page_length=10&fields=["name","customer_name","grand_total","status","transaction_date"]&order_by=creation desc');
+          if (soRes.ok) {
+            const soData = await soRes.json();
+            const orders = soData.data || [];
+            if (orders.length > 0) {
+              notifs.push({ id: id++, title: 'Sales Orders Update', msg: `${orders.length} pesanan aktif dalam sistem. Total backlog perlu ditangani.`, time: 'Terkini', color: '#3b82f6', read: false, link: '/dashboard/selling?tab=orders' });
+              const pending = orders.filter((o: any) => o.status === 'To Deliver and Bill');
+              if (pending.length > 0) {
+                notifs.push({ id: id++, title: 'Pesanan Menunggu Pengiriman', msg: `${pending.length} pesanan menunggu untuk dikirim ke pelanggan.`, time: 'Terkini', color: '#8b5cf6', read: false, link: '/dashboard/selling?tab=orders' });
+              }
+            }
+          }
+        }
+        
+        // Fetch stock entries (relevant to admin_gudang, administrator)
+        if (['administrator', 'admin_gudang'].includes(role)) {
+          const seRes = await fetch('/api/frappe/resource/Stock Entry?limit_page_length=5&fields=["name","stock_entry_type","docstatus","posting_date"]&order_by=creation desc&filters=[["docstatus","=",0]]');
+          if (seRes.ok) {
+            const seData = await seRes.json();
+            const drafts = seData.data || [];
+            if (drafts.length > 0) {
+              notifs.push({ id: id++, title: 'Stock Entry Draft', msg: `${drafts.length} mutasi stok menunggu disahkan (submitted).`, time: 'Terkini', color: '#10b981', read: false, link: '/dashboard/stock?tab=entries' });
+            }
+          }
+        }
+        
+        // Fetch work orders (relevant to manajer_produksi, administrator)
+        if (['administrator', 'manajer_produksi'].includes(role)) {
+          const woRes = await fetch('/api/frappe/resource/Work Order?limit_page_length=10&fields=["name","production_item","status","qty"]&order_by=creation desc');
+          if (woRes.ok) {
+            const woData = await woRes.json();
+            const wos = woData.data || [];
+            if (wos.length > 0) {
+              const inProcess = wos.filter((w: any) => w.status === 'Not Started' || w.status === 'Draft');
+              if (inProcess.length > 0) {
+                notifs.push({ id: id++, title: 'Work Order Baru', msg: `${inProcess.length} work order belum dimulai. Jadwalkan produksi segera.`, time: 'Terkini', color: '#f59e0b', read: false, link: '/dashboard/manufacturing?tab=workorders' });
+              }
+              const completed = wos.filter((w: any) => w.status === 'Completed');
+              if (completed.length > 0) {
+                notifs.push({ id: id++, title: 'Produksi Selesai', msg: `${completed.length} work order telah selesai diproduksi.`, time: 'Terkini', color: '#10b981', read: false, link: '/dashboard/manufacturing?tab=workorders' });
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.debug('[Notifications] fetch error:', err);
+      }
+      
+      setNotifications(notifs);
+      setUnreadCount(notifs.filter(n => !n.read).length);
+    }
+    
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 60_000); // refresh every 60s
+    return () => clearInterval(interval);
+  }, [user]);
 
   const profileRef = useRef<HTMLDivElement>(null);
   const notifRef   = useRef<HTMLDivElement>(null);
@@ -153,14 +235,23 @@ export function Topbar() {
     : pathname.includes('users')                          ? MODULE_COLORS.users
     : '#054CC7';
 
-  // ── Breadcrumb ──────────────────────────────────────────────────────────────
+  // ── Breadcrumb (tab-aware) ───────────────────────────────────────────────────
+  const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+  const currentTab = searchParams?.get('tab') || null;
+
+  // Map tab param → translation key
+  const TAB_TO_BC: Record<string, string> = {
+    customers: 'bcCustomer', orders: 'bcSalesOrder', invoices: 'bcSalesInvoice',
+    stockentry: 'bcStockEntry', items: 'bcItem', warehouse: 'bcWarehouse', delivery: 'bcDeliveryNote',
+    bom: 'bcBOM', workorders: 'bcWorkOrder', jobcards: 'bcJobCard',
+  };
+
   const routeInfo = ROUTES.find(r => r.path === pathname) ?? ROUTES[0];
   const breadcrumbs = routeInfo.segments.map((seg, i) => {
-    const label = t[seg] ?? seg;
+    let label = t[seg] ?? seg;
     // Determine clickable path
     let path = SEGMENT_TO_PATH[seg] || '';
     if (!path && i > 0) {
-      // For Home/Analytics/Data, derive from parent context
       const parentSeg = routeInfo.segments[i - 1];
       const parentPath = SEGMENT_TO_PATH[parentSeg] || '/dashboard';
       if (seg === 'bcHome')      path = parentPath + '/home';
@@ -168,6 +259,11 @@ export function Topbar() {
       else if (seg === 'bcData') path = parentPath;
     }
     const isLast = i === routeInfo.segments.length - 1;
+    // Override last segment label with active tab name
+    if (isLast && currentTab && seg === 'bcData') {
+      const tabBcKey = TAB_TO_BC[currentTab];
+      if (tabBcKey && (t as any)[tabBcKey]) label = (t as any)[tabBcKey];
+    }
     return { label, path, isLast };
   });
 
@@ -280,6 +376,8 @@ export function Topbar() {
 
         {/* ── Right ── */}
         <div className="topbar-right">
+
+
           {/* Live Clock */}
           <div className="topbar-clock">
             <Clock size={13} className="clock-icon" />
@@ -311,29 +409,40 @@ export function Topbar() {
                   </div>
                 </div>
 
-                {notifications.map(n => (
-                  <div
-                    key={n.id}
-                    className="notif-item"
-                    style={{ background: n.read ? 'white' : '#f0f7ff', cursor: 'pointer' }}
-                    onClick={() => {
-                      setNotifications(ns => ns.map(x => x.id === n.id ? { ...x, read: true } : x));
-                      setUnreadCount(c => Math.max(0, c - (n.read ? 0 : 1)));
-                    }}
-                  >
-                    <div className="notif-dot" style={{ background: n.color }} />
-                    <div className="notif-body">
-                      <div className="notif-item-title" style={{ fontWeight: n.read ? 600 : 700 }}>{n.title}</div>
-                      <div className="notif-item-msg">{n.msg}</div>
-                      <div className="notif-item-time">{n.time}</div>
-                    </div>
-                    {!n.read && <div style={{ width: 7, height: 7, background: '#054CC7', borderRadius: '50%', flexShrink: 0, marginTop: 4, alignSelf: 'flex-start' }} />}
+                {notifications.length === 0 ? (
+                  <div style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--text-secondary, #64748b)' }}>
+                    <CheckCircle2 size={32} style={{ margin: '0 auto 8px', opacity: 0.5 }} />
+                    <div style={{ fontSize: 13, fontWeight: 500 }}>Tidak ada notifikasi</div>
+                    <div style={{ fontSize: 11, marginTop: 4, opacity: 0.7 }}>Semua data sudah terkini</div>
                   </div>
-                ))}
+                ) : (
+                  notifications.map(n => (
+                    <div
+                      key={n.id}
+                      className="notif-item"
+                      style={{ background: n.read ? 'var(--bg-card, white)' : 'var(--bg-hover, #f0f7ff)', cursor: 'pointer' }}
+                      onClick={() => {
+                        setNotifications(ns => ns.map(x => x.id === n.id ? { ...x, read: true } : x));
+                        setUnreadCount(c => Math.max(0, c - (n.read ? 0 : 1)));
+                        if (n.link) { router.push(n.link); setShowNotif(false); }
+                      }}
+                    >
+                      <div className="notif-dot" style={{ background: n.color }} />
+                      <div className="notif-body">
+                        <div className="notif-item-title" style={{ fontWeight: n.read ? 500 : 700 }}>{n.title}</div>
+                        <div className="notif-item-msg">{n.msg}</div>
+                        <div className="notif-item-time">{n.time}</div>
+                      </div>
+                      {!n.read && <div style={{ width: 7, height: 7, background: '#054CC7', borderRadius: '50%', flexShrink: 0, marginTop: 4, alignSelf: 'flex-start' }} />}
+                    </div>
+                  ))
+                )}
 
-                <div className="notif-footer" onClick={() => setShowNotif(false)}>
-                  {t.notifications} →
-                </div>
+                {notifications.length > 0 && (
+                  <div className="notif-footer" onClick={() => setShowNotif(false)}>
+                    {t.notifications} →
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -450,13 +559,12 @@ export function Topbar() {
         .breadcrumb-link:hover { background: #f0f7ff; color: #054CC7; }
         .breadcrumb-current { font-size: 13px; font-weight: 700; padding: 3px 6px; }
 
-        /* ── Center: Search — absolutely centered ── */
+        /* ── Center: Search — flex-based responsive width ── */
         .topbar-center {
-          position: absolute;
-          left: 50%;
-          transform: translateX(-50%);
-          width: 400px;
-          max-width: calc(100% - 500px);
+          flex: 1;
+          max-width: 420px;
+          margin: 0 16px;
+          min-width: 0;
         }
 
         .search-wrap {
@@ -647,11 +755,31 @@ export function Topbar() {
         .logout-item { color: #dc2626; }
         .logout-item:hover { background: #fff1f2; }
 
+        /* Live sync badge */
+        .live-sync-badge {
+          display: flex; align-items: center; gap: 5px;
+          padding: 4px 8px;
+          background: #f0fdf4; border: 1px solid #bbf7d0;
+          border-radius: 20px;
+        }
+        .live-dot {
+          width: 7px; height: 7px;
+          background: #10b981; border-radius: 50%;
+          animation: livePulse 2s ease-in-out infinite;
+          flex-shrink: 0;
+        }
+        @keyframes livePulse {
+          0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(16,185,129,0.4); }
+          50% { opacity: 0.7; box-shadow: 0 0 0 4px rgba(16,185,129,0); }
+        }
+        .live-text { font-size: 10px; font-weight: 800; color: #059669; letter-spacing: 0.06em; }
+
         /* Mobile */
         @media (max-width: 768px) {
           .hamburger-btn { display: flex; }   /* show on mobile */
           .topbar-brand-text { display: none; }
           .topbar-clock { display: none; }
+          .live-sync-badge { display: none; }
           .topbar-divider { display: none; }
           .topbar-breadcrumb { display: none; }
           .topbar-center {

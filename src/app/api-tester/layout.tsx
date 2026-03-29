@@ -20,7 +20,7 @@ export default function ApiTesterLayout({ children }: { children: React.ReactNod
     return (
       <div style={{
         height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: '#f8f9fb', fontFamily: "'Montserrat', sans-serif",
+        background: '#f8f9fb', fontFamily: "'Poppins', sans-serif",
       }}>
         <div style={{ textAlign: 'center' }}>
           <div style={{
@@ -43,7 +43,7 @@ export default function ApiTesterLayout({ children }: { children: React.ReactNod
       height: '100vh',
       overflow: 'hidden',
       background: '#f8f9fb',
-      fontFamily: "'Montserrat', sans-serif",
+      fontFamily: "'Poppins', sans-serif",
     }}>
       <Sidebar />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>

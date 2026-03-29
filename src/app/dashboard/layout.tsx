@@ -105,7 +105,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       toggleMinimize: () => setIsMinimized(m => !m),
       closeSidebar: () => setIsOpen(false)
     }}>
-      <div className={`dashboard-shell ${settings.darkMode ? 'dark-mode' : ''} ${settings.compactMode ? 'compact-mode' : ''}`}>
+      <div className={`dashboard-shell ${settings.darkMode ? 'dark-mode' : ''} ${settings.dataDensity === 'compact' ? 'compact-mode' : ''}`}>
 
         {/* Mobile overlay */}
         <div
@@ -207,6 +207,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         .dark-mode .notif-item { border-color: #334155 !important; }
         .dark-mode .notif-item-title, .dark-mode .profile-dropdown-name { color: var(--text-primary, #f1f5f9) !important; }
         .dark-mode .page-main { background: var(--bg-main, #0f172a); }
+
+        /* Dark mode — Dashboard & page content */
+        .dark-mode .chart-container, .dark-mode .stat-card { background: var(--bg-card, #1e293b) !important; border-color: var(--border-color, #334155) !important; }
+        .dark-mode .dm-text-primary { color: var(--text-primary, #f1f5f9) !important; }
+        .dark-mode .dm-text-secondary { color: var(--text-secondary, #94a3b8) !important; }
+        .dark-mode .dm-btn-outline { background: var(--bg-card, #1e293b) !important; border: 1px solid var(--border-color, #334155) !important; color: var(--text-primary, #f1f5f9) !important; }
+        .dark-mode h1, .dark-mode h2, .dark-mode h3 { color: var(--text-primary, #f1f5f9) !important; }
+        .dark-mode .erp-table th { background: #1e293b !important; color: var(--text-secondary, #94a3b8) !important; border-color: #334155 !important; }
+        .dark-mode .erp-table td { border-color: #334155 !important; color: var(--text-primary, #f1f5f9) !important; }
+        .dark-mode .erp-table tr:hover { background: #1e293b !important; }
+        .dark-mode .erp-input, .dark-mode select.erp-input { background: var(--input-bg, #0f172a) !important; border-color: var(--border-color, #334155) !important; color: var(--text-primary, #f1f5f9) !important; }
+        .dark-mode .modal-overlay { background: rgba(0,0,0,0.7) !important; }
+        .dark-mode .modal-content { background: var(--bg-card, #1e293b) !important; border-color: var(--border-color, #334155) !important; }
+        .dark-mode .section-title { color: var(--text-primary, #f1f5f9) !important; border-color: var(--border-color, #334155) !important; }
+        .dark-mode .helper-text { color: var(--text-secondary, #6b7280) !important; }
+        .dark-mode .card-hover:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important; }
 
         /* ── Compact mode globals ── */
         .compact-mode .page-main { padding: var(--spacing-md, 12px) !important; }

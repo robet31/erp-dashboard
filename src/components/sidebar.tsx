@@ -8,14 +8,14 @@ import { getRoleConfig } from '@/config/rbac';
 import {
   Home, PieChart, Users, ShoppingCart, Receipt, Package, Warehouse,
   ArrowRightLeft, Truck, Layers, Cog, Wrench, X, LayoutDashboard,
-  LogOut, ChevronLeft, ChevronRight, Clock, Wifi, WifiOff, Zap
+  LogOut, ChevronLeft, ChevronRight, Clock, Wifi, WifiOff, Zap, UserCog
 } from 'lucide-react';
 import { getInitials, shortenName } from '@/lib/utils';
 import { Suspense, useEffect, useState } from 'react';
 import { useSidebar } from '@/app/dashboard/layout';
 
 type NavItem = { href: string; label: string; icon: React.ReactNode; module: 'dashboard' | 'selling' | 'stock' | 'manufacturing' | 'users'; tabId?: string; };
-type NavGroup = { title: string; emoji: string; items: NavItem[]; requiredModule: 'selling' | 'stock' | 'manufacturing' | 'admin'; color: string; };
+type NavGroup = { title: string; emoji: string; items: NavItem[]; requiredModule: 'selling' | 'stock' | 'manufacturing' | 'users'; color: string; };
 
 const NAV_GROUPS: NavGroup[] = [
   {
@@ -47,6 +47,12 @@ const NAV_GROUPS: NavGroup[] = [
       { href: '/dashboard/manufacturing', tabId: 'bom', label: 'BOM', icon: <Layers size={17} />, module: 'manufacturing' },
       { href: '/dashboard/manufacturing', tabId: 'workorders', label: 'Work Order', icon: <Cog size={17} />, module: 'manufacturing' },
       { href: '/dashboard/manufacturing', tabId: 'jobcards', label: 'Job Card', icon: <Wrench size={17} />, module: 'manufacturing' },
+    ]
+  },
+  {
+    title: 'Admin', emoji: '👥', color: '#8b5cf6', requiredModule: 'users',
+    items: [
+      { href: '/dashboard/users', label: 'Kelola Pengguna', icon: <UserCog size={17} />, module: 'users' },
     ]
   }
 ];
@@ -145,7 +151,7 @@ function SidebarContent() {
         {/* Navigation */}
         <nav className="sidebar-nav">
           {NAV_GROUPS.map((group, groupIdx) => {
-            if (!canAccess(group.requiredModule as any)) return null;
+            if (!canAccess(group.requiredModule)) return null;
             return (
               <div key={groupIdx} className="nav-group">
                 {!isMinimized && (
@@ -185,6 +191,9 @@ function SidebarContent() {
             );
           })}
         </nav>
+
+
+
 
         {/* Footer - User Profile */}
         <div className="sidebar-footer">
@@ -629,6 +638,9 @@ function SidebarContent() {
           cursor: pointer;
           color: #374151;
         }
+
+
+
 
         /* ── MOBILE ── */
         @media (max-width: 768px) {

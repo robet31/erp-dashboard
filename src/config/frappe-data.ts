@@ -1,20 +1,21 @@
 // src/config/frappe-data.ts
 // Konfigurasi data statis dari Frappe ERP
-// Data ini diambil dari API Frappe
+// Data ini diambil dari API Frappe — HARUS cocok persis dengan nama di ERPNext
 
 export const FRAPPE_COMPANIES = [
-  { name: 'PT Artavista', code: 'ARTA', short: 'PT Artavista' },
+  { name: 'Artavista', code: 'A', short: 'Artavista' },
   { name: 'PT Solusi Berdikari', code: 'PSB', short: 'Solusi Berdikari' },
   { name: 'PT Maju Sejahtera', code: 'PMS', short: 'Maju Sejahtera' },
   { name: 'PT Maju Jaya Abadi', code: 'PMJA', short: 'Maju Jaya' },
 ];
 
 export const FRAPPE_WAREHOUSES = [
-  // PT Artavista
-  { name: 'Stores - ARTA', company: 'PT Artavista', type: 'Stores' },
-  { name: 'Work In Progress - ARTA', company: 'PT Artavista', type: 'WIP' },
-  { name: 'Finished Goods - ARTA', company: 'PT Artavista', type: 'FG' },
-  { name: 'Goods In Transit - ARTA', company: 'PT Artavista', type: 'Transit' },
+  // Artavista (suffix - A, sesuai ERPNext)
+  { name: 'Stores - A', company: 'Artavista', type: 'Stores' },
+  { name: 'Work In Progress - A', company: 'Artavista', type: 'WIP' },
+  { name: 'Finished Goods - A', company: 'Artavista', type: 'FG' },
+  { name: 'Goods In Transit - A', company: 'Artavista', type: 'Transit' },
+  { name: 'Raw Materials - A', company: 'Artavista', type: 'Stores' },
   // PT Solusi Berdikari
   { name: 'Stores - PSB', company: 'PT Solusi Berdikari', type: 'Stores' },
   { name: 'Work In Progress - PSB', company: 'PT Solusi Berdikari', type: 'WIP' },
@@ -77,5 +78,5 @@ export function getFGWarehouse(company: string) {
 
 export function getCompanyCode(companyName: string): string {
   const company = FRAPPE_COMPANIES.find(c => c.name === companyName);
-  return company ? company.code : 'NV';
+  return company ? company.code : 'A';
 }

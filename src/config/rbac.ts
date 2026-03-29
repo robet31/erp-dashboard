@@ -26,7 +26,11 @@ export const ROLES = [
     color: '#054CC7', // Warna Primary Baru
     modules: ['dashboard', 'selling'] as ModuleKey[],
     permissions: ['create_customer', 'edit_customer', 'create_sales_order', 'edit_sales_order'] as PermissionKey[],
-    widgets: [{ id: 'sales_overview', title: 'Sales Overview', type: 'chart' }] as DashboardWidget[]
+    widgets: [
+      { id: 'revenue_stats', title: 'Revenue Stats', type: 'chart' },
+      { id: 'sales_orders', title: 'Sales Orders', type: 'list' },
+      { id: 'items', title: 'Items', type: 'stat' },
+    ] as DashboardWidget[]
   },
   {
     id: 'admin_gudang',
@@ -37,7 +41,10 @@ export const ROLES = [
     color: '#17C3CC', // Warna Secondary Baru
     modules: ['dashboard', 'stock'] as ModuleKey[],
     permissions: ['create_item', 'create_delivery_note', 'edit_delivery_note'] as PermissionKey[],
-    widgets: [{ id: 'stock_overview', title: 'Stock Overview', type: 'stat' }] as DashboardWidget[]
+    widgets: [
+      { id: 'items', title: 'Items', type: 'stat' },
+      { id: 'production_status', title: 'Production Status', type: 'chart' },
+    ] as DashboardWidget[]
   },
   {
     id: 'manajer_produksi',
@@ -48,7 +55,10 @@ export const ROLES = [
     color: '#054CC7', // Warna Primary Baru
     modules: ['dashboard', 'manufacturing'] as ModuleKey[],
     permissions: ['create_bom', 'create_work_order', 'create_job_card'] as PermissionKey[],
-    widgets: [{ id: 'prod_overview', title: 'Production Overview', type: 'chart' }] as DashboardWidget[]
+    widgets: [
+      { id: 'production_status', title: 'Production Status', type: 'chart' },
+      { id: 'items', title: 'Items', type: 'stat' },
+    ] as DashboardWidget[]
   },
   {
     id: 'operator',
@@ -59,7 +69,10 @@ export const ROLES = [
     color: '#17C3CC', // Warna Secondary Baru
     modules: ['dashboard', 'manufacturing'] as ModuleKey[],
     permissions: ['create_job_card'] as PermissionKey[],
-    widgets: [{ id: 'job_card_list', title: 'My Job Cards', type: 'list' }] as DashboardWidget[]
+    widgets: [
+      { id: 'production_status', title: 'Production Status', type: 'chart' },
+      { id: 'items', title: 'Items', type: 'stat' },
+    ] as DashboardWidget[]
   },
   {
     id: 'administrator',
@@ -70,7 +83,12 @@ export const ROLES = [
     color: '#054CC7',
     modules: ['dashboard', 'selling', 'stock', 'manufacturing', 'users'] as ModuleKey[],
     permissions: ['create_customer', 'edit_customer', 'create_sales_order', 'edit_sales_order', 'create_delivery_note', 'edit_delivery_note', 'create_item', 'create_bom', 'create_work_order', 'create_job_card', 'manage_users', 'create_user', 'edit_user', 'delete_user'] as PermissionKey[],
-    widgets: [{ id: 'system_overview', title: 'System Overview', type: 'chart' }] as DashboardWidget[]
+    widgets: [
+      { id: 'revenue_stats', title: 'Revenue Stats', type: 'chart' },
+      { id: 'sales_orders', title: 'Sales Orders', type: 'list' },
+      { id: 'items', title: 'Items', type: 'stat' },
+      { id: 'production_status', title: 'Production Status', type: 'chart' },
+    ] as DashboardWidget[]
   }
 ];
 
@@ -91,4 +109,10 @@ export const hasModuleAccess = (roleId: string, module: ModuleKey) => {
 export const getDashboardWidgets = (roleId: string): DashboardWidget[] => {
   const role = getRoleConfig(roleId);
   return role.widgets || [];
+};
+
+// Helper: get widget IDs as string array for easy includes() check
+export const getWidgetIds = (roleId: string): string[] => {
+  const role = getRoleConfig(roleId);
+  return (role.widgets || []).map(w => w.id);
 };

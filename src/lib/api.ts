@@ -23,10 +23,11 @@ const API_SECRET = process.env.NEXT_PUBLIC_FRAPPE_API_SECRET || '';
 const AUTH_TOKEN = `token ${API_KEY}:${API_SECRET}`;
 
 // ─── CIRCUIT BREAKER ───────────────────────────────────────────────────────
-// After first server failure, skip retrying for OFFLINE_TTL_MS to avoid
-// flooding logs and blocking renders with 10s timeouts on every page load.
+// After N consecutive server failures, skip retrying for OFFLINE_TTL_MS to
+// avoid flooding logs and blocking renders with long timeouts on every load.
 const _cb = { offline: false, until: 0, count: 0 };
-const OFFLINE_TTL_MS = 60_000; // 60 seconds cooldown
+const OFFLINE_TTL_MS = 30_000;  // 30 seconds cooldown (was 60)
+const FAILURE_THRESHOLD = 3;    // trip after 3 consecutive failures (was 1)
 
 function circuitIsOpen(): boolean {
   if (_cb.offline && Date.now() < _cb.until) return true; // Still in cooldown
@@ -39,12 +40,13 @@ function circuitIsOpen(): boolean {
 }
 
 function tripCircuit(reason: string) {
-  _cb.offline = true;
   _cb.count++;
-  _cb.until = Date.now() + OFFLINE_TTL_MS;
-  if (typeof window !== 'undefined') {
-    // Only log once per trip, not per-request
-    console.debug(`[ERP] Server offline (${reason}). Skipping API calls for ${OFFLINE_TTL_MS / 1000}s.`);
+  if (_cb.count >= FAILURE_THRESHOLD) {
+    _cb.offline = true;
+    _cb.until = Date.now() + OFFLINE_TTL_MS;
+    if (typeof window !== 'undefined') {
+      console.debug(`[ERP] Server offline after ${FAILURE_THRESHOLD} failures (${reason}). Skipping for ${OFFLINE_TTL_MS / 1000}s.`);
+    }
   }
 }
 // ───────────────────────────────────────────────────────────────────────────

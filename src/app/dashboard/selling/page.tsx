@@ -3,6 +3,7 @@
 import React, { useState, useMemo, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/providers/auth-provider';
+import { useSettings } from '@/providers/settings-provider';
 import { useSellingData, useStockData } from '@/hooks/useFrappeData';
 import { getWarehousesByCompany } from '@/config/frappe-data';
 import { 
@@ -14,7 +15,7 @@ import { formatDate, getStatusBadgeClass, getStatusLabel } from '@/lib/utils';
 import type { SalesOrder, Customer } from '@/lib/frappe-types';
 
 const STATUS_FILTERS = ['Semua', 'Draft', 'To Deliver and Bill', 'Completed', 'Cancelled'];
-const FIXED_COMPANY = 'PT Artavista';
+const FIXED_COMPANY = 'Artavista';
 const COLOR_PRIMARY = '#1d4ed8';
 const COLOR_SECONDARY = '#3b82f6';
 
@@ -192,7 +193,8 @@ function CreateCustomerModal({ onClose, onSuccess, showToast }: { onClose: () =>
 
 function DetailCustomerModal({ customer, onClose, onSuccess, showToast }: any) {
   const [fullData, setFullData] = useState<any>(null);
-  const [form, setForm] = useState({ disabled: 0 });
+  const [isEditing, setIsEditing] = useState(false);
+  const [form, setForm] = useState<any>({});
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -201,17 +203,36 @@ function DetailCustomerModal({ customer, onClose, onSuccess, showToast }: any) {
       try {
         const res = await fetch(`/api/frappe/resource/Customer/${encodeURIComponent(customer.name)}`, { cache: 'no-store' });
         const data = await res.json();
-        
-        // Merge with local storage details (karena kita mock creation address & contact di local)
         const localDetailsMap = JSON.parse(localStorage.getItem('erp_mock_customer_details') || '{}');
         const localData = localDetailsMap[customer.customer_name] || {};
-        
         const merged = { ...localData, ...data.data, disabled: data.data?.disabled || customer.disabled || 0 };
         setFullData(merged);
-        setForm({ disabled: merged.disabled });
+        setForm({
+          customer_name: merged.customer_name || '',
+          customer_type: merged.customer_type || 'Company',
+          email_address: merged.email_address || localData.email_address || '',
+          mobile_number: merged.mobile_number || merged.mobile_no || localData.mobile_number || '',
+          map_to_first_name: merged.map_to_first_name || localData.map_to_first_name || '',
+          map_to_last_name: merged.map_to_last_name || localData.map_to_last_name || '',
+          address_line1: merged.address_line1 || localData.address_line1 || '',
+          address_line2: merged.address_line2 || localData.address_line2 || '',
+          city: merged.city || localData.city || '',
+          state: merged.state || localData.state || '',
+          pincode: merged.pincode || localData.pincode || '',
+          country: merged.country || localData.country || 'Indonesia',
+          disabled: merged.disabled || 0,
+        });
       } catch (e) {
-        setFullData({ customer_type: customer.customer_type || 'Company', customer_name: customer.customer_name || '', disabled: customer.disabled || 0 });
-        setForm({ disabled: customer.disabled || 0 });
+        const localData = JSON.parse(localStorage.getItem('erp_mock_customer_details') || '{}')[customer.customer_name] || {};
+        setFullData({ customer_type: customer.customer_type || 'Company', customer_name: customer.customer_name || '', disabled: customer.disabled || 0, ...localData });
+        setForm({
+          customer_name: customer.customer_name || '', customer_type: customer.customer_type || 'Company',
+          email_address: localData.email_address || '', mobile_number: localData.mobile_number || '',
+          map_to_first_name: localData.map_to_first_name || '', map_to_last_name: localData.map_to_last_name || '',
+          address_line1: localData.address_line1 || '', address_line2: localData.address_line2 || '',
+          city: localData.city || '', state: localData.state || '', pincode: localData.pincode || '',
+          country: localData.country || 'Indonesia', disabled: customer.disabled || 0,
+        });
       } finally { setIsLoading(false); }
     };
     fetchFullData();
@@ -221,95 +242,127 @@ function DetailCustomerModal({ customer, onClose, onSuccess, showToast }: any) {
     e.preventDefault(); setIsSubmitting(true);
     try {
       const { apiUpdate } = await import('@/lib/api');
-      await apiUpdate('Customer', customer.name, { disabled: form.disabled });
-      showToast('Status Customer berhasil diperbarui!', 'success'); onClose(); if (onSuccess) onSuccess();
-    } catch (err: any) { showToast(extractFrappeError(err), 'error'); } finally { setIsSubmitting(false); }
+      await apiUpdate('Customer', customer.name, {
+        customer_name: form.customer_name,
+        customer_type: form.customer_type,
+        disabled: form.disabled,
+      });
+      // Save extended details to localStorage (Frappe doesn't store contact inline)
+      const savedDetails = JSON.parse(localStorage.getItem('erp_mock_customer_details') || '{}');
+      savedDetails[form.customer_name] = { ...form };
+      localStorage.setItem('erp_mock_customer_details', JSON.stringify(savedDetails));
+      showToast('Customer berhasil diperbarui!', 'success');
+      setIsEditing(false);
+      onClose(); if (onSuccess) onSuccess();
+    } catch (err: any) { showToast(extractFrappeError(err, 'Gagal update Customer'), 'error'); } finally { setIsSubmitting(false); }
+  };
+
+  const renderField = (label: string, key: string, placeholder?: string, type?: string) => {
+    if (isEditing) {
+      return (
+        <div className="form-group" style={{ marginBottom: '10px' }}>
+          <label className="erp-label">{label}</label>
+          <input type={type || 'text'} className="erp-input" value={form[key] || ''} 
+            onChange={e => setForm((f: any) => ({ ...f, [key]: e.target.value }))} placeholder={placeholder || ''} />
+        </div>
+      );
+    }
+    return (
+      <div style={{ marginBottom: '10px' }}>
+        <p style={{ fontSize: '11px', color: '#6B7280', fontWeight: 600 }}>{label}</p>
+        <p style={{ fontSize: '13px', fontWeight: 600, color: key === 'email_address' ? COLOR_PRIMARY : '#111827' }}>
+          {form[key] || '-'}
+        </p>
+      </div>
+    );
   };
 
   return (
     <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal-content" style={{ width: '100%', maxWidth: '700px', margin: '0 16px', padding: 0, overflow: 'hidden' }}>
+      <div className="modal-content" style={{ width: '100%', maxWidth: '750px', margin: '0 16px', padding: 0, overflow: 'hidden' }}>
         {isLoading ? <div style={{ textAlign: 'center', padding: '60px 20px' }}><Loader2 className="animate-spin" size={32} color={COLOR_PRIMARY} /></div> : (
           <>
             <div style={{ background: '#f8f9fb', padding: '20px 24px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
                 <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#111827', margin: '0 0 4px 0' }}>{fullData?.customer_name}</h2>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  <span className={`badge ${fullData?.disabled ? 'badge-danger' : 'badge-success'}`}>{fullData?.disabled ? 'Diblokir / Non-Aktif' : 'Aktif Bertransaksi'}</span>
+                  <span className={`badge ${form.disabled ? 'badge-danger' : 'badge-success'}`}>{form.disabled ? 'Diblokir / Non-Aktif' : 'Aktif Bertransaksi'}</span>
                   <span style={{ fontSize: '12px', color: '#6B7280', fontWeight: 600 }}>ID: {fullData?.name || customer.name}</span>
                 </div>
               </div>
-              <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6B7280' }}><X size={20} /></button>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <button onClick={() => setIsEditing(!isEditing)} 
+                  style={{ background: isEditing ? '#fef3c7' : '#eff6ff', border: `1px solid ${isEditing ? '#f59e0b' : '#bfdbfe'}`, borderRadius: '6px', padding: '6px 12px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', color: isEditing ? '#92400e' : COLOR_PRIMARY, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Edit size={14} /> {isEditing ? 'Mode Edit Aktif' : 'Edit'}
+                </button>
+                <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6B7280' }}><X size={20} /></button>
+              </div>
             </div>
             
-            <div style={{ padding: '24px', maxHeight: '75vh', overflowY: 'auto' }}>
+            <form onSubmit={handleSubmit} style={{ padding: '24px', maxHeight: '75vh', overflowY: 'auto' }}>
               <div className="responsive-grid" style={{ gap: '24px', marginBottom: '24px' }}>
                 <div style={{ background: '#ffffff', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '16px' }}>
                   <h3 className="section-title" style={{ fontSize: '13px', marginTop: 0 }}><User size={14}/> Informasi Kontak</h3>
-                  <div className="responsive-grid" style={{ marginBottom: '12px' }}>
-                    <div>
-                      <p style={{ fontSize: '11px', color: '#6B7280', fontWeight: 600 }}>Tipe Pelanggan</p>
-                      <p style={{ fontSize: '13px', fontWeight: 700, color: '#111827' }}>{fullData?.customer_type || 'Company'}</p>
+                  {isEditing && (
+                    <div className="form-group" style={{ marginBottom: '10px' }}>
+                      <label className="erp-label">Customer Type</label>
+                      <select className="erp-input" value={form.customer_type} onChange={e => setForm((f: any) => ({ ...f, customer_type: e.target.value }))}>
+                        <option value="Company">Company (Perusahaan/B2B)</option>
+                        <option value="Individual">Individual (Perorangan/B2C)</option>
+                      </select>
                     </div>
-                    <div>
-                      <p style={{ fontSize: '11px', color: '#6B7280', fontWeight: 600 }}>Phone / Mobile</p>
-                      <p style={{ fontSize: '13px', fontWeight: 600, color: '#111827' }}>{fullData?.mobile_number || fullData?.mobile_no || '-'}</p>
-                    </div>
+                  )}
+                  {!isEditing && renderField('Tipe Pelanggan', 'customer_type')}
+                  {renderField('Nama Customer', 'customer_name', 'PT Distribusi Teknologi')}
+                  <div className="responsive-grid">
+                    {renderField('Nama Depan (PIC)', 'map_to_first_name', 'Budi')}
+                    {renderField('Nama Belakang (PIC)', 'map_to_last_name', 'Santoso')}
                   </div>
-                  <div className="responsive-grid" style={{ marginBottom: '12px' }}>
-                    <div>
-                      <p style={{ fontSize: '11px', color: '#6B7280', fontWeight: 600 }}>Nama Depan (PIC)</p>
-                      <p style={{ fontSize: '13px', fontWeight: 600, color: '#111827' }}>{fullData?.map_to_first_name || '-'}</p>
-                    </div>
-                    <div>
-                      <p style={{ fontSize: '11px', color: '#6B7280', fontWeight: 600 }}>Nama Belakang (PIC)</p>
-                      <p style={{ fontSize: '13px', fontWeight: 600, color: '#111827' }}>{fullData?.map_to_last_name || '-'}</p>
-                    </div>
-                  </div>
-                  <div>
-                    <p style={{ fontSize: '11px', color: '#6B7280', fontWeight: 600 }}>Email Address</p>
-                    <p style={{ fontSize: '13px', fontWeight: 600, color: COLOR_PRIMARY }}>{fullData?.email_address || '-'}</p>
-                  </div>
+                  {renderField('Email Address', 'email_address', 'budi@email.com', 'email')}
+                  {renderField('No. HP/WA', 'mobile_number', '081234567890')}
                 </div>
 
                 <div style={{ background: '#ffffff', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '16px' }}>
                   <h3 className="section-title" style={{ fontSize: '13px', marginTop: 0 }}><MapPin size={14}/> Alamat Terdaftar</h3>
-                  <div style={{ marginBottom: '12px' }}>
-                    <p style={{ fontSize: '11px', color: '#6B7280', fontWeight: 600 }}>Alamat Lengkap</p>
-                    <p style={{ fontSize: '13px', fontWeight: 500, color: '#374151', lineHeight: 1.5 }}>
-                      {fullData?.address_line1 ? (
-                        <>{fullData.address_line1}<br/>{fullData.address_line2}</>
-                      ) : '-'}
-                    </p>
+                  {renderField('Jalan Utama', 'address_line1', 'Jl. Sudirman No. 123')}
+                  {renderField('Gedung/Lantai', 'address_line2', 'Gedung Cyber Lantai 5')}
+                  <div className="responsive-grid">
+                    {renderField('Kota', 'city', 'Jakarta Selatan')}
+                    {renderField('Provinsi', 'state', 'DKI Jakarta')}
                   </div>
                   <div className="responsive-grid">
-                    <div>
-                      <p style={{ fontSize: '11px', color: '#6B7280', fontWeight: 600 }}>Kota / Provinsi</p>
-                      <p style={{ fontSize: '13px', fontWeight: 600, color: '#111827' }}>{fullData?.city || '-'}, {fullData?.state || '-'}</p>
-                    </div>
-                    <div>
-                      <p style={{ fontSize: '11px', color: '#6B7280', fontWeight: 600 }}>Negara / Kode Pos</p>
-                      <p style={{ fontSize: '13px', fontWeight: 600, color: '#111827' }}>{fullData?.country || 'Indonesia'} {fullData?.pincode || ''}</p>
-                    </div>
+                    {renderField('Kode Pos', 'pincode', '12345')}
+                    {renderField('Negara', 'country', 'Indonesia')}
                   </div>
                 </div>
               </div>
 
-              <form onSubmit={handleSubmit} style={{ background: '#f8f9fb', padding: '16px', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+              <div style={{ background: '#f8f9fb', padding: '16px', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
                 <h3 className="section-title" style={{ fontSize: '13px', marginTop: 0, border: 'none' }}><Briefcase size={14}/> Manajemen Status</h3>
                 <div className="form-group" style={{ margin: 0 }}>
-                  <label className="erp-label">Ubah Status Pelanggan</label>
-                  <select className="erp-input" value={form.disabled} onChange={e => setForm({ disabled: Number(e.target.value) })}>
-                    <option value={0}>Active (Bisa bertransaksi)</option>
-                    <option value={1}>Disabled (Diblokir/Tidak aktif)</option>
-                  </select>
-                  <p className="helper-text">Ubah ke Disabled jika customer bermasalah atau tidak aktif lagi.</p>
+                  <label className="erp-label">Status Pelanggan</label>
+                  {isEditing ? (
+                    <select className="erp-input" value={form.disabled} onChange={e => setForm((f: any) => ({ ...f, disabled: Number(e.target.value) }))}>
+                      <option value={0}>Active (Bisa bertransaksi)</option>
+                      <option value={1}>Disabled (Diblokir/Tidak aktif)</option>
+                    </select>
+                  ) : (
+                    <p style={{ fontSize: '13px', fontWeight: 700, color: form.disabled ? '#ef4444' : '#16a34a' }}>
+                      {form.disabled ? '🔴 Diblokir / Non-Aktif' : '🟢 Active — Bisa Bertransaksi'}
+                    </p>
+                  )}
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>
-                  <button type="submit" disabled={isSubmitting} className="btn btn-primary" style={{ background: COLOR_PRIMARY }}>{isSubmitting ? 'Menyimpan...' : 'Simpan Perubahan'}</button>
+              </div>
+
+              {isEditing && (
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '16px' }}>
+                  <button type="button" onClick={() => setIsEditing(false)} className="btn btn-secondary">Batal Edit</button>
+                  <button type="submit" disabled={isSubmitting} className="btn btn-primary" style={{ background: COLOR_PRIMARY }}>
+                    {isSubmitting ? 'Menyimpan...' : '💾 Simpan Perubahan'}
+                  </button>
                 </div>
-              </form>
-            </div>
+              )}
+            </form>
           </>
         )}
       </div>
@@ -321,11 +374,11 @@ function DetailCustomerModal({ customer, onClose, onSuccess, showToast }: any) {
 // 2. MODAL SALES ORDER
 // ==========================================
 function CreateOrderModal({ onClose, customers, items, warehouses, originalBins, localLedger, onSuccess, showToast }: any) {
-  const [form, setForm] = useState({ customer: '', transaction_date: new Date().toISOString().split('T')[0], delivery_date: new Date().toISOString().split('T')[0], warehouse: 'Finished Goods - NV', item_code: '', qty: '', rate: '', amount: 0 });
+  const [form, setForm] = useState({ customer: '', transaction_date: new Date().toISOString().split('T')[0], delivery_date: new Date().toISOString().split('T')[0], warehouse: 'Finished Goods - A', item_code: '', qty: '', rate: '', amount: 0 });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
 
-  const activeWarehouses = useMemo(() => warehouses.filter((w: any) => !w.is_group && (w.company === FIXED_COMPANY || w.name.includes('NV'))), [warehouses]);
+  const activeWarehouses = useMemo(() => warehouses.filter((w: any) => !w.is_group && (w.company === FIXED_COMPANY || w.company === 'Artavista' || w.name.includes('- A'))), [warehouses]);
 
   const availableStock = useMemo(() => {
     if (!form.item_code || !form.warehouse) return 0;
@@ -461,21 +514,61 @@ function CreateOrderModal({ onClose, customers, items, warehouses, originalBins,
   );
 }
 
-function OrderDetailModal({ order, onClose, onSubmitOrder }: { order: any; onClose: () => void; onSubmitOrder?: (wo: any) => void; }) {
+function OrderDetailModal({ order, onClose, onSubmitOrder, onSuccess, showToast }: { order: any; onClose: () => void; onSubmitOrder?: (wo: any) => void; onSuccess?: () => void; showToast?: any; }) {
   const [fullData, setFullData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState<any>({});
 
   useEffect(() => {
     const fetchDetail = async () => {
       try {
         const res = await fetch(`/api/frappe/resource/Sales Order/${encodeURIComponent(order.name)}`, { cache: 'no-store' });
         const data = await res.json();
-        if (data.data) setFullData(data.data);
+        if (data.data) {
+          setFullData(data.data);
+          setEditForm({
+            delivery_date: data.data.delivery_date || '',
+            items: (data.data.items || []).map((item: any) => ({
+              name: item.name, item_code: item.item_code, item_name: item.item_name,
+              qty: item.qty, rate: item.rate, amount: item.amount, uom: item.uom, warehouse: item.warehouse,
+            })),
+          });
+        }
       } catch (e) { console.error(e); } finally { setIsLoading(false); }
     };
     fetchDetail();
   }, [order.name]);
+
+  const handleItemFieldChange = (index: number, field: string, value: string) => {
+    setEditForm((f: any) => {
+      const newItems = [...f.items];
+      newItems[index] = { ...newItems[index], [field]: Number(value) || 0 };
+      if (field === 'qty' || field === 'rate') {
+        newItems[index].amount = (newItems[index].qty || 0) * (newItems[index].rate || 0);
+      }
+      return { ...f, items: newItems };
+    });
+  };
+
+  const handleUpdate = async () => {
+    setIsSubmitting(true);
+    try {
+      const { apiUpdate } = await import('@/lib/api');
+      await apiUpdate('Sales Order', order.name, {
+        delivery_date: editForm.delivery_date,
+        items: editForm.items.map((item: any) => ({
+          name: item.name, item_code: item.item_code, qty: item.qty, rate: item.rate, warehouse: item.warehouse,
+        })),
+      });
+      if (showToast) showToast('Sales Order berhasil diperbarui!', 'success');
+      setIsEditing(false);
+      onClose(); if (onSuccess) onSuccess();
+    } catch (err: any) {
+      if (showToast) showToast(extractFrappeError(err, 'Gagal update Sales Order'), 'error');
+    } finally { setIsSubmitting(false); }
+  };
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
@@ -483,6 +576,8 @@ function OrderDetailModal({ order, onClose, onSubmitOrder }: { order: any; onClo
     setIsSubmitting(false);
     onClose();
   };
+
+  const isDraft = order.docstatus === 0;
 
   return (
     <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget && !isSubmitting) onClose(); }}>
@@ -497,13 +592,28 @@ function OrderDetailModal({ order, onClose, onSubmitOrder }: { order: any; onClo
                   <span style={{ fontSize: '12px', color: '#6B7280' }}>Tgl Dibuat: {formatDate(fullData?.transaction_date)}</span>
                 </div>
               </div>
-              <button onClick={onClose} disabled={isSubmitting} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={20} /></button>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                {isDraft && (
+                  <button onClick={() => setIsEditing(!isEditing)} 
+                    style={{ background: isEditing ? '#fef3c7' : '#eff6ff', border: `1px solid ${isEditing ? '#f59e0b' : '#bfdbfe'}`, borderRadius: '6px', padding: '6px 12px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', color: isEditing ? '#92400e' : COLOR_PRIMARY, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <Edit size={14} /> {isEditing ? 'Mode Edit' : 'Edit'}
+                  </button>
+                )}
+                <button onClick={onClose} disabled={isSubmitting} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={20} /></button>
+              </div>
             </div>
             
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px', marginBottom: '16px' }}>
               <div style={{ background: '#f8f9fb', padding: '12px', borderRadius: '8px', border: '1px solid #e5e7eb' }}><p style={{ fontSize: '11px', color: '#6B7280', fontWeight: 600 }}>Pemesan</p><p style={{ fontSize: '13px', fontWeight: 700, color: '#111827' }}>{fullData?.customer_name}</p></div>
-              <div style={{ background: '#f8f9fb', padding: '12px', borderRadius: '8px', border: '1px solid #e5e7eb' }}><p style={{ fontSize: '11px', color: '#6B7280', fontWeight: 600 }}>Tgl Target Kirim</p><p style={{ fontSize: '13px', fontWeight: 700, color: '#111827' }}>{formatDate(fullData?.delivery_date)}</p></div>
-              <div style={{ background: '#eff6ff', padding: '12px', borderRadius: '8px', border: '1px solid #bfdbfe' }}><p style={{ fontSize: '11px', color: '#1e40af', fontWeight: 600 }}>Total Nominal</p><p style={{ fontSize: '16px', fontWeight: 800, color: COLOR_PRIMARY }}>{formatUang(fullData?.grand_total)}</p></div>
+              <div style={{ background: '#f8f9fb', padding: '12px', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+                <p style={{ fontSize: '11px', color: '#6B7280', fontWeight: 600 }}>Tgl Target Kirim</p>
+                {isEditing ? (
+                  <input type="date" className="erp-input" style={{ padding: '4px 8px', fontSize: '12px' }} value={editForm.delivery_date} onChange={e => setEditForm((f: any) => ({ ...f, delivery_date: e.target.value }))} />
+                ) : (
+                  <p style={{ fontSize: '13px', fontWeight: 700, color: '#111827' }}>{formatDate(fullData?.delivery_date)}</p>
+                )}
+              </div>
+              <div style={{ background: '#eff6ff', padding: '12px', borderRadius: '8px', border: '1px solid #bfdbfe' }}><p style={{ fontSize: '11px', color: '#1e40af', fontWeight: 600 }}>Total Nominal</p><p style={{ fontSize: '16px', fontWeight: 800, color: COLOR_PRIMARY }}>{formatUang(isEditing ? editForm.items?.reduce((s: number, i: any) => s + (i.amount || 0), 0) : fullData?.grand_total)}</p></div>
             </div>
             
             <p className="section-title">Item yang Dipesan</p>
@@ -511,12 +621,24 @@ function OrderDetailModal({ order, onClose, onSubmitOrder }: { order: any; onClo
               <table className="erp-table" style={{ width: '100%', minWidth: '500px' }}>
                 <thead><tr><th>Kode Produk</th><th>Nama Produk</th><th style={{ textAlign: 'right' }}>Jumlah (Qty)</th><th style={{ textAlign: 'right' }}>Harga Satuan</th><th style={{ textAlign: 'right' }}>Subtotal</th></tr></thead>
                 <tbody>
-                  {(fullData?.items || []).map((item: any, i: number) => (
+                  {(isEditing ? editForm.items : fullData?.items || []).map((item: any, i: number) => (
                     <tr key={i}>
                       <td><span style={{ color: COLOR_SECONDARY, fontWeight: 700 }}>{item.item_code}</span></td>
                       <td style={{ whiteSpace: 'normal', fontSize: '12px' }}>{item.item_name}</td>
-                      <td style={{ textAlign: 'right', fontWeight: 600 }}>{Number(item.qty)} <span style={{fontSize: '10px', color: '#6B7280'}}>{item.uom}</span></td>
-                      <td style={{ textAlign: 'right', color: '#4B5563' }}>{formatUang(item.rate)}</td>
+                      <td style={{ textAlign: 'right' }}>
+                        {isEditing ? (
+                          <input type="number" className="erp-input" style={{ width: '70px', padding: '4px', fontSize: '12px', textAlign: 'right' }} value={item.qty} onChange={e => handleItemFieldChange(i, 'qty', e.target.value)} />
+                        ) : (
+                          <span style={{ fontWeight: 600 }}>{Number(item.qty)} <span style={{fontSize: '10px', color: '#6B7280'}}>{item.uom}</span></span>
+                        )}
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        {isEditing ? (
+                          <input type="number" className="erp-input" style={{ width: '100px', padding: '4px', fontSize: '12px', textAlign: 'right' }} value={item.rate} onChange={e => handleItemFieldChange(i, 'rate', e.target.value)} />
+                        ) : (
+                          <span style={{ color: '#4B5563' }}>{formatUang(item.rate)}</span>
+                        )}
+                      </td>
                       <td style={{ textAlign: 'right', fontWeight: 800, color: COLOR_PRIMARY }}>{formatUang(item.amount)}</td>
                     </tr>
                   ))}
@@ -525,12 +647,23 @@ function OrderDetailModal({ order, onClose, onSubmitOrder }: { order: any; onClo
             </div>
 
             <div className="modal-footer">
-              {order.docstatus === 0 && (
-                <button className="btn btn-primary mobile-btn" onClick={handleSubmit} disabled={isSubmitting} style={{ background: COLOR_PRIMARY, borderColor: COLOR_PRIMARY }}>
-                  <Send size={16} /> {isSubmitting ? 'Memproses...' : 'Submit (Kunci Order)'}
-                </button>
+              {isEditing ? (
+                <>
+                  <button className="btn btn-secondary mobile-btn" onClick={() => setIsEditing(false)} disabled={isSubmitting}>Batal Edit</button>
+                  <button className="btn btn-primary mobile-btn" onClick={handleUpdate} disabled={isSubmitting} style={{ background: COLOR_PRIMARY, borderColor: COLOR_PRIMARY }}>
+                    {isSubmitting ? 'Menyimpan...' : '💾 Simpan Perubahan'}
+                  </button>
+                </>
+              ) : (
+                <>
+                  {isDraft && (
+                    <button className="btn btn-primary mobile-btn" onClick={handleSubmit} disabled={isSubmitting} style={{ background: COLOR_PRIMARY, borderColor: COLOR_PRIMARY }}>
+                      <Send size={16} /> {isSubmitting ? 'Memproses...' : 'Submit (Kunci Order)'}
+                    </button>
+                  )}
+                  <button className="btn btn-secondary mobile-btn" onClick={onClose} disabled={isSubmitting}>Tutup</button>
+                </>
               )}
-              <button className="btn btn-secondary mobile-btn" onClick={onClose} disabled={isSubmitting}>Tutup</button>
             </div>
           </>
         )}
@@ -759,6 +892,7 @@ function InvoiceDetailModal({ invoice, onClose, onSubmitInvoice }: any) {
 function SellingPageContent() {
   const { salesOrders, customers, isLoading, error, refetch } = useSellingData();
   const { items: allItems, bins: originalBins, warehouses } = useStockData();
+  const { t } = useSettings();
   const [invoices, setInvoices] = useState<any[]>([]);
 
   const [toast, setToast] = useState<{ show: boolean, msg: string, type: 'success' | 'error' | 'info' }>({ show: false, msg: '', type: 'success' });
@@ -951,13 +1085,13 @@ function SellingPageContent() {
       {showCreateInvoiceModal && <CreateInvoiceModal onClose={() => setShowCreateInvoiceModal(false)} customers={customers} items={allItems} orders={activeSalesOrders} onSuccess={() => fetchInvoices()} onLink={(inv: any, so: any) => setInvoiceLinks(prev => { const next = {...prev, [inv]: so}; localStorage.setItem('erp_mock_invoice_links', JSON.stringify(next)); return next; })} showToast={showToast} />}
       
       {selectedCustomer && <DetailCustomerModal customer={selectedCustomer} onClose={() => setSelectedCustomer(null)} onSuccess={() => refetch()} showToast={showToast} />}
-      {selectedOrder && <OrderDetailModal order={selectedOrder} onClose={() => setSelectedOrder(null)} onSubmitOrder={handleSOSubmit} />}
+      {selectedOrder && <OrderDetailModal order={selectedOrder} onClose={() => setSelectedOrder(null)} onSubmitOrder={handleSOSubmit} onSuccess={() => refetch()} showToast={showToast} />}
       {selectedInvoice && <InvoiceDetailModal invoice={selectedInvoice} onClose={() => setSelectedInvoice(null)} onSubmitInvoice={handleInvoiceSubmit} />}
 
       <div className="mobile-flex-col" style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
         <div>
-          <h1 style={{ fontSize: '22px', fontWeight: 800, color: '#111827', marginBottom: '4px' }}>Modul Penjualan</h1>
-          <p style={{ fontSize: '12px', color: '#6B7280' }}>Kelola Transaksi & Database Pelanggan Anda</p>
+          <h1 style={{ fontSize: '22px', fontWeight: 800, color: 'var(--text-primary, #111827)', marginBottom: '4px' }}>{t.sellingTitle}</h1>
+          <p style={{ fontSize: '12px', color: 'var(--text-secondary, #6B7280)' }}>{t.sellingSubtitle}</p>
         </div>
         <div className="mobile-full-width" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
           {activeTab === 'customers' && <button className="btn btn-primary btn-sm mobile-full-width action-btn" onClick={() => setShowCreateCustomerModal(true)} style={{ background: COLOR_PRIMARY, borderColor: COLOR_PRIMARY }}><Plus size={14} /> Daftar Customer Baru</button>}

@@ -1,7 +1,8 @@
 // src/hooks/useFrappeData.ts
 // Custom hooks — fetch data dari Frappe/ERPNext menggunakan Proxy API Next.js (Bebas CORS)
+// Fitur: Real-time polling setiap 30 detik + refresh saat tab kembali aktif
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { apiGetList, apiCreate, apiUpdate, apiDelete } from '@/lib/api'; 
 import type {
   Item, Warehouse, Bin, Customer, SalesOrder,
@@ -23,6 +24,9 @@ import {
   mockBOMs,
   mockWorkOrders,
 } from '@/lib/mock-data';
+
+// ─── Polling interval ────────────────────────────────────────────────────────
+const POLL_INTERVAL_MS = 30_000; // 30 detik — real-time sync
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -79,6 +83,50 @@ function buildWorkOrderStatus(wos: WorkOrder[]): WorkOrderStatusSummary {
   };
 }
 
+// ─── Utility: is array from offline circuit breaker ──────────────────────────
+function isOfflineResult(arr: any[]): boolean {
+  return !!(arr as any).__offline;
+}
+
+// ─── Real-time polling hook helper ───────────────────────────────────────────
+function usePolling(fetchFn: () => Promise<void>, intervalMs: number) {
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const start = useCallback(() => {
+    if (timerRef.current) return;
+    timerRef.current = setInterval(fetchFn, intervalMs);
+  }, [fetchFn, intervalMs]);
+
+  const stop = useCallback(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    // Start polling
+    start();
+
+    // Pause when tab hidden, resume when visible
+    const handleVisibility = () => {
+      if (document.hidden) {
+        stop();
+      } else {
+        // Immediately refetch on tab focus, then resume polling
+        fetchFn();
+        start();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      stop();
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [fetchFn, start, stop]);
+}
+
 // ─── Dashboard Data Hook ─────────────────────────────────────────────────────
 
 export interface DashboardData extends BaseState {
@@ -92,86 +140,93 @@ export interface DashboardData extends BaseState {
   workOrderStatus: WorkOrderStatusSummary;
   stats: DashboardStats;
   refetch: () => void;
+  lastUpdated: Date | null;
 }
 
 export function useDashboardData(): DashboardData {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [data, setData] = useState<Omit<DashboardData, 'isLoading' | 'error' | 'refetch'> | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [data, setData] = useState<Omit<DashboardData, 'isLoading' | 'error' | 'refetch' | 'lastUpdated'> | null>(null);
 
   const fetchData = useCallback(async () => {
-    setIsLoading(true);
+    // Don't show loading spinner on background polls (only on first load)
+    if (!data) setIsLoading(true);
     setError(null);
 
     try {
       const [salesOrders, items, bins, workOrders] = await Promise.allSettled([
-        apiGetList<SalesOrder>('Sales Order', { limit: 1000, fields: ['*'] }),
-        apiGetList<Item>('Item', { limit: 1000, fields: ['*'] }),
-        apiGetList<Bin>('Bin', { limit: 1000, fields: ['*'] }),
-        apiGetList<WorkOrder>('Work Order', { limit: 1000, fields: ['*'] }),
+        apiGetList<SalesOrder>('Sales Order', { limit: 500, fields: ['name', 'customer', 'customer_name', 'transaction_date', 'grand_total', 'status', 'docstatus', 'delivery_date'] }),
+        apiGetList<Item>('Item', { limit: 500, fields: ['name', 'item_code', 'item_name', 'item_group', 'stock_uom', 'is_stock_item', 'disabled', 'standard_rate'] }),
+        apiGetList<Bin>('Bin', { limit: 1000, fields: ['name', 'item_code', 'warehouse', 'actual_qty', 'projected_qty', 'stock_value', 'valuation_rate'] }),
+        apiGetList<WorkOrder>('Work Order', { limit: 200, fields: ['name', 'production_item', 'qty', 'produced_qty', 'status', 'planned_start_date', 'planned_end_date', 'company'] }),
       ]);
 
-      const rSalesOrders = (salesOrders.status === 'fulfilled' && salesOrders.value.length > 0 ? salesOrders.value : mockSalesOrders).map((o: any) => ({ ...o, items: o.items || [] }));
-      const rItems = items.status === 'fulfilled' && items.value.length > 0 ? items.value : mockItems;
-      const rBins = bins.status === 'fulfilled' && bins.value.length > 0 ? bins.value : mockBins;
-      const rWorkOrders = workOrders.status === 'fulfilled' && workOrders.value.length > 0 ? workOrders.value : mockWorkOrders;
+      const soData    = salesOrders.status  === 'fulfilled' ? salesOrders.value  : [];
+      const itemData  = items.status        === 'fulfilled' ? items.value        : [];
+      const binData   = bins.status         === 'fulfilled' ? bins.value         : [];
+      const woData    = workOrders.status   === 'fulfilled' ? workOrders.value   : [];
 
-      if (salesOrders.status === 'rejected' || (salesOrders.status === 'fulfilled' && salesOrders.value.length === 0)) console.warn('Sales Order: tidak ada data, menggunakan mock');
-      if (items.status === 'rejected' || (items.status === 'fulfilled' && items.value.length === 0)) console.warn('Item: tidak ada data, menggunakan mock');
-      if (bins.status === 'rejected' || (bins.status === 'fulfilled' && bins.value.length === 0)) console.warn('Bin: tidak ada data, menggunakan mock');
+      // Only use mock when the server is fully offline (circuit breaker)
+      const soFinal   = isOfflineResult(soData)   ? mockSalesOrders   : soData;
+      const itemFinal = isOfflineResult(itemData)  ? mockItems         : itemData;
+      const binFinal  = isOfflineResult(binData)   ? mockBins          : binData;
+      const woFinal   = isOfflineResult(woData)    ? mockWorkOrders    : woData;
 
-      const revenueTrend = buildRevenueTrend(rSalesOrders.length > 0 ? rSalesOrders : []);
-      const stockByCategory = buildStockByCategory(rBins, rItems);
+      const rSalesOrders = soFinal.map((o: any) => ({ ...o, items: o.items || [] }));
+      const revenueTrend = buildRevenueTrend(rSalesOrders);
+      const stockByCategory = buildStockByCategory(binFinal, itemFinal);
       const productionTrend = revenueTrend.map(r => ({ month: r.month, planned: 100000, produced: Math.floor(r.revenue / 12000) }));
-      const workOrderStatus = buildWorkOrderStatus(rWorkOrders.length > 0 ? rWorkOrders : []);
+      const workOrderStatus = buildWorkOrderStatus(woFinal);
 
       setData({
-        salesOrders: rSalesOrders.length > 0 ? rSalesOrders : [],
-        items: rItems.length > 0 ? rItems : [],
-        bins: rBins.length > 0 ? rBins : [],
-        workOrders: rWorkOrders.length > 0 ? rWorkOrders : [],
+        salesOrders: rSalesOrders,
+        items: itemFinal,
+        bins: binFinal,
+        workOrders: woFinal,
         revenueTrend,
-        stockByCategory: stockByCategory.length > 0 ? stockByCategory : [],
+        stockByCategory,
         productionTrend,
         workOrderStatus,
         stats: {
           totalOrders: rSalesOrders.length,
           totalRevenue: rSalesOrders.reduce((s, o) => s + (o.grand_total || 0), 0),
-          activeItems: rItems.filter((i: any) => i.disabled === 0).length,
-          lowStockCount: rBins.filter((b: any) => (b.projected_qty || 0) < 50).length,
+          activeItems: itemFinal.filter((i: any) => i.disabled === 0 || i.disabled === false).length,
+          lowStockCount: binFinal.filter((b: any) => (b.actual_qty || 0) < 10).length,
         },
       });
+      setLastUpdated(new Date());
     } catch (err) {
       console.error('[Dashboard] fetch error:', err);
       setError(err instanceof Error ? err.message : 'Gagal ambil data');
-      const emptyRevenueTrend = buildRevenueTrend([]);
-      setData({
-        salesOrders: [], items: [], bins: [], workOrders: [],
-        revenueTrend: emptyRevenueTrend,
-        stockByCategory: [],
-        productionTrend: emptyRevenueTrend.map(r => ({ month: r.month, planned: 100000, produced: 0 })),
-        workOrderStatus: { total: 0, completed: 0, inProcess: 0, pending: 0, rejected: 0 },
-        stats: { totalOrders: 0, totalRevenue: 0, activeItems: 0, lowStockCount: 0 },
-      });
+      if (!data) {
+        // Only fall back to mock on first load failure
+        const emptyRevenueTrend = buildRevenueTrend([]);
+        setData({
+          salesOrders: [], items: [], bins: [], workOrders: [],
+          revenueTrend: emptyRevenueTrend,
+          stockByCategory: [],
+          productionTrend: emptyRevenueTrend.map(r => ({ month: r.month, planned: 100000, produced: 0 })),
+          workOrderStatus: { total: 0, completed: 0, inProcess: 0, pending: 0, rejected: 0 },
+          stats: { totalOrders: 0, totalRevenue: 0, activeItems: 0, lowStockCount: 0 },
+        });
+      }
     } finally {
       setIsLoading(false);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+  usePolling(fetchData, POLL_INTERVAL_MS);
 
   const fallback = { 
-    salesOrders: [], 
-    items: [], 
-    bins: [], 
-    workOrders: [], 
-    revenueTrend: mockRevenueTrend, 
-    stockByCategory: mockStockByCategory, 
-    productionTrend: mockProductionTrend, 
-    workOrderStatus: mockWorkOrderStatus, 
+    salesOrders: [], items: [], bins: [], workOrders: [], 
+    revenueTrend: mockRevenueTrend, stockByCategory: mockStockByCategory, 
+    productionTrend: mockProductionTrend, workOrderStatus: mockWorkOrderStatus, 
     stats: { totalOrders: 0, totalRevenue: 0, activeItems: 0, lowStockCount: 0 } 
   };
-  return { ...(data || fallback), isLoading, error, refetch: fetchData };
+  return { ...(data || fallback), isLoading, error, refetch: fetchData, lastUpdated };
 }
 
 // ─── Selling Module Hook ─────────────────────────────────────────────────────
@@ -181,45 +236,60 @@ export interface SellingData extends BaseState {
   customers: Customer[];
   deliveryNotes: DeliveryNote[];
   refetch: () => void;
+  lastUpdated: Date | null;
 }
 
 export function useSellingData(): SellingData {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [salesOrders, setSalesOrders] = useState<SalesOrder[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [deliveryNotes, setDeliveryNotes] = useState<DeliveryNote[]>([]);
+  const initialLoadDone = useRef(false);
 
   const fetchData = useCallback(async () => {
-    setIsLoading(true);
+    if (!initialLoadDone.current) setIsLoading(true);
     setError(null);
 
     try {
-      const [so, cust] = await Promise.allSettled([
-        apiGetList<SalesOrder>('Sales Order', { limit: 1000, fields: ['*'] }),
-        apiGetList<Customer>('Customer', { limit: 1000, fields: ['*'] }),
+      const [so, cust, dn] = await Promise.allSettled([
+        apiGetList<SalesOrder>('Sales Order', { limit: 500, fields: ['name', 'customer', 'customer_name', 'transaction_date', 'grand_total', 'status', 'docstatus', 'delivery_date', 'items'] }),
+        apiGetList<Customer>('Customer', { limit: 500, fields: ['name', 'customer_name', 'customer_type', 'customer_group', 'territory', 'mobile_no', 'email_id'] }),
+        apiGetList<DeliveryNote>('Delivery Note', { limit: 500, fields: ['name', 'customer', 'customer_name', 'posting_date', 'grand_total', 'status', 'docstatus', 'items'] }),
       ]);
-      setSalesOrders(so.status === 'fulfilled' ? so.value.map((o: any) => ({ ...o, items: o.items || [] })) : mockSalesOrders);
-      setCustomers(cust.status === 'fulfilled' ? cust.value : mockCustomers);
-    } catch (err) {
-      console.warn('Failed to fetch Sales Orders/Customers, using mock data:', err);
-      setSalesOrders(mockSalesOrders);
-      setCustomers(mockCustomers);
-    }
 
-    try {
-      const dn = await apiGetList<DeliveryNote>('Delivery Note', { limit: 1000, fields: ['*'] });
-      setDeliveryNotes(dn.map((d: any) => ({ ...d, items: d.items || [] })));
-    } catch (err) {
-      console.warn('Failed to fetch Delivery Notes, using mock data:', err);
-      setDeliveryNotes(mockDeliveryNotes);
-    }
+      const soData  = so.status   === 'fulfilled' ? so.value   : [];
+      const custData = cust.status === 'fulfilled' ? cust.value : [];
+      const dnData  = dn.status   === 'fulfilled' ? dn.value   : [];
 
-    setIsLoading(false);
+      setSalesOrders(
+        isOfflineResult(soData) ? mockSalesOrders : soData.map((o: any) => ({ ...o, items: o.items || [] }))
+      );
+      setCustomers(
+        isOfflineResult(custData) ? mockCustomers : custData
+      );
+      setDeliveryNotes(
+        isOfflineResult(dnData) ? mockDeliveryNotes : dnData.map((d: any) => ({ ...d, items: d.items || [] }))
+      );
+      setLastUpdated(new Date());
+    } catch (err) {
+      console.warn('[Selling] fetch failed:', err);
+      if (!initialLoadDone.current) {
+        setSalesOrders(mockSalesOrders);
+        setCustomers(mockCustomers);
+        setDeliveryNotes(mockDeliveryNotes);
+      }
+    } finally {
+      initialLoadDone.current = true;
+      setIsLoading(false);
+    }
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
-  return { salesOrders, customers, deliveryNotes, isLoading, error, refetch: fetchData };
+  usePolling(fetchData, POLL_INTERVAL_MS);
+
+  return { salesOrders, customers, deliveryNotes, isLoading, error, refetch: fetchData, lastUpdated };
 }
 
 // ─── Stock Module Hook ───────────────────────────────────────────────────────
@@ -230,46 +300,61 @@ export interface StockData extends BaseState {
   bins: Bin[];
   stockEntries: StockEntry[];
   refetch: () => void;
+  lastUpdated: Date | null;
 }
 
 export function useStockData(): StockData {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [items, setItems] = useState<Item[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [bins, setBins] = useState<Bin[]>([]);
   const [stockEntries, setStockEntries] = useState<StockEntry[]>([]);
+  const initialLoadDone = useRef(false);
 
   const fetchData = useCallback(async () => {
-    setIsLoading(true);
+    if (!initialLoadDone.current) setIsLoading(true);
     setError(null);
 
     try {
       const [it, wh, bn, se] = await Promise.allSettled([
-        apiGetList<Item>('Item', { limit: 1000, fields: ['*'] }),
-        apiGetList<Warehouse>('Warehouse', { limit: 1000, fields: ['*'] }),
-        apiGetList<Bin>('Bin', { limit: 1000, fields: ['*'] }),
-        apiGetList<StockEntry>('Stock Entry', { limit: 1000, fields: ['*'] }),
+        apiGetList<Item>('Item', { limit: 500, fields: ['name', 'item_code', 'item_name', 'item_group', 'stock_uom', 'is_stock_item', 'is_fixed_asset', 'disabled', 'standard_rate', 'creation', 'modified'] }),
+        apiGetList<Warehouse>('Warehouse', { limit: 200, fields: ['name', 'warehouse_name', 'company', 'is_group', 'parent_warehouse'] }),
+        apiGetList<Bin>('Bin', { limit: 1000, fields: ['name', 'item_code', 'warehouse', 'actual_qty', 'projected_qty', 'stock_value', 'valuation_rate'] }),
+        apiGetList<StockEntry>('Stock Entry', { limit: 200, fields: ['name', 'stock_entry_type', 'posting_date', 'posting_time', 'company', 'docstatus', 'to_warehouse', 'from_warehouse', 'total_amount', 'modified'] }),
       ]);
 
-      setItems(it.status === 'fulfilled' && it.value.length > 0 ? it.value : mockItems);
-      setWarehouses(wh.status === 'fulfilled' && wh.value.length > 0 ? wh.value : mockWarehouses);
-      setBins(bn.status === 'fulfilled' && bn.value.length > 0 ? bn.value : mockBins);
-      setStockEntries(se.status === 'fulfilled' && se.value.length > 0 ? se.value.map((s: any) => ({ ...s, items: s.items || [] })) : mockStockEntries);
+      const itData = it.status === 'fulfilled' ? it.value : [];
+      const whData = wh.status === 'fulfilled' ? wh.value : [];
+      const bnData = bn.status === 'fulfilled' ? bn.value : [];
+      const seData = se.status === 'fulfilled' ? se.value : [];
 
+      setItems(isOfflineResult(itData) ? mockItems : itData);
+      setWarehouses(isOfflineResult(whData) ? mockWarehouses : whData);
+      setBins(isOfflineResult(bnData) ? mockBins : bnData);
+      setStockEntries(
+        isOfflineResult(seData) ? mockStockEntries : seData.map((s: any) => ({ ...s, items: s.items || [] }))
+      );
+      setLastUpdated(new Date());
     } catch (err) {
-      console.warn('Failed to fetch stock data, using mock data:', err);
-      setItems(mockItems);
-      setWarehouses(mockWarehouses);
-      setBins(mockBins);
-      setStockEntries(mockStockEntries);
+      console.warn('[Stock] fetch failed:', err);
+      if (!initialLoadDone.current) {
+        setItems(mockItems);
+        setWarehouses(mockWarehouses);
+        setBins(mockBins);
+        setStockEntries(mockStockEntries);
+      }
     } finally {
+      initialLoadDone.current = true;
       setIsLoading(false);
     }
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
-  return { items, warehouses, bins, stockEntries, isLoading, error, refetch: fetchData };
+  usePolling(fetchData, POLL_INTERVAL_MS);
+
+  return { items, warehouses, bins, stockEntries, isLoading, error, refetch: fetchData, lastUpdated };
 }
 
 // ─── Manufacturing Module Hook ────────────────────────────────────────────────
@@ -278,54 +363,51 @@ export interface ManufacturingData extends BaseState {
   workOrders: WorkOrder[];
   boms: BOM[];
   refetch: () => void;
+  lastUpdated: Date | null;
 }
 
 export function useManufacturingData(): ManufacturingData {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
   const [boms, setBoms] = useState<BOM[]>([]);
+  const initialLoadDone = useRef(false);
 
   const fetchData = useCallback(async () => {
-    setIsLoading(true);
+    if (!initialLoadDone.current) setIsLoading(true);
     setError(null);
 
     try {
       const [wo, bom] = await Promise.allSettled([
-        apiGetList<WorkOrder>('Work Order', { limit: 1000, fields: ['*'] }),
-        apiGetList<BOM>('BOM', { limit: 1000, fields: ['*'] }),
+        apiGetList<WorkOrder>('Work Order', { limit: 200, fields: ['name', 'production_item', 'item_name', 'bom_no', 'qty', 'produced_qty', 'status', 'planned_start_date', 'planned_end_date', 'company', 'docstatus', 'modified'] }),
+        apiGetList<BOM>('BOM', { limit: 200, fields: ['name', 'item', 'item_name', 'quantity', 'is_active', 'is_default', 'company', 'docstatus', 'modified', 'items'] }),
       ]);
 
-      // Check if offline (apiGetList returns [] with __offline flag when server is down)
-      const woData = wo.status === 'fulfilled' ? wo.value : [];
+      const woData  = wo.status  === 'fulfilled' ? wo.value  : [];
       const bomData = bom.status === 'fulfilled' ? bom.value : [];
-      const isOffline = (woData as any).__offline || (bomData as any).__offline;
 
-      setWorkOrders(
-        woData.length > 0 ? woData : isOffline ? mockWorkOrders : mockWorkOrders
-      );
+      setWorkOrders(isOfflineResult(woData) ? mockWorkOrders : woData);
       setBoms(
-        bomData.length > 0
-          ? bomData.map((b: any) => ({ ...b, items: b.items || [] }))
-          : mockBOMs
+        isOfflineResult(bomData) ? mockBOMs : bomData.map((b: any) => ({ ...b, items: b.items || [] }))
       );
-
-      // Only show error for real API errors (not offline)
-      if (wo.status === 'rejected' && !(wo.reason?.message?.includes('503') || wo.reason?.message?.includes('offline'))) {
-        console.debug('[Manufacturing] Work Order fetch failed, using mock data');
-      }
+      setLastUpdated(new Date());
     } catch (err) {
-      // Silently fall back to mock — don't show error banner
-      console.debug('[Manufacturing] Fetch failed, using mock data:', (err as Error)?.message);
-      setWorkOrders(mockWorkOrders);
-      setBoms(mockBOMs);
+      console.debug('[Manufacturing] fetch failed, using mock data:', (err as Error)?.message);
+      if (!initialLoadDone.current) {
+        setWorkOrders(mockWorkOrders);
+        setBoms(mockBOMs);
+      }
     } finally {
+      initialLoadDone.current = true;
       setIsLoading(false);
     }
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
-  return { workOrders, boms, isLoading, error, refetch: fetchData };
+  usePolling(fetchData, POLL_INTERVAL_MS);
+
+  return { workOrders, boms, isLoading, error, refetch: fetchData, lastUpdated };
 }
 
 // ─── User Management Hook ─────────────────────────────────────────────────────
@@ -336,6 +418,7 @@ export interface UserData extends BaseState {
   createUser: (data: Partial<FrappeUser>) => Promise<FrappeUser>;
   updateUser: (name: string, data: Partial<FrappeUser>) => Promise<FrappeUser>;
   deleteUser: (name: string) => Promise<void>;
+  lastUpdated: Date | null;
 }
 
 const MOCK_USERS: FrappeUser[] = [
@@ -350,34 +433,71 @@ const MOCK_USERS: FrappeUser[] = [
 export function useUserData(): UserData {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [users, setUsers] = useState<FrappeUser[]>([]);
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     setError(null);
 
+    const mergedMap = new Map<string, FrappeUser>();
+
+    // 1. Fetch from PostgreSQL Database (primary source for local users)
     try {
-      const data = await apiGetList<FrappeUser>('User', { limit: 1000, fields: ['*'] });
-
-      // __offline flag is set by apiGetList when server is unreachable
-      const isOffline = (data as any).__offline;
-
-      if (isOffline || data.length < 2) {
-        // Server offline or only returned 1 user (Guest/Administrator only)
-        // Use mock data silently — no error banner
-        setUsers(MOCK_USERS);
-        setError(null); // don't show an error banner
-      } else {
-        setUsers(data);
+      const pgRes = await fetch('/api/auth/users');
+      if (pgRes.ok) {
+        const pgData = await pgRes.json();
+        (pgData.users || []).forEach((u: any) => {
+          mergedMap.set(u.email, {
+            name: u.name || u.email,
+            full_name: u.full_name || u.email,
+            first_name: u.first_name || '',
+            last_name: u.last_name || '',
+            email: u.email,
+            enabled: 1,
+            user_type: 'System User',
+            role: u.role || undefined, // Preserve role from DB
+            creation: u.creation || new Date().toISOString(),
+            modified: u.creation || new Date().toISOString(),
+          } as any);
+        });
       }
-    } catch (err) {
-      // Silent fallback — server being down is expected in dev
-      console.debug('[Users] Fetch failed, using mock data');
-      setUsers(MOCK_USERS);
-      setError(null);
-    } finally {
-      setIsLoading(false);
+    } catch (pgErr) {
+      console.debug('[Users] PostgreSQL fetch failed:', pgErr);
     }
+
+    // 2. Fetch from Frappe API (secondary source, may have limited results)
+    try {
+      const data = await apiGetList<FrappeUser>('User', { 
+        limit: 500, 
+        fields: ['name', 'full_name', 'first_name', 'last_name', 'email', 'enabled', 'user_type', 'creation', 'modified'],
+        filters: [['User', 'user_type', '!=', 'Website User']]
+      });
+
+      if (!isOfflineResult(data)) {
+        data.forEach(u => {
+          // Frappe data takes priority if the user exists in both
+          if (u.email) {
+            mergedMap.set(u.email, { ...mergedMap.get(u.email), ...u });
+          }
+        });
+      }
+    } catch (frappeErr) {
+      console.debug('[Users] Frappe API fetch failed:', frappeErr);
+    }
+
+    // 3. Combine results
+    const allUsers = Array.from(mergedMap.values());
+    
+    if (allUsers.length > 0) {
+      setUsers(allUsers);
+    } else {
+      // Fallback to mock if both sources failed
+      setUsers(MOCK_USERS);
+    }
+    
+    setLastUpdated(new Date());
+    setIsLoading(false);
   }, []);
 
   const createUser = useCallback(async (data: Partial<FrappeUser>): Promise<FrappeUser> => {
@@ -395,10 +515,10 @@ export function useUserData(): UserData {
     catch { throw new Error('Gagal hapus user. Server tidak tersedia.'); }
   }, [fetchData]);
 
-  // Single fetch on mount (fetchData is stable via useCallback)
   useEffect(() => { fetchData(); }, [fetchData]);
+  usePolling(fetchData, POLL_INTERVAL_MS);
 
-  return { users, isLoading, error, refetch: fetchData, createUser, updateUser, deleteUser };
+  return { users, isLoading, error, refetch: fetchData, createUser, updateUser, deleteUser, lastUpdated };
 }
 
 // ─── Legacy export (backward compat) ─────────────────────────────────────────

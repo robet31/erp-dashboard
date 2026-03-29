@@ -14,12 +14,23 @@ import type { FrappeUser } from '@/lib/frappe-types';
 import { ROLES, type UserRole } from '@/config/rbac';
 
 function CreateUserModal({ onClose, editingUser, onSuccess }: { onClose: () => void; editingUser?: FrappeUser | null; onSuccess: () => void }) {
+  // Get role from user data (database source) or fallback
+  const getUserRole = (user: FrappeUser | null | undefined): UserRole => {
+    if (!user) return 'admin_sales';
+    // Check the role field from DB (set by /api/auth/users)
+    const dbRole = (user as any).role;
+    if (dbRole && ROLES.some(r => r.id === dbRole)) return dbRole as UserRole;
+    // Fallback to localStorage for legacy data
+    const roleMap = JSON.parse(localStorage.getItem('erp_user_roles') || '{}');
+    return (roleMap[user.email] as UserRole) || 'admin_sales';
+  };
+
   const [form, setForm] = useState({
     email: editingUser?.email || '',
     first_name: editingUser?.first_name || editingUser?.full_name?.split(' ')[0] || '',
     last_name: editingUser?.last_name || editingUser?.full_name?.split(' ').slice(1).join(' ') || '',
     enabled: editingUser?.enabled !== undefined ? editingUser.enabled : 1,
-    role: editingUser ? getStoredRole(editingUser.email) : 'admin_sales' as UserRole,
+    role: getUserRole(editingUser) as UserRole,
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -27,13 +38,18 @@ function CreateUserModal({ onClose, editingUser, onSuccess }: { onClose: () => v
 
   const currentRole = ROLES.find(r => r.id === form.role) || ROLES[2];
 
-  function getStoredRole(email: string | undefined): UserRole {
-    if (!email) return 'admin_sales';
-    const roleMap = JSON.parse(localStorage.getItem('erp_user_roles') || '{}');
-    return (roleMap[email] as UserRole) || 'admin_sales';
-  }
-
-  function saveRoleMapping(email: string, role: UserRole) {
+  // Save role to both database and localStorage (for backward compat)
+  async function saveRoleToDB(email: string, role: UserRole, fullName?: string) {
+    try {
+      await fetch('/api/auth/users', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, role, full_name: fullName }),
+      });
+    } catch (err) {
+      console.warn('Failed to save role to DB, using localStorage fallback:', err);
+    }
+    // Always save to localStorage as fallback
     const roleMap = JSON.parse(localStorage.getItem('erp_user_roles') || '{}');
     roleMap[email] = role;
     localStorage.setItem('erp_user_roles', JSON.stringify(roleMap));
@@ -80,22 +96,13 @@ function CreateUserModal({ onClose, editingUser, onSuccess }: { onClose: () => v
       }
     }
 
-    // Always save to database (or sync queue for demo/offline mode)
+    // Always save to database
     try {
+      const fullName = `${form.first_name} ${form.last_name}`.trim();
+
       if (editingUser) {
-        // Edit flow
-        const existingUsers = JSON.parse(localStorage.getItem('erp_users') || '[]');
-        const idx = existingUsers.findIndex((u: any) => u.email === editingUser.email);
-        if (idx >= 0) {
-          existingUsers[idx] = { 
-            ...existingUsers[idx], 
-            first_name: form.first_name, 
-            last_name: form.last_name, 
-            enabled: form.enabled,
-            role: form.role 
-          };
-          localStorage.setItem('erp_users', JSON.stringify(existingUsers));
-        }
+        // Edit flow: update role + name in PostgreSQL
+        await saveRoleToDB(form.email, form.role, fullName);
         
         // Add to sync queue if API failed and user exists in ERP
         if (!apiSuccess && !userNotInERP) {
@@ -111,7 +118,7 @@ function CreateUserModal({ onClose, editingUser, onSuccess }: { onClose: () => v
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
-            full_name: `${form.first_name} ${form.last_name}`.trim(), 
+            full_name: fullName, 
             email: form.email, 
             password: 'password123', // Default
             role: form.role 
@@ -125,6 +132,9 @@ function CreateUserModal({ onClose, editingUser, onSuccess }: { onClose: () => v
           return;
         }
 
+        // Also save role mapping
+        await saveRoleToDB(form.email, form.role, fullName);
+
         // Add to sync queue if ERP sync failed
         if (!apiSuccess && !userNotInERP) {
           addToSyncQueue({
@@ -135,14 +145,12 @@ function CreateUserModal({ onClose, editingUser, onSuccess }: { onClose: () => v
         }
       }
       
-      saveRoleMapping(form.email, form.role);
-      
       if (apiSuccess) {
         alert('✅ User berhasil disimpan ke ERP & Database!');
       } else if (userNotInERP) {
-        alert('⚠️ User disimpan (Database saja - tidak ada di ERP, hubungi admin untuk sinkronisasi manual)');
+        alert('✅ User berhasil disimpan ke Database!');
       } else {
-        alert('⚠️ User berhasil disimpan! (Database Mode - akan sync ke ERP saat koneksi tersedia)');
+        alert('✅ User berhasil disimpan! (akan sync ke ERP saat koneksi tersedia)');
       }
       
       onSuccess();
@@ -371,7 +379,7 @@ export default function UsersPage() {
   ];
 
   return (
-    <div style={{ fontFamily: "'Montserrat', sans-serif", animation: 'fadeIn 0.3s ease-out' }}>
+    <div style={{ fontFamily: "'Poppins', sans-serif", animation: 'fadeIn 0.3s ease-out' }}>
       {/* Loading/Error State */}
       {isLoading && (
         <div style={{ textAlign: 'center', padding: '20px', color: '#6B7280' }}>
@@ -410,32 +418,7 @@ export default function UsersPage() {
             <p style={{ fontSize: '13px', color: '#6B7280' }}>Manajemen akun user dan role akses sistem</p>
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
-            {/* Sync Status Indicator */}
-            {pendingCount > 0 && (
-              <div style={{ 
-                display: 'flex', alignItems: 'center', gap: '6px',
-                padding: '8px 12px', background: '#fff7ed', border: '1px solid #fed7aa',
-                borderRadius: '8px', fontSize: '12px', fontWeight: 600, color: '#c2410c'
-              }}>
-                <CloudOff size={14} />
-                {pendingCount} pending sync
-              </div>
-            )}
-            <button 
-              onClick={() => syncAll()} 
-              disabled={isSyncing || pendingCount === 0}
-              style={{ 
-                display: 'flex', alignItems: 'center', gap: '6px',
-                padding: '8px 14px', background: pendingCount > 0 ? '#f97316' : 'white', 
-                border: '1px solid #e5e7eb',
-                borderRadius: '8px', fontSize: '13px', fontWeight: 600, 
-                color: pendingCount > 0 ? 'white' : '#374151', 
-                cursor: pendingCount > 0 ? 'pointer' : 'not-allowed',
-                opacity: isSyncing ? 0.7 : 1
-              }}
-            >
-              <Cloud size={14} /> {isSyncing ? 'Syncing...' : 'Sync ERP'}
-            </button>
+
             <button 
               onClick={() => refetch()} 
               style={{ 
@@ -494,7 +477,7 @@ export default function UsersPage() {
                 fontSize: '13px', 
                 width: '100%',
                 outline: 'none',
-                fontFamily: "'Montserrat', sans-serif"
+                fontFamily: "'Poppins', sans-serif"
               }} 
             />
           </div>
@@ -538,8 +521,10 @@ export default function UsersPage() {
                   <td style={{ padding: '12px', color: '#6B7280', fontSize: '13px' }}>{user.email}</td>
                   <td style={{ padding: '12px' }}>
                     {(() => {
-                      const roleMap = JSON.parse(localStorage.getItem('erp_user_roles') || '{}');
-                      const userRole = roleMap[user.email] || 'admin_sales';
+                      // Read role from DB data first (returned by API), then fallback to localStorage
+                      const dbRole = (user as any).role;
+                      const localRoleMap = JSON.parse(localStorage.getItem('erp_user_roles') || '{}');
+                      const userRole = (dbRole && ROLES.some(r => r.id === dbRole)) ? dbRole : (localRoleMap[user.email] || 'admin_sales');
                       const roleConfig = ROLES.find(r => r.id === userRole) || ROLES[2];
                       return (
                         <span style={{ 
@@ -635,7 +620,7 @@ export default function UsersPage() {
           font-size: 14px;
           outline: none;
           transition: all 0.2s;
-          font-family: 'Montserrat', sans-serif;
+          font-family: 'Poppins', sans-serif;
         }
         .erp-input:focus {
           border-color: #0066B3;
