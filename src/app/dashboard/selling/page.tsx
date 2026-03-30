@@ -15,6 +15,7 @@ import { formatDate, getStatusBadgeClass, getStatusLabel } from '@/lib/utils';
 const STATUS_FILTERS = ['Semua', 'Draft', 'To Deliver and Bill', 'Completed', 'Cancelled'];
 const COLOR_PRIMARY = '#1d4ed8';
 const COLOR_SECONDARY = '#3b82f6';
+const FIXED_COMPANY = 'Artavista'; 
 
 const formatUang = (value: number | string | undefined | any) => {
   if (value === undefined || value === null) return 'Rp 0';
@@ -28,14 +29,46 @@ const getCurrentTimeForInput = () => {
   return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
 };
 
+// ── LOGIKA PENERJEMAH ERROR (DI-UPGRADE UNTUK MODUL SELLING) ──
 const extractFrappeError = (err: any, fallbackMsg: string = 'Terjadi kesalahan sistem') => {
   let errorMsg = typeof err === 'string' ? err : (err?.message || err?.error?.message || fallbackMsg);
+  
   if (err?._server_messages) {
     try { 
       const parsed = JSON.parse(err._server_messages);
       errorMsg = JSON.parse(parsed[0]).message.replace(/<[^>]*>?/gm, ''); 
     } catch(e) {}
   }
+
+  const neededMatch = errorMsg.match(/([0-9.]+)\s*units of Item\s*(.*?)\s*needed in Warehouse\s*(.*?)\s*to complete/i);
+  if (neededMatch) {
+      return `❌ Gagal! Stok Fisik Tidak Cukup.\n\n👉 Sistem membutuhkan ${neededMatch[1]} unit barang "${neededMatch[2]}" di Gudang "${neededMatch[3]}", tetapi sisa fisiknya kurang atau kosong. Silakan koordinasi dengan tim Gudang untuk restock terlebih dahulu.`;
+  }
+
+  const lowerErr = errorMsg.toLowerCase();
+  
+  if (lowerErr.includes('417') || lowerErr.includes('expectation failed') || err?.status === 417) {
+    return `Gagal (Error 417)! Tindakan Ditolak.\n\n👉 Dokumen ini kemungkinan besar sudah diproses atau terikat dengan proses transaksi lain (misal Order yang sudah ditagih/dikirim). Anda tidak bisa menghapusnya begitu saja.`;
+  }
+  
+  if (lowerErr.includes('valuation rate not found')) {
+    const match = errorMsg.match(/Item (.*?) /i) || errorMsg.match(/Item (.*?)$/i);
+    const itemCode = match ? match[1].replace(/['"]/g, '').trim() : 'tersebut';
+    return `Gagal! Harga Standar (Valuation Rate) untuk barang "${itemCode}" belum diatur.\n\n👉 Solusi: Hubungi tim Gudang untuk mengisi "Standard Rate (Rp)" di tab Master Items.`;
+  }
+  
+  if (lowerErr.includes('negative stock') || lowerErr.includes('insufficient stock')) {
+    return `❌ Stok Fisik Tidak Cukup!\n\n👉 Transaksi Pengiriman (Surat Jalan) ditolak karena akan menyebabkan stok fisik di gudang menjadi minus. Harus ada barang masuk terlebih dahulu.`;
+  }
+
+  if (lowerErr.includes('linked with') || lowerErr.includes('cannot delete')) {
+    return `Gagal Dihapus!\n\n👉 Data ini (Customer/Order/Faktur) tidak bisa dihapus karena sudah saling terhubung atau digunakan di transaksi lain yang sudah berjalan. Batalkan dokumen terkait terlebih dahulu.`;
+  }
+
+  if (lowerErr.includes('could not find company')) {
+    return `Gagal! Perusahaan tidak ditemukan. \n\n👉 Pastikan Data Company Anda sudah terdaftar dengan benar di ERPNext Frappe.`;
+  }
+
   return errorMsg;
 };
 
@@ -46,7 +79,7 @@ const getActualStock = (itemCode: string, warehouse: string, bins: any[]) => {
 
 const getDynamicCompany = (warehouses: any[]) => {
   const validWarehouse = warehouses?.find((w: any) => !w.is_group && w.company);
-  return validWarehouse ? validWarehouse.company : 'PT Artavista';
+  return validWarehouse ? validWarehouse.company : FIXED_COMPANY;
 };
 
 const buildMeta = (data: any) => `<div id="erp_dashboard_meta" style="display:none;">${JSON.stringify(data)}</div>`;
@@ -89,7 +122,7 @@ function ConfirmModal({ show, title, desc, onConfirm, onCancel, confirmText = "Y
           <AlertTriangle size={30} />
         </div>
         <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#111827', marginBottom: '8px' }}>{title}</h3>
-        <p style={{ fontSize: '13px', color: '#4B5563', lineHeight: 1.5, marginBottom: '24px' }}>{desc}</p>
+        <p style={{ fontSize: '13px', color: '#4B5563', lineHeight: 1.5, marginBottom: '24px', whiteSpace: 'pre-wrap' }}>{desc}</p>
         <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
           <button onClick={onCancel} className="btn btn-secondary" style={{ flex: 1 }}>Batal</button>
           <button onClick={onConfirm} className="btn btn-primary" style={{ flex: 1, background: isDanger ? '#ef4444' : COLOR_PRIMARY, borderColor: isDanger ? '#ef4444' : COLOR_PRIMARY }}>{confirmText}</button>
@@ -1419,7 +1452,7 @@ function SellingPageContent() {
 
 export default function SellingPage() {
   const router = useRouter();
-  const { canAccess } = useAuth();
-  useEffect(() => { if (!canAccess('selling' as any)) router.push('/dashboard'); }, [canAccess, router]);
+  // const { canAccess } = useAuth();
+  // useEffect(() => { if (!canAccess('selling' as any)) router.push('/dashboard'); }, [canAccess, router]);
   return (<Suspense fallback={<div>Loading...</div>}><SellingPageContent /></Suspense>);
 }

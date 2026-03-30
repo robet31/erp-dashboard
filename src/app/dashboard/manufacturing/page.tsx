@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/providers/auth-provider';
-import { useManufacturingData, useStockData, useSellingData } from '@/hooks/useFrappeData';
+import { useManufacturingData, useStockData } from '@/hooks/useFrappeData';
 import {
   Cog, Plus, X, Trash2, Eye, Search, Layers, Wrench, PlayCircle, CheckCircle, AlertCircle, Send, Timer, MonitorPlay, CheckSquare, Loader2, Info, AlertTriangle, MapPin
 } from 'lucide-react';
@@ -28,28 +28,36 @@ const extractFrappeError = (err: any, fallbackMsg: string = 'Terjadi kesalahan s
 
   const lowerErr = errorMsg.toLowerCase();
 
-  if (lowerErr.includes('time logs are required')) {
-    return `Gagal Disahkan! Frappe membutuhkan catatan waktu (Time Log).\n\n👉 Sistem aplikasi sedang mencoba menambahkan catatan waktu otomatis. Silakan coba klik Submit sekali lagi.`;
-  }
-
   if (lowerErr.includes('could not find company')) {
     const companyMatch = errorMsg.match(/Company:\s*(.*)/i);
     const companyName = companyMatch ? companyMatch[1].replace(/['"]/g, '').trim() : FIXED_COMPANY;
-    return `Gagal Menyimpan! Perusahaan "${companyName}" belum terdaftar di database.\n\n👉 Solusi: Buka sistem ERPNext/Frappe Anda, cari menu "Company", lalu buat perusahaan baru dengan nama persis "${companyName}". Setelah itu coba proses lagi di sini.`;
+    return `🏢 Perusahaan Belum Terdaftar di Database!\n\nSistem ditolak karena Perusahaan bernama "${companyName}" belum terdaftar di database utama ERPNext.\n\n🛠️ CARA MENGATASI:\n1. Buka ERPNext / Frappe Anda di tab baru.\n2. Ketik "Company" di kolom pencarian atas.\n3. Klik "+ Add Company" (Tambah Perusahaan).\n4. Isi kolom nama dengan persis: ${companyName}\n5. Simpan (Save).`;
+  }
+
+  if (lowerErr.includes('time logs are required')) {
+    return `⏳ Gagal Disahkan! Butuh Catatan Waktu (Time Log).\n\n👉 Sistem Frappe mewajibkan pencatatan waktu untuk tugas ini.`;
+  }
+  
+  if (lowerErr.includes('manufactured qty') || lowerErr.includes('fg_completed_qty')) {
+    return `📦 Gagal Mutasi Gudang! Kuantitas Kosong.\n\n👉 Pastikan Anda mengisi jumlah rakitan (Quantity) lebih dari 0 agar sistem tahu berapa barang yang harus dimasukkan ke gudang.`;
   }
   
   if (lowerErr.includes('valuation rate not found')) {
     const match = errorMsg.match(/Item (.*?) /i) || errorMsg.match(/Item (.*?)$/i);
     const itemCode = match ? match[1].replace(/['"]/g, '').trim() : 'tersebut';
-    return `Gagal! Harga Standar (Valuation Rate) untuk komponen "${itemCode}" belum diatur.\n\n👉 Solusi: Buka menu Gudang > Master Items, klik Edit pada barang ini, dan isi "Standard Rate (Rp)". Sistem pabrik butuh nilai ini untuk menghitung biaya produksi.`;
+    return `💰 Harga Standar Belum Diatur!\n\nSistem pabrik butuh nilai harga bahan baku "${itemCode}" untuk menghitung biaya produksi keseluruhan.\n\n🛠️ CARA MENGATASI:\n👉 Buka menu "Gudang" > "Master Items", klik Edit pada barang ${itemCode}, lalu isi nominal "Standard Rate (Rp)".`;
   }
 
   if (lowerErr.includes('not found') && (lowerErr.includes('operation') || lowerErr.includes('workstation'))) {
-    return `Gagal Menyimpan! Operation atau Workstation yang Anda ketik belum ada di Frappe.\n\n👉 Solusi: Pastikan Anda mengetik nama Operation (misal: Perakitan) dan Workstation yang sudah terdaftar di master data Manufacturing ERPNext Anda.`;
+    return `⚙️ Operation / Workstation Tidak Ditemukan\n\nNama Proses (Operation) atau Meja Kerja (Workstation) yang Anda ketik belum terdaftar.`;
   }
   
   if (lowerErr.includes('linked with') || lowerErr.includes('cannot delete')) {
-    return `Gagal Dihapus!\n\n👉 Dokumen ini tidak bisa dihapus karena sudah digunakan di transaksi lain (misalnya Work Order yang sudah berjalan). Batalkan dulu transaksi yang terkait jika ingin menghapusnya.`;
+    return `🔒 Gagal Menghapus Data\n\nDokumen ini sudah dikunci karena saling terhubung dengan transaksi lain (misal: Surat Perintah Kerja yang sudah berjalan).\n\n👉 Solusi: Anda harus membatalkan (Cancel) dokumen terkaitnya terlebih dahulu.`;
+  }
+  
+  if (lowerErr.includes('negative stock') || lowerErr.includes('insufficient stock')) {
+    return `❌ Stok Fisik Tidak Cukup di Gudang Sumber!\n\n👉 Transaksi ditolak karena akan menyebabkan sisa fisik di gudang menjadi minus.`;
   }
 
   return errorMsg;
@@ -89,7 +97,7 @@ function Toast({ show, message, type }: { show: boolean, message: string, type: 
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
         {message.split('\n').map((line, i) => (
-          <span key={i} style={{ lineHeight: 1.4, fontWeight: line.includes('👉') ? 800 : 500 }}>
+          <span key={i} style={{ lineHeight: 1.4, fontWeight: line.includes('👉') || line.includes('🛠️') ? 800 : 500 }}>
             {line}
           </span>
         ))}
@@ -122,15 +130,30 @@ const getDynamicCompany = (warehouses: any[]) => {
   return validWarehouse ? validWarehouse.company : FIXED_COMPANY;
 };
 
+const getActualStock = (itemCode: string, warehouse: string, bins: any[]) => {
+  const bin = bins.find((b: any) => b.item_code === itemCode && b.warehouse === warehouse);
+  return bin ? Number(bin.actual_qty) : 0;
+};
+
 // ==========================================
 // 1. MODAL CREATE & PREVIEW BOM
 // ==========================================
-function CreateBOMModal({ onClose, items, warehouses, onSuccess, showToast }: any) {
-  const defaultCompany = useMemo(() => getDynamicCompany(warehouses), [warehouses]);
+function CreateBOMModal({ onClose, items, bins, onSuccess, showToast }: any) {
   const [form, setForm] = useState({ item: '', quantity: '1' });
   const [bomItems, setBomItems] = useState([{ item_code: '', qty: 1 }]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+
+  const getGlobalStock = (itemCode: string) => {
+    if (!itemCode) return 0;
+    return (bins || [])
+      .filter((b: any) => b.item_code === itemCode)
+      .reduce((sum: number, b: any) => sum + Number(b.actual_qty), 0);
+  };
+
+  const hasEmptyStock = useMemo(() => {
+    return bomItems.some(bi => bi.item_code && getGlobalStock(bi.item_code) <= 0);
+  }, [bomItems, bins]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -138,6 +161,10 @@ function CreateBOMModal({ onClose, items, warehouses, onSuccess, showToast }: an
     if (bomItems.some(bi => !bi.item_code)) return setError("Pilih semua bahan baku.");
     if (Number(form.quantity) <= 0) return setError("Target produksi BOM harus lebih dari 0.");
     
+    if (hasEmptyStock) {
+      return setError("❌ Tidak bisa membuat resep! Salah satu bahan baku memiliki stok 0 di gudang. Harap isi stok (Stock Entry) terlebih dahulu.");
+    }
+
     setIsSubmitting(true); setError('');
     try {
       const selectedMainItem = (items || []).find((i: any) => i.item_code === form.item);
@@ -145,7 +172,7 @@ function CreateBOMModal({ onClose, items, warehouses, onSuccess, showToast }: an
         item: form.item, 
         quantity: parseFloat(form.quantity), 
         uom: selectedMainItem?.stock_uom || 'Nos',
-        company: defaultCompany, 
+        company: FIXED_COMPANY, 
         is_active: 1, 
         items: bomItems.map((bi: any) => {
           const itemDetail = (items || []).find((it: any) => it.item_code === bi.item_code);
@@ -155,7 +182,6 @@ function CreateBOMModal({ onClose, items, warehouses, onSuccess, showToast }: an
       
       const { apiCreate, apiUpdate } = await import('@/lib/api');
       const res: any = await apiCreate('BOM', bomData);
-      
       const docName = res.data?.name || res.name;
       if(docName) await apiUpdate('BOM', docName, { docstatus: 1 });
       
@@ -172,14 +198,9 @@ function CreateBOMModal({ onClose, items, warehouses, onSuccess, showToast }: an
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px', alignItems: 'center' }}>
           <div>
             <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#111827', margin: 0 }}>Buat Resep Baru (BOM)</h2>
-            <p style={{ fontSize: '12px', color: '#6B7280', marginTop: '2px' }}>Bill of Materials untuk panduan pabrik</p>
+            <p style={{ fontSize: '12px', color: '#6B7280', marginTop: '2px' }}>Pastikan bahan baku tersedia di gudang.</p>
           </div>
           <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', color: '#6B7280' }}><X size={20} /></button>
-        </div>
-        
-        <div style={{ background: '#eff6ff', padding: '12px', borderRadius: '8px', border: `1px solid ${COLOR_PRIMARY}30`, display: 'flex', gap: '8px', marginBottom: '16px' }}>
-          <Info size={16} color={COLOR_PRIMARY} style={{ flexShrink: 0, marginTop: '2px' }} />
-          <p style={{ fontSize: '11px', color: '#1e3a8a', lineHeight: 1.4, margin: 0 }}>BOM (Bill of Materials) adalah resep. Sistem butuh tahu barang apa yang ingin dihasilkan dan komponen apa saja yang harus diambil dari gudang.</p>
         </div>
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
@@ -198,39 +219,50 @@ function CreateBOMModal({ onClose, items, warehouses, onSuccess, showToast }: an
           </div>
           
           <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '16px', marginTop: '4px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-              <p className="section-title" style={{ margin: 0, padding: 0, border: 'none' }}>Daftar Bahan Baku (Komponen)</p>
-            </div>
+            <p className="section-title" style={{ margin: 0, padding: 0, border: 'none', marginBottom: '12px' }}>Daftar Bahan Baku (Komponen)</p>
             
-            {bomItems.map((bi, i) => (
-              <div key={i} style={{ display: 'flex', gap: '8px', marginBottom: '10px', alignItems: 'center' }} className="mobile-flex-col">
-                <div style={{ flex: 3 }}>
-                  <select className="erp-input" value={bi.item_code} onChange={e => { const n = [...bomItems]; n[i].item_code = e.target.value; setBomItems(n); }}>
-                    <option value="">-- Pilih Komponen --</option>
-                    {(items || []).map((it: any) => <option key={it.name} value={it.item_code}>{it.item_code}</option>)}
-                  </select>
+            {bomItems.map((bi, i) => {
+              const currentStock = getGlobalStock(bi.item_code);
+              return (
+                <div key={i} style={{ marginBottom: '15px', padding: '10px', background: currentStock <= 0 && bi.item_code ? '#fff1f2' : '#f8fafc', borderRadius: '8px', border: `1px solid ${currentStock <= 0 && bi.item_code ? '#fecaca' : '#e2e8f0'}` }}>
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                    <div style={{ flex: 3 }}>
+                      <select className="erp-input" value={bi.item_code} onChange={e => { const n = [...bomItems]; n[i].item_code = e.target.value; setBomItems(n); }}>
+                        <option value="">-- Pilih Bahan Mentah --</option>
+                        {(items || []).map((it: any) => <option key={it.name} value={it.item_code}>{it.item_code}</option>)}
+                      </select>
+                    </div>
+                    <input style={{ flex: 1, textAlign: 'center' }} type="number" min="0.1" step="any" placeholder="Qty" className="erp-input" value={bi.qty} onChange={e => { const n = [...bomItems]; n[i].qty = Number(e.target.value); setBomItems(n); }} />
+                    <button type="button" onClick={() => setBomItems(bomItems.filter((_, idx) => idx !== i))} style={{ color: '#ef4444', border:'none', background:'none', cursor:'pointer' }}><Trash2 size={16} /></button>
+                  </div>
+                  {bi.item_code && (
+                    <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', fontWeight: 700, color: currentStock > 0 ? '#059669' : '#dc2626' }}>
+                      {currentStock > 0 ? <CheckCircle size={12}/> : <AlertTriangle size={12}/>}
+                      Stok Saat Ini: {currentStock} Unit {currentStock <= 0 && "(Kosong! Tidak bisa produksi)"}
+                    </div>
+                  )}
                 </div>
-                <div style={{ display: 'flex', gap: '8px', flex: 1, alignItems: 'center' }}>
-                  <input style={{ flex: 1, textAlign: 'center' }} type="number" min="0.1" step="any" placeholder="Qty" className="erp-input" value={bi.qty} onChange={e => { const n = [...bomItems]; n[i].qty = Number(e.target.value); setBomItems(n); }} />
-                  {bomItems.length > 1 && <button type="button" onClick={() => setBomItems(bomItems.filter((_, idx) => idx !== i))} style={{ color: '#ef4444', border:'none', background:'#fee2e2', padding: '6px', borderRadius: '6px', cursor: 'pointer', display: 'flex' }}><Trash2 size={14} /></button>}
-                </div>
-              </div>
-            ))}
-            <button type="button" className="btn btn-secondary btn-sm mobile-full-width" onClick={() => setBomItems([...bomItems, { item_code: '', qty: 1 }])} style={{ color: COLOR_PRIMARY, borderColor: COLOR_PRIMARY, background: '#eff6ff', marginTop: '4px' }} disabled={bomItems[bomItems.length - 1].item_code === ''}>+ Tambah Bahan Lain</button>
+              );
+            })}
+            <button type="button" className="btn btn-secondary btn-sm mobile-full-width" onClick={() => setBomItems([...bomItems, { item_code: '', qty: 1 }])} style={{ color: COLOR_PRIMARY, borderColor: COLOR_PRIMARY, background: '#eff6ff', marginTop: '4px' }}>+ Tambah Bahan Lain</button>
           </div>
           
           {error && (
-            <div className="error-box" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '8px' }}>
+            <div className="error-box" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '8px', marginTop: '16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><AlertCircle size={16}/> <span>Ada Kendala:</span></div>
               {error.split('\n').map((line, idx) => (
-                <span key={idx} style={{ fontWeight: line.includes('👉') ? 800 : 500, fontSize: '12px' }}>{line}</span>
+                line.trim() === '' 
+                ? <div key={idx} style={{ height: '4px' }} /> 
+                : <span key={idx} style={{ fontWeight: line.includes('👉') || line.includes('🛠️') ? 800 : 500, fontSize: '12px', lineHeight: 1.5 }}>{line}</span>
               ))}
             </div>
           )}
           
           <div className="modal-footer">
             <button type="button" onClick={onClose} className="btn btn-secondary mobile-btn" disabled={isSubmitting}>Batal</button>
-            <button type="submit" className="btn btn-primary mobile-btn" style={{ background: COLOR_PRIMARY, borderColor: COLOR_PRIMARY }} disabled={isSubmitting}>{isSubmitting ? 'Memproses...' : 'Simpan & Aktifkan BOM'}</button>
+            <button type="submit" className="btn btn-primary mobile-btn" style={{ background: hasEmptyStock ? '#94a3b8' : COLOR_PRIMARY, borderColor: hasEmptyStock ? '#94a3b8' : COLOR_PRIMARY }} disabled={isSubmitting || hasEmptyStock}>
+              {isSubmitting ? 'Memproses...' : (hasEmptyStock ? 'Stok Bahan Mentah Habis' : 'Simpan & Aktifkan BOM')}
+            </button>
           </div>
         </form>
       </div>
@@ -285,7 +317,7 @@ function DetailBOMModal({ bom, workOrders, onClose }: any) {
 
             {isUsed && (
               <div style={{ background: '#eff6ff', padding: '12px', borderRadius: '8px', border: '1px dashed #bfdbfe', marginBottom: '16px' }}>
-                <p style={{ fontSize: '11px', color: '#1e40af', fontWeight: 700, marginBottom: '4px' }}>DIPAKAI OLEH WORK ORDER:</p>
+                <p style={{ fontSize: '11px', color: '#1e40af', fontWeight: 700, marginBottom: '4px' }}>LINKED WORK ORDERS:</p>
                 <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                   {usedInWOs.map((wo: any) => <span key={wo.name} style={{ background: 'white', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 600, border: '1px solid #bfdbfe', color: '#1e3a8a' }}>{wo.name}</span>)}
                 </div>
@@ -320,7 +352,7 @@ function DetailBOMModal({ bom, workOrders, onClose }: any) {
 // ==========================================
 // 2. MODAL CREATE & PREVIEW WORK ORDER
 // ==========================================
-function CreateWorkOrderModal({ onClose, boms, warehouses, onSuccess, showToast }: any) {
+function CreateWorkOrderModal({ onClose, boms, warehouses, bins, onSuccess, showToast }: any) {
   const defaultCompany = useMemo(() => getDynamicCompany(warehouses), [warehouses]);
   const activeWarehouses = useMemo(() => (warehouses || []).filter((w: any) => w.type === 'Stores' || !w.is_group), [warehouses]);
 
@@ -330,21 +362,42 @@ function CreateWorkOrderModal({ onClose, boms, warehouses, onSuccess, showToast 
     qty: '1', 
     source_warehouse: '', 
     wip_warehouse: '', 
-    fg_warehouse: '',
-    scrap_warehouse: ''
+    fg_warehouse: ''
   });
   
+  const [fullBomDetails, setFullBomDetails] = useState<any>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
 
-  const handleBOMChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+  const requiredMaterials = useMemo(() => {
+    if (!fullBomDetails || !fullBomDetails.items) return [];
+    return fullBomDetails.items.map((rm: any) => {
+      const requiredPerUnit = Number(rm.qty) / Number(fullBomDetails.quantity || 1);
+      const totalRequired = requiredPerUnit * Number(form.qty || 0);
+      const available = getActualStock(rm.item_code, form.source_warehouse, bins);
+      return { ...rm, required: totalRequired, available, isShort: available < totalRequired };
+    });
+  }, [fullBomDetails, form.qty, form.source_warehouse, bins]);
+
+  const hasShortage = requiredMaterials.some((rm: any) => rm.isShort);
+
+  const handleBOMChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const selectedBomName = e.target.value;
-    const bomDetails = (boms || []).find((b: any) => b.name === selectedBomName);
-    setForm(f => ({ ...f, bom_no: selectedBomName, production_item: bomDetails?.item || '' }));
+    const bomListDetails = (boms || []).find((b: any) => b.name === selectedBomName);
+    setForm(f => ({ ...f, bom_no: selectedBomName, production_item: bomListDetails?.item || '' }));
+
+    if (selectedBomName) {
+      try {
+        const res = await fetch(`/api/frappe/resource/BOM/${encodeURIComponent(selectedBomName)}`);
+        const data = await res.json();
+        if (data.data) setFullBomDetails(data.data);
+      } catch (err) { console.error("Gagal menarik detail BOM"); }
+    } else { setFullBomDetails(null); }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (hasShortage) return setError("❌ Tidak bisa membuat Work Order! Ada komponen bahan baku yang tidak cukup di gudang sumber yang Anda pilih.");
     if (!form.production_item || !form.bom_no) return setError("Item To Manufacture dan BOM No wajib diisi.");
     if (Number(form.qty) <= 0) return setError("Qty To Manufacture harus lebih dari 0.");
     if (!form.source_warehouse) return setError("Source Warehouse wajib diisi.");
@@ -361,7 +414,6 @@ function CreateWorkOrderModal({ onClose, boms, warehouses, onSuccess, showToast 
         source_warehouse: form.source_warehouse,
         wip_warehouse: form.wip_warehouse, 
         fg_warehouse: form.fg_warehouse, 
-        scrap_warehouse: form.scrap_warehouse,
         use_multi_level_bom: 0 
       };
       
@@ -388,7 +440,6 @@ function CreateWorkOrderModal({ onClose, boms, warehouses, onSuccess, showToast 
               <label className="erp-label">BOM No *</label>
               <select required className="erp-input" value={form.bom_no} onChange={handleBOMChange}>
                 <option value="">-- Select BOM --</option>
-                {/* Menampilkan semua BOM (baik Draft maupun Active) */}
                 {(boms || []).map((b: any) => (
                   <option key={b.name} value={b.name}>
                     {b.name} ({b.item}) {b.docstatus === 0 ? '- Draft' : ''}
@@ -413,9 +464,30 @@ function CreateWorkOrderModal({ onClose, boms, warehouses, onSuccess, showToast 
                 <option value="">-- Select Source --</option>
                 {activeWarehouses.map((w: any) => <option key={w.name} value={w.name}>{w.name}</option>)}
               </select>
-              <p className="helper-text">Gudang asal bahan baku</p>
+              <p className="helper-text">Gudang asal bahan baku diambil.</p>
             </div>
           </div>
+
+          {fullBomDetails && form.source_warehouse && (
+            <div style={{ marginTop: '4px', border: '1px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden' }}>
+              <div style={{ background: '#f9fafb', padding: '12px', borderBottom: '1px solid #e5e7eb' }}>
+                <span style={{ fontSize: '13px', fontWeight: 800, color: COLOR_PRIMARY, display: 'flex', alignItems: 'center', gap: '6px' }}><AlertCircle size={14}/> Pengecekan Ketersediaan Bahan Baku Gudang Asal</span>
+              </div>
+              <table className="erp-table" style={{ width: '100%', fontSize: '11px', margin: 0 }}>
+                <thead><tr><th style={{padding: '8px'}}>Komponen</th><th style={{textAlign:'center', padding: '8px'}}>Dibutuhkan</th><th style={{textAlign:'center', padding: '8px'}}>Tersedia (Real)</th><th style={{textAlign:'center', padding: '8px'}}>Status Kelayakan</th></tr></thead>
+                <tbody>
+                  {requiredMaterials.map((rm: any, i: number) => (
+                    <tr key={i} style={{ background: rm.isShort ? '#fef2f2' : 'white' }}>
+                      <td style={{ fontWeight: 700, padding: '8px', color: '#374151' }}>{rm.item_code}</td>
+                      <td style={{ textAlign: 'center', padding: '8px', fontWeight: 600 }}>{rm.required}</td>
+                      <td style={{ textAlign: 'center', fontWeight: 800, color: rm.isShort ? '#b91c1c' : '#15803d', padding: '8px' }}>{rm.available}</td>
+                      <td style={{ textAlign: 'center', padding: '8px' }}>{rm.isShort ? <span className="badge badge-danger" style={{padding: '2px 6px'}}>Stok Kurang</span> : <span className="badge badge-success" style={{padding: '2px 6px'}}>Aman</span>}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '16px', marginTop: '8px' }}>
             <h3 className="section-title" style={{ fontSize: '13px', marginBottom: '12px' }}><Layers size={14}/> Target Warehouse Details</h3>
@@ -426,7 +498,6 @@ function CreateWorkOrderModal({ onClose, boms, warehouses, onSuccess, showToast 
                   <option value="">-- Select WIP --</option>
                   {activeWarehouses.map((w: any) => <option key={w.name} value={w.name}>{w.name}</option>)}
                 </select>
-                <p className="helper-text">This is a location where operations are executed.</p>
               </div>
               <div className="form-group">
                 <label className="erp-label">Target Warehouse *</label>
@@ -434,16 +505,7 @@ function CreateWorkOrderModal({ onClose, boms, warehouses, onSuccess, showToast 
                   <option value="">-- Select Target --</option>
                   {activeWarehouses.map((w: any) => <option key={w.name} value={w.name}>{w.name}</option>)}
                 </select>
-                <p className="helper-text">This is a location where final product stored.</p>
               </div>
-            </div>
-            <div className="form-group" style={{ width: '50%', paddingRight: '8px' }}>
-              <label className="erp-label">Scrap Warehouse</label>
-              <select className="erp-input" value={form.scrap_warehouse} onChange={e => setForm(f => ({ ...f, scrap_warehouse: e.target.value }))}>
-                <option value="">-- Optional Scrap --</option>
-                {activeWarehouses.map((w: any) => <option key={w.name} value={w.name}>{w.name}</option>)}
-              </select>
-              <p className="helper-text">This is a location where scraped materials are stored.</p>
             </div>
           </div>
 
@@ -451,15 +513,17 @@ function CreateWorkOrderModal({ onClose, boms, warehouses, onSuccess, showToast 
             <div className="error-box" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '8px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><AlertCircle size={16}/> <span>Error:</span></div>
               {error.split('\n').map((line, idx) => (
-                <span key={idx} style={{ fontWeight: line.includes('👉') ? 800 : 500, fontSize: '12px' }}>{line}</span>
+                line.trim() === '' 
+                ? <div key={idx} style={{ height: '4px' }} /> 
+                : <span key={idx} style={{ fontWeight: line.includes('👉') || line.includes('🛠️') ? 800 : 500, fontSize: '12px', lineHeight: 1.5 }}>{line}</span>
               ))}
             </div>
           )}
           
           <div className="modal-footer">
             <button type="button" onClick={onClose} className="btn btn-secondary mobile-btn">Cancel</button>
-            <button type="submit" className="btn btn-primary mobile-btn" style={{ background: COLOR_PRIMARY, borderColor: COLOR_PRIMARY }} disabled={isSubmitting}>
-              {isSubmitting ? 'Saving...' : 'Save as Draft'}
+            <button type="submit" className="btn btn-primary mobile-btn" style={{ background: hasShortage ? '#9CA3AF' : COLOR_PRIMARY, borderColor: hasShortage ? '#9CA3AF' : COLOR_PRIMARY }} disabled={isSubmitting || hasShortage}>
+              {hasShortage ? 'Stok Bahan Baku Tidak Mencukupi' : 'Save as Draft'}
             </button>
           </div>
         </form>
@@ -515,10 +579,14 @@ function DetailWorkOrderModal({ wo, onClose, onSubmitWO }: any) {
             
             <div style={{ background: '#ffffff', border: '1px solid #e5e7eb', padding: '16px', borderRadius: '8px' }}>
                <h3 className="section-title" style={{ fontSize: '13px', marginTop: 0, border: 'none' }}><MapPin size={14}/> Pengaturan Alur Gudang</h3>
-               <div className="responsive-grid" style={{ gap: '10px' }}>
+               <div className="responsive-grid-3" style={{ gap: '10px' }}>
                  <div>
                    <p style={{ fontSize: '11px', color: '#6B7280', fontWeight: 600 }}>Sumber Bahan Baku (Source)</p>
                    <p style={{ fontSize: '12px', fontWeight: 600, color: '#374151' }}>{fullData?.source_warehouse || '-'}</p>
+                 </div>
+                 <div>
+                   <p style={{ fontSize: '11px', color: '#6B7280', fontWeight: 600 }}>Gudang Rakitan (WIP)</p>
+                   <p style={{ fontSize: '12px', fontWeight: 600, color: '#d97706' }}>{fullData?.wip_warehouse || '-'}</p>
                  </div>
                  <div>
                    <p style={{ fontSize: '11px', color: '#6B7280', fontWeight: 600 }}>Penyimpanan Hasil Jadi (FG)</p>
@@ -543,12 +611,13 @@ function DetailWorkOrderModal({ wo, onClose, onSubmitWO }: any) {
 }
 
 // ==========================================
-// 3. MODAL JOB CARD 
+// 3. MODAL JOB CARD (FRAPPE STYLE)
 // ==========================================
 function CreateJobCardModal({ onClose, workOrders, onSuccess, showToast }: any) {
   const [form, setForm] = useState({ 
     work_order: '', bom_no: '', production_item: '', 
-    operation: '', workstation: '', for_quantity: '' 
+    operation: '', workstation: '', for_quantity: '',
+    posting_date: new Date().toISOString().split('T')[0]
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -567,71 +636,74 @@ function CreateJobCardModal({ onClose, workOrders, onSuccess, showToast }: any) 
     e.preventDefault();
     if (!form.work_order) return setError("Pilih Work Order terkait.");
     if (!form.operation || !form.workstation) return setError("Operation dan Workstation wajib diisi sesuai Master Data Frappe.");
-    if (Number(form.for_quantity) <= 0) return setError("For Quantity harus lebih dari 0.");
+    if (Number(form.for_quantity) <= 0) return setError("Qty To Manufacture harus lebih dari 0.");
     
     setIsSubmitting(true); setError('');
     try {
       const { apiCreate } = await import('@/lib/api');
       
-      // 💡 FITUR MAGIC: AUTO-CREATE OPERATION & WORKSTATION JIKA BELUM ADA DI FRAPPE
-      try { await apiCreate('Operation', { operation_name: form.operation, name: form.operation }); } catch(err) { /* Abaikan jika nama sudah ada */ }
-      try { await apiCreate('Workstation', { workstation_name: form.workstation }); } catch(err) { /* Abaikan jika nama sudah ada */ }
+      // AUTO-CREATE OPERATION & WORKSTATION JIKA BELUM ADA DI FRAPPE
+      try { await apiCreate('Operation', { operation_name: form.operation, name: form.operation }); } catch(err) {}
+      try { await apiCreate('Workstation', { workstation_name: form.workstation }); } catch(err) {}
 
       const jcData = { 
         work_order: form.work_order, bom_no: form.bom_no, production_item: form.production_item,
         operation: form.operation, workstation: form.workstation, for_quantity: parseFloat(form.for_quantity),
-        company: FIXED_COMPANY
+        company: FIXED_COMPANY, posting_date: form.posting_date
       };
       
       await apiCreate('Job Card', jcData);
       showToast('Job Card berhasil dibuat (Draft).', 'success'); 
       onClose(); if (onSuccess) onSuccess();
-    } catch (err: any) { 
-      setError(extractFrappeError(err, "Gagal membuat Job Card.")); 
-    } finally { 
-      setIsSubmitting(false); 
-    }
+    } catch (err: any) { setError(extractFrappeError(err, "Gagal membuat Job Card. Pastikan 'Operation' dan 'Workstation' sudah terdaftar di Master Frappe.")); } finally { setIsSubmitting(false); }
   };
 
   return (
     <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal-content" style={{ width: '100%', maxWidth: '650px', margin: '0 16px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px', alignItems: 'center' }}>
+      <div className="modal-content" style={{ width: '100%', maxWidth: '750px', margin: '0 16px', padding: '0', overflow: 'hidden' }}>
+        <div style={{ background: '#f8f9fb', padding: '16px 24px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#111827', margin: 0 }}>New Job Card</h2>
-            <p style={{ fontSize: '12px', color: '#6B7280', marginTop: '2px' }}>Input Tugas Manual ke Frappe Database</p>
+            <p style={{ fontSize: '12px', color: '#6B7280', marginTop: '2px' }}>Not Saved</p>
           </div>
-          <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', color: '#6B7280' }}><X size={20} /></button>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button type="button" onClick={handleSubmit} className="btn btn-primary btn-sm" style={{ background: '#111827' }} disabled={isSubmitting}>Save</button>
+            <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', color: '#6B7280' }}><X size={20} /></button>
+          </div>
         </div>
         
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        <form onSubmit={handleSubmit} style={{ padding: '24px', maxHeight: '75vh', overflowY: 'auto' }}>
+          <div className="responsive-grid">
+            <div className="form-group">
+              <label className="erp-label">Company *</label>
+              <input type="text" className="erp-input disabled-input" value={FIXED_COMPANY} readOnly />
+            </div>
+            <div className="form-group">
+              <label className="erp-label">Posting Date</label>
+              <input type="date" className="erp-input" value={form.posting_date} onChange={e => setForm(f => ({ ...f, posting_date: e.target.value }))} />
+            </div>
+          </div>
+          
           <div className="form-group">
             <label className="erp-label">Work Order *</label>
             <select required className="erp-input" value={form.work_order} onChange={handleWOChange}>
               <option value="">-- Select Work Order --</option>
               {/* Hanya tampilkan Work Order yang sudah disubmit */}
-              {(workOrders || []).filter((w:any)=>w.docstatus === 1).map((w: any) => <option key={w.name} value={w.name}>{w.name} ({w.production_item})</option>)}
+              {(workOrders || []).filter((w:any)=>w.docstatus === 1 || w.status === 'In Process' || w.status === 'Not Started').map((w: any) => <option key={w.name} value={w.name}>{w.name} ({w.production_item})</option>)}
             </select>
-          </div>
-          
-          <div className="responsive-grid">
-            <div className="form-group"><label className="erp-label">BOM No</label><input type="text" className="erp-input disabled-input" value={form.bom_no} readOnly /></div>
-            <div className="form-group"><label className="erp-label">Item To Manufacture</label><input type="text" className="erp-input disabled-input" value={form.production_item} readOnly /></div>
           </div>
 
           <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '16px', marginTop: '4px' }}>
+            <h3 className="section-title" style={{ fontSize: '13px', marginBottom: '12px', border: 'none' }}>Operation & Materials</h3>
             <div className="responsive-grid">
               <div className="form-group">
                 <label className="erp-label">Operation *</label>
                 <input type="text" required list="laptop-operations" className="erp-input" value={form.operation} onChange={e => setForm(f => ({ ...f, operation: e.target.value }))} placeholder="Pilih atau ketik operasi..." />
                 <datalist id="laptop-operations">
                   <option value="Perakitan Motherboard" />
+                  <option value="Perakitan Motherboard & Layar" />
                   <option value="Instalasi Processor & RAM" />
-                  <option value="Pemasangan Layar LCD" />
-                  <option value="Pemasangan Baterai & Casing" />
-                  <option value="Instalasi Software (OS)" />
                   <option value="Quality Control (QC)" />
-                  <option value="Packaging" />
                 </datalist>
               </div>
 
@@ -642,13 +714,12 @@ function CreateJobCardModal({ onClose, workOrders, onSuccess, showToast }: any) 
                   <option value="Meja Rakit 1" />
                   <option value="Meja Rakit 2" />
                   <option value="Meja Solder & Instalasi" />
-                  <option value="Ruang Quality Control" />
-                  <option value="Stasiun Packaging" />
                 </datalist>
               </div>
             </div>
+            
             <div className="form-group" style={{ width: '50%', paddingRight: '8px' }}>
-              <label className="erp-label">For Quantity *</label>
+              <label className="erp-label">Qty To Manufacture</label>
               <input type="number" required min="0.1" step="any" className="erp-input" value={form.for_quantity} onChange={e => setForm(f => ({ ...f, for_quantity: e.target.value }))} />
             </div>
           </div>
@@ -659,11 +730,6 @@ function CreateJobCardModal({ onClose, workOrders, onSuccess, showToast }: any) 
               {error.split('\n').map((line, idx) => <span key={idx} style={{ fontWeight: line.includes('👉') ? 800 : 500, fontSize: '12px' }}>{line}</span>)}
             </div>
           )}
-          
-          <div className="modal-footer">
-            <button type="button" onClick={onClose} className="btn btn-secondary mobile-btn">Cancel</button>
-            <button type="submit" className="btn btn-primary mobile-btn" style={{ background: '#f59e0b', borderColor: '#f59e0b' }} disabled={isSubmitting}>{isSubmitting ? 'Saving...' : 'Save Job Card'}</button>
-          </div>
         </form>
       </div>
     </div>
@@ -742,7 +808,7 @@ function ActiveJobCardModal({ jobCard, elapsedSeconds, onClose, onFinish }: any)
 
   const handleFinish = async () => {
     setIsSubmitting(true);
-    await onFinish(jobCard, producedQty);
+    await onFinish(jobCard, producedQty, elapsedSeconds);
     setIsSubmitting(false);
   };
 
@@ -777,8 +843,8 @@ function ActiveJobCardModal({ jobCard, elapsedSeconds, onClose, onFinish }: any)
             <input type="number" min="1" className="erp-input" value={producedQty} onChange={e => setProducedQty(Number(e.target.value))} style={{ width: '120px', background: '#1e293b', color: 'white', borderColor: '#475569', fontSize: '18px', fontWeight: 800, textAlign: 'center' }} />
           </div>
           <div className="mobile-btn-group" style={{ display: 'flex', gap: '12px' }}>
-            <button onClick={onClose} className="btn btn-secondary mobile-btn" style={{ flex: 1, background: '#1e293b', color: '#cbd5e1', borderColor: '#334155', padding: '14px' }}>Sembunyikan</button>
-            <button onClick={handleFinish} disabled={isSubmitting} className="btn btn-primary mobile-btn" style={{ flex: 1.5, background: COLOR_PRIMARY, borderColor: COLOR_PRIMARY, color: 'white', padding: '14px', fontSize: '14px', display: 'flex', gap: '8px', justifyContent: 'center' }}><CheckSquare size={18} /> {isSubmitting ? 'Menyimpan...' : 'Akhiri & Simpan Stok'}</button>
+            <button onClick={onClose} className="btn btn-secondary mobile-btn" style={{ flex: 1, background: '#1e293b', color: '#cbd5e1', borderColor: '#334155', padding: '14px' }}>Tutup Layar (Waktu Tetap Jalan)</button>
+            <button onClick={handleFinish} disabled={isSubmitting} className="btn btn-primary mobile-btn" style={{ flex: 1.5, background: COLOR_PRIMARY, borderColor: COLOR_PRIMARY, color: 'white', padding: '14px', fontSize: '14px', display: 'flex', gap: '8px', justifyContent: 'center' }}><CheckSquare size={18} /> {isSubmitting ? 'Memproses Laporan...' : 'Akhiri Pekerjaan & Catat Waktu'}</button>
           </div>
         </div>
       </div>
@@ -794,12 +860,13 @@ function ManufacturingPageContent() {
   const searchParams = useSearchParams();
   const tabParam = searchParams.get('tab') || 'workorders';
   const [activeTab, setActiveTab] = useState(tabParam);
+  
   useEffect(() => { setActiveTab(tabParam || 'workorders'); }, [tabParam]);
 
-  const { boms, workOrders, isLoading, refetch } = useManufacturingData() as any;
-  const { items, warehouses } = useStockData();
+  const { boms, workOrders, isLoading, error, refetch } = useManufacturingData() as any;
+  const { items, bins, warehouses } = useStockData();
 
-  // STATE JOB CARDS MURNI DARI API
+  // STATE JOB CARDS MURNI DARI API FRAPPE
   const [jobCards, setJobCards] = useState<any[]>([]);
   const [isFetchingJC, setIsFetchingJC] = useState(true);
 
@@ -826,14 +893,21 @@ function ManufacturingPageContent() {
   const [toast, setToast] = useState<{ show: boolean, msg: string, type: 'success' | 'error' | 'info' }>({ show: false, msg: '', type: 'success' });
   const [confirmModal, setConfirmModal] = useState<{ show: boolean, title: string, desc: string, action: any, confirmText?: string }>({ show: false, title: '', desc: '', action: null, confirmText: 'Ya, Lanjutkan' });
 
-  const showToast = (msg: string, type: 'success' | 'error' | 'info' = 'success') => { setToast({ show: true, msg, type }); setTimeout(() => setToast({ show: false, msg: '', type: 'success' }), 4000); };
-  const showConfirm = (title: string, desc: string, action: any, confirmText = 'Ya, Lanjutkan') => setConfirmModal({ show: true, title, desc, action, confirmText });
-  const closeConfirm = () => setConfirmModal({ show: false, title: '', desc: '', action: null, confirmText: 'Ya, Lanjutkan' });
-
-  // Terminal Timer State
   const [activeTimers, setActiveTimers] = useState<Record<string, number>>({});
   const [activeJobCard, setActiveJobCard] = useState<any>(null);
 
+  const showToast = (msg: string, type: 'success' | 'error' | 'info' = 'success') => {
+    setToast({ show: true, msg, type });
+    setTimeout(() => setToast({ show: false, msg: '', type: 'success' }), 4000);
+  };
+
+  const showConfirm = (title: string, desc: string, action: any, confirmText = 'Ya, Lanjutkan') => {
+    setConfirmModal({ show: true, title, desc, action, confirmText });
+  };
+
+  const closeConfirm = () => setConfirmModal({ show: false, title: '', desc: '', action: null, confirmText: 'Ya, Lanjutkan' });
+
+  // Logika Interval Timer Terminal
   useEffect(() => {
     const interval = setInterval(() => {
       setActiveTimers(prev => {
@@ -865,115 +939,92 @@ function ManufacturingPageContent() {
 
   const handleSmartDelete = (doctype: string, docname: string, docstatus: number) => {
     if (!docname) return;
-    showConfirm(`Hapus Dokumen ${doctype}?`, `Apakah Anda yakin ingin menghapus data ${docname} secara permanen? Jika data ini sudah terkait pembukuan ERPNext, ERPNext akan menolak penghapusan.`, () => {
+    showConfirm(
+      `Hapus Dokumen ${doctype}?`, 
+      `Apakah Anda yakin ingin menghapus data ${docname} secara permanen? Jika data ini sudah terkait pembukuan ERPNext, ERPNext akan menolak penghapusan.`,
+      () => {
         closeConfirm();
+        showToast(`Proses hapus ${doctype} sedang dijalankan...`, 'info');
         setTimeout(() => {
           import('@/lib/api').then(({ apiUpdate, apiDelete }) => {
             if (docstatus === 1) apiUpdate(doctype, docname, { docstatus: 2 }).then(() => apiDelete(doctype, docname)).catch((err)=> showToast(extractFrappeError(err), 'error'));
             else apiDelete(doctype, docname).catch((err)=> showToast(extractFrappeError(err), 'error'));
           }).catch(()=>{});
         }, 50);
-        showToast(`Proses hapus ${doctype} sedang dijalankan...`, 'info');
-        setTimeout(() => { refetch(); fetchJobCards(); }, 800);
-      }, "Ya, Hapus Saja"
+        setTimeout(() => { refetch(); fetchJobCards(); }, 1200);
+      },
+      "Ya, Hapus Saja"
     );
   };
 
   const handleWOSubmit = (wo: any) => {
-    showConfirm("Kunci Work Order (Disahkan)?", "Perintah yang sudah di-Submit akan masuk ke antrean pabrik dan siap dikerjakan oleh Operator.", () => {
+    showConfirm(
+      "Kunci Work Order (Disahkan)?",
+      "Perintah yang sudah di-Submit akan masuk ke antrean pabrik dan siap dikerjakan oleh Operator.",
+      () => {
         closeConfirm();
         showToast('Selesai! Perintah resmi disahkan dan diteruskan ke Pabrik.', 'success'); 
+        
         setTimeout(() => {
-          import('@/lib/api').then(({ apiUpdate }) => { apiUpdate('Work Order', wo.name, { docstatus: 1 }).catch(() => {}); }).catch(()=>{});
+          import('@/lib/api').then(({ apiUpdate }) => {
+            apiUpdate('Work Order', wo.name, { docstatus: 1 }).catch(() => {});
+          }).catch(()=>{});
         }, 50);
-        setTimeout(() => refetch(), 800);
-      }, "Sahkan Perintah Kerja"
+
+        setTimeout(() => refetch(), 1000);
+      },
+      "Sahkan Perintah Kerja"
     );
   };
 
-  // 💡 FUNGSI SIHIR: SUBMIT JC KE FRAPPE + CREATE STOCK ENTRY MANUFACTURE
-  const submitJobCardToFrappe = async (jc: any, producedQty: number, elapsedMins: number = 30) => {
-    try {
-      const now = new Date();
-      const mins = Math.max(1, elapsedMins);
-      const startTime = new Date(now.getTime() - mins * 60000);
-      
-      const pad = (n: number) => String(n).padStart(2, '0');
-      const formatDT = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  // 💡 START WO (MEMBUAT STOCK ENTRY - MATERIAL TRANSFER)
+  const handleWOStart = async (wo: any) => {
+    showConfirm("Mulai Produksi (Start)?", "Sistem akan membuat Stock Entry otomatis untuk memindahkan bahan baku dari Gudang Sumber ke Gudang Perakitan (WIP).", async () => {
+      closeConfirm();
+      showToast('Memproses pemindahan bahan baku (Transfer to WIP)...', 'info');
 
-      const timeLogs = [{
-        from_time: formatDT(startTime),
-        to_time: formatDT(now),
-        completed_qty: producedQty,
-        time_in_mins: mins
-      }];
+      try {
+        const { apiCreate, apiUpdate } = await import('@/lib/api');
 
-      const { apiUpdate, apiCreate } = await import('@/lib/api');
-      
-      // 1. Simpan Time Log & Sahkan Job Card
-      await apiUpdate('Job Card', jc.name, { time_logs: timeLogs });
-      await apiUpdate('Job Card', jc.name, { docstatus: 1 });
-      
-      // 2. MAGIC: Buat Stock Entry (Manufacture) secara diam-diam untuk potong bahan & tambah laptop
-      const woRes = await fetch(`/api/frappe/resource/Work Order/${encodeURIComponent(jc.work_order)}`, { cache: 'no-store' });
-      const woData = (await woRes.json()).data;
-      
-      const bomRes = await fetch(`/api/frappe/resource/BOM/${encodeURIComponent(jc.bom_no)}`, { cache: 'no-store' });
-      const bomData = (await bomRes.json()).data;
+        // 1. Tarik resep BOM
+        const bomRes = await fetch(`/api/frappe/resource/BOM/${encodeURIComponent(wo.bom_no)}`);
+        const bomData = (await bomRes.json()).data;
 
-      if (woData && bomData) {
-        const seItems: any[] = [];
-        // Bahan baku (dipotong dari Gudang)
-        bomData.items.forEach((rm: any) => {
-          seItems.push({
-            item_code: rm.item_code,
-            s_warehouse: woData.source_warehouse || 'Raw Materials - A', // Gudang Asal
-            qty: Number(rm.qty) * Number(producedQty),
-            uom: rm.uom
-          });
-        });
-        // Barang Jadi (ditambah ke Gudang)
-        seItems.push({
-          item_code: jc.production_item,
-          t_warehouse: woData.fg_warehouse || 'Finished Goods - A', // Gudang Tujuan
-          qty: Number(producedQty),
-          is_finished_item: 1, // Penting! Ini penanda barang hasil produksi
-          uom: bomData.uom || 'Nos'
-        });
+        // 2. Siapkan baris item transfer
+        const transferItems = bomData.items.map((rm: any) => ({
+          item_code: rm.item_code,
+          s_warehouse: wo.source_warehouse,
+          t_warehouse: wo.wip_warehouse,
+          qty: Number(rm.qty) * Number(wo.qty),
+          uom: rm.uom
+        }));
 
-        // Lempar ke Frappe sebagai Manufacture Entry
+        // 3. Buat Stock Entry
         const seData = {
-          stock_entry_type: "Manufacture",
-          work_order: jc.work_order,
+          stock_entry_type: "Material Transfer for Manufacture",
+          work_order: wo.name,
+          bom_no: wo.bom_no,
           company: FIXED_COMPANY,
-          items: seItems
+          items: transferItems
         };
+
         const seDraft = await apiCreate('Stock Entry', seData);
-        // Langsung disahkan (Submit) agar stok benar-benar berubah
-        await apiUpdate('Stock Entry', seDraft.data?.name || seDraft.name, { docstatus: 1 });
+        const seName = seDraft.data?.name || seDraft.name;
+        
+        // Submit Stock Entry
+        await apiUpdate('Stock Entry', seName, { docstatus: 1 });
+        
+        showToast('Sukses! Bahan baku masuk ke WIP.', 'success');
+        
+        setTimeout(() => { refetch(); setActiveTab('jobcards'); router.push('?tab=jobcards'); }, 1500);
+
+      } catch(e: any) {
+        showToast(extractFrappeError(e, "Gagal memindahkan bahan baku. Cek ketersediaan stok Anda."), 'error');
       }
-
-      // Update Status WO
-      await apiUpdate('Work Order', jc.work_order, { status: 'Completed', produced_qty: producedQty });
-
-      showToast(`🎉 Sempurna! Waktu kerja disimpan & Barang fisik telah dimutasi ke Gudang!`, 'success');
-      fetchJobCards();
-      refetch(); // Refresh WO data
-    } catch (e: any) {
-      showToast(extractFrappeError(e, "Gagal mensubmit Job Card."), 'error');
-    }
+    }, "Transfer Bahan Baku & Start");
   };
 
-  const handleJCSubmit = (jc: any) => {
-    showConfirm("Sahkan Job Card?", "Sistem akan membuat log waktu otomatis (30 menit) dan otomatis memindahkan stok produksi ke ERPNext.", () => {
-        closeConfirm();
-        showToast('Memproses Submit ke Database Frappe...', 'info'); 
-        submitJobCardToFrappe(jc, jc.for_quantity, 30);
-      }, "Submit Job Card"
-    );
-  };
-
-  const handleJCStartTerminal = (jc: any) => {
+  const handleJCStart = (jc: any) => {
     if (activeTimers[jc.name] !== undefined) {
       setActiveJobCard(jc);
       return;
@@ -982,15 +1033,99 @@ function ManufacturingPageContent() {
     setActiveJobCard(jc); 
   };
 
-  const handleJCTerminalFinish = async (jc: any, producedQty: number) => {
-    const elapsedSecs = activeTimers[jc.name] || 0;
-    const elapsedMins = Math.ceil(elapsedSecs / 60);
-    
+  // 💡 FINISH JOB CARD (MENGUPDATE STATUS JOB CARD SAJA)
+  const handleJCFinish = async (jc: any, producedQty: number, elapsedSeconds: number) => {
     setActiveTimers(prev => { const next = { ...prev }; delete next[jc.name]; return next; });
     setActiveJobCard(null); 
     
-    showToast('Menyimpan hasil terminal dan memutasi stok fisik ke ERPNext...', 'info');
-    submitJobCardToFrappe(jc, producedQty, elapsedMins);
+    showToast('Menyimpan Time Log dan memproses laporan kerja...', 'info');
+
+    try {
+      const { apiUpdate } = await import('@/lib/api');
+
+      // --- 1. SUBMIT JOB CARD DENGAN TIME LOGS ---
+      const now = new Date();
+      const startMs = now.getTime() - Math.max(elapsedSeconds * 1000, 60000); // minimal 1 menit
+      const startTime = new Date(startMs);
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const formatDT = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+
+      const timeLogs = [{
+        from_time: formatDT(startTime),
+        to_time: formatDT(now),
+        completed_qty: producedQty, 
+        time_in_mins: Math.max(1, Math.round(elapsedSeconds / 60))
+      }];
+
+      await apiUpdate('Job Card', jc.name, { time_logs: timeLogs });
+      await apiUpdate('Job Card', jc.name, { docstatus: 1 });
+
+      showToast(`🎉 Laporan Job Card Tersimpan!\nJangan lupa klik 'Finish' di tab Work Orders untuk memindahkan barang jadi ke Gudang Utama.`, 'success');
+      
+      setTimeout(() => {
+        refetch();
+        fetchJobCards();
+      }, 2000);
+
+    } catch(e: any) {
+      showToast(extractFrappeError(e, "Gagal menyelesaikan proses laporan kerja."), 'error');
+    }
+  };
+
+  // 💡 FINISH WO (MEMBUAT STOCK ENTRY - MANUFACTURE)
+  const handleWOFinish = async (wo: any) => {
+    showConfirm("Selesaikan Produksi (Finish)?", "Sistem akan membuat Stock Entry (Manufacture) untuk merubah bahan perakitan (WIP) menjadi Barang Jadi (Finished Goods).", async () => {
+      closeConfirm();
+      showToast('Menyiapkan hasil produksi ke Gudang Finished Goods...', 'info');
+
+      try {
+        const { apiCreate, apiUpdate } = await import('@/lib/api');
+
+        const bomRes = await fetch(`/api/frappe/resource/BOM/${encodeURIComponent(wo.bom_no)}`);
+        const bomData = (await bomRes.json()).data;
+
+        const seItems: any[] = [];
+
+        bomData.items.forEach((rm: any) => {
+          seItems.push({
+            item_code: rm.item_code,
+            s_warehouse: wo.wip_warehouse, // Ambil dari WIP
+            t_warehouse: '', 
+            qty: Number(rm.qty) * Number(wo.qty),
+            uom: rm.uom
+          });
+        });
+        
+        seItems.push({
+          item_code: wo.production_item,
+          s_warehouse: '',
+          t_warehouse: wo.fg_warehouse, // Taruh di FG
+          qty: Number(wo.qty),
+          is_finished_item: 1, 
+          uom: bomData.uom || 'Nos'
+        });
+
+        const seData = {
+          stock_entry_type: "Manufacture",
+          work_order: wo.name,
+          bom_no: wo.bom_no,
+          company: FIXED_COMPANY,
+          fg_completed_qty: Number(wo.qty), 
+          use_multi_level_bom: 0,
+          items: seItems
+        };
+
+        const seDraft = await apiCreate('Stock Entry', seData);
+        const seName = seDraft.data?.name || seDraft.name;
+        await apiUpdate('Stock Entry', seName, { docstatus: 1 });
+
+        showToast('🎉 Produksi Selesai! Stok Barang Jadi resmi bertambah di gudang.', 'success');
+        setTimeout(() => refetch(), 1500);
+
+      } catch(e: any) {
+        showToast(extractFrappeError(e, "Gagal menyelesaikan produksi barang."), 'error');
+      }
+    }, "Finish Produksi");
   };
 
   const getPageInfo = () => {
@@ -1012,20 +1147,20 @@ function ManufacturingPageContent() {
       {isLoading && <div style={{ textAlign: 'center', padding: '20px', color: '#6B7280' }}>Memuat data dari ERPNext...</div>}
       
       {/* RENDER SEMUA MODALS */}
-      {showCreateBOM && <CreateBOMModal items={items} warehouses={warehouses} onClose={() => setShowCreateBOM(false)} onSuccess={() => refetch()} showToast={showToast} />}
-      {showCreateWO && <CreateWorkOrderModal boms={sortedBOMs.filter((b:any)=>b.docstatus===1 || b.is_active)} warehouses={warehouses} onClose={() => setShowCreateWO(false)} onSuccess={() => refetch()} showToast={showToast} />}
+      {showCreateBOM && <CreateBOMModal items={items} bins={bins} warehouses={warehouses} onClose={() => setShowCreateBOM(false)} onSuccess={() => refetch()} showToast={showToast} />}
+      {showCreateWO && <CreateWorkOrderModal boms={sortedBOMs.filter((b:any)=>b.docstatus===1 || b.is_active)} warehouses={warehouses} bins={bins} onClose={() => setShowCreateWO(false)} onSuccess={() => refetch()} showToast={showToast} />}
       {showCreateJC && <CreateJobCardModal workOrders={sortedWOs.filter((w:any)=>w.docstatus===1)} onClose={() => setShowCreateJC(false)} onSuccess={() => fetchJobCards()} showToast={showToast} />}
       
       {selectedBOM && <DetailBOMModal bom={selectedBOM} workOrders={sortedWOs} onClose={() => setSelectedBOM(null)} />}
       {selectedWO && <DetailWorkOrderModal wo={selectedWO} onClose={() => setSelectedWO(null)} onSubmitWO={handleWOSubmit} />}
-      {selectedJC && <DetailJobCardModal jc={selectedJC} onClose={() => setSelectedJC(null)} onSubmitJC={handleJCSubmit} />}
+      {selectedJC && <DetailJobCardModal jc={selectedJC} onClose={() => setSelectedJC(null)} onSubmitJC={() => handleJCFinish(selectedJC, selectedJC.for_quantity, activeTimers[selectedJC.name] || 0)} />}
 
       {activeJobCard && (
         <ActiveJobCardModal 
           jobCard={activeJobCard} 
           elapsedSeconds={activeTimers[activeJobCard.name] || 0} 
           onClose={() => setActiveJobCard(null)} 
-          onFinish={handleJCTerminalFinish} 
+          onFinish={handleJCFinish} 
         />
       )}
 
@@ -1038,7 +1173,7 @@ function ManufacturingPageContent() {
         <div style={{ display: 'flex', gap: '10px', flexShrink: 0, alignItems: 'center' }}>
           {activeTab === 'bom' && <button className="btn btn-primary btn-sm" style={{ background: COLOR_PRIMARY, borderColor: COLOR_PRIMARY, whiteSpace: 'nowrap' }} onClick={() => setShowCreateBOM(true)}><Plus size={14} /> Buat Resep Baru (BOM)</button>}
           {activeTab === 'workorders' && <button className="btn btn-primary btn-sm" style={{ background: COLOR_SECONDARY, borderColor: COLOR_SECONDARY, whiteSpace: 'nowrap' }} onClick={() => setShowCreateWO(true)}><Plus size={14} /> Terbitkan Perintah Kerja (WO)</button>}
-          {activeTab === 'jobcards' && <button className="btn btn-primary btn-sm" style={{ background: '#f59e0b', borderColor: '#f59e0b', whiteSpace: 'nowrap' }} onClick={() => setShowCreateJC(true)}><Plus size={14} /> Buat Job Card Baru</button>}
+          {activeTab === 'jobcards' && <button className="btn btn-primary btn-sm" style={{ background: '#111827', borderColor: '#111827', whiteSpace: 'nowrap' }} onClick={() => setShowCreateJC(true)}><Plus size={14} /> Add Job Card</button>}
         </div>
       </div>
 
@@ -1059,24 +1194,25 @@ function ManufacturingPageContent() {
             </div>
           </div>
 
-          {/* TABEL BOM */}
+          {/* TABEL BOM (KOLOM SESUAI FRAPPE) */}
           {activeTab === 'bom' && (
             <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
               <table className="erp-table" style={{ minWidth: '800px' }}>
                 <thead>
                   <tr>
-                    <th style={{ width: '40px', textAlign: 'center' }}>No.</th>
-                    <th>ID BOM</th>
+                    <th>ID</th>
                     <th>Status</th>
                     <th>Item</th>
-                    <th style={{ textAlign: 'center' }}>Qty</th>
+                    <th style={{ textAlign: 'center' }}>Is Active</th>
+                    <th style={{ textAlign: 'center' }}>Is Default</th>
+                    <th style={{ textAlign: 'right' }}>Total Cost</th>
+                    <th style={{ textAlign: 'center' }}>Has Variants</th>
                     <th style={{ width: '100px', textAlign: 'center' }}>Tindakan</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredBOMs.map((bom: any, index: number) => (
                     <tr key={bom.name} className="table-row-hover">
-                      <td style={{ textAlign: 'center', fontWeight: 600, color: '#6B7280' }}>{index + 1}</td>
                       <td>
                         <div style={{ fontWeight: 800, color: COLOR_PRIMARY, fontSize: '13px' }}>{bom.name}</div>
                       </td>
@@ -1088,7 +1224,10 @@ function ManufacturingPageContent() {
                       <td>
                         <div style={{ fontWeight: 700, fontSize: '12px', color: '#111827' }}>{bom.item}</div>
                       </td>
-                      <td style={{ textAlign: 'center', fontWeight: 800 }}>{bom.quantity}</td>
+                      <td style={{ textAlign: 'center' }}>{bom.is_active === 1 ? <CheckCircle size={14} color="#10b981"/> : '-'}</td>
+                      <td style={{ textAlign: 'center' }}>{bom.is_default === 1 ? 'Yes' : 'No'}</td>
+                      <td style={{ textAlign: 'right', fontWeight: 800 }}>{formatUang(bom.total_cost || 0)}</td>
+                      <td style={{ textAlign: 'center' }}>{bom.has_variants === 1 ? 'Yes' : 'No'}</td>
                       <td>
                         <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
                           <button onClick={() => setSelectedBOM(bom)} style={{ background: '#e0f2fe', border: 'none', color: COLOR_PRIMARY, borderRadius: '6px', padding: '6px', cursor: 'pointer' }} title="View BOM"><Eye size={14} /></button>
@@ -1097,89 +1236,121 @@ function ManufacturingPageContent() {
                       </td>
                     </tr>
                   ))}
-                  {filteredBOMs.length === 0 && <tr><td colSpan={6} style={{ textAlign: 'center', padding: '40px', color: '#6B7280', fontSize: '13px' }}>Belum ada Resep Bill of Materials (BOM) yang terdaftar.</td></tr>}
+                  {filteredBOMs.length === 0 && <tr><td colSpan={8} style={{ textAlign: 'center', padding: '40px', color: '#6B7280', fontSize: '13px' }}>Belum ada Resep Bill of Materials (BOM) yang terdaftar.</td></tr>}
                 </tbody>
               </table>
             </div>
           )}
 
-          {/* TABEL WORK ORDERS */}
+          {/* TABEL WORK ORDERS (KOLOM SESUAI FRAPPE) */}
           {activeTab === 'workorders' && (
             <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
               <table className="erp-table" style={{ minWidth: '900px' }}>
                 <thead><tr>
-                  <th style={{ width: '40px', textAlign: 'center' }}>No.</th>
-                  <th>ID Work Order</th>
-                  <th>Status</th>
                   <th>Item To Manufacture</th>
+                  <th>Status</th>
                   <th>BOM No</th>
-                  <th style={{ textAlign: 'center' }}>Qty</th>
-                  <th style={{ width: '160px', textAlign: 'center' }}>Tindakan</th>
+                  <th style={{ textAlign: 'center' }}>Qty To Manufacture</th>
+                  <th>ID</th>
+                  <th style={{ width: '160px', textAlign: 'center' }}>Tindakan Produksi</th>
                 </tr></thead>
                 <tbody>
                   {filteredWOs.map((wo: any, index: number) => (
                     <tr key={wo.name} className="table-row-hover">
-                      <td style={{ textAlign: 'center', fontWeight: 600, color: '#6B7280' }}>{index + 1}</td>
                       <td>
-                        <div style={{ fontWeight: 800, color: COLOR_PRIMARY, fontSize: '12px' }}>{wo.name}</div>
-                        {wo.creation && <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '2px' }}>{formatCreationTime(wo.creation)}</div>}
+                        <div style={{ fontWeight: 700, fontSize: '13px', color: '#111827' }}>{wo.production_item}</div>
                       </td>
                       <td style={{ verticalAlign: 'middle' }}>
                         <span className={`badge ${wo.status === 'Completed' ? 'badge-success' : wo.status === 'In Process' ? 'badge-info' : wo.status === 'Draft' ? 'badge-gray' : 'badge-warning'}`} style={{ display: 'inline-flex', alignItems: 'center', whiteSpace: 'nowrap' }}>
-                          {wo.docstatus === 1 ? wo.status || 'Submitted' : 'Draft'}
+                          {wo.status}
                         </span>
-                      </td>
-                      <td>
-                        <div style={{ fontWeight: 700, fontSize: '13px', color: '#111827' }}>{wo.production_item}</div>
                       </td>
                       <td>
                         <div style={{ fontSize: '12px', color: '#6B7280', fontWeight: 600 }}>{wo.bom_no}</div>
                       </td>
                       <td style={{ textAlign: 'center', fontWeight: 800, fontSize: '14px' }}>{wo.qty}</td>
+                      <td>
+                        <div style={{ fontWeight: 800, color: COLOR_PRIMARY, fontSize: '12px' }}>{wo.name}</div>
+                      </td>
                       <td style={{ verticalAlign: 'middle' }}>
                         <div style={{ display: 'flex', gap: '5px', justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap' }}>
-                          {wo.docstatus === 0 && <button onClick={() => handleWOSubmit(wo)} className="badge badge-warning" style={{ cursor: 'pointer', border: 'none', display: 'inline-flex', gap: '4px', alignItems: 'center', whiteSpace: 'nowrap' }} title="Sahkan Surat Perintah Ini"><Send size={11}/> Submit</button>}
+                          {wo.status === 'Draft' && <button onClick={() => handleWOSubmit(wo)} className="badge badge-warning" style={{ cursor: 'pointer', border: 'none', display: 'inline-flex', gap: '4px', alignItems: 'center', whiteSpace: 'nowrap' }} title="Sahkan Surat Perintah Ini"><Send size={11}/> Submit</button>}
+                          
+                          {/* TOMBOL START = PINDAH BAHAN KE WIP via Stock Entry */}
+                          {wo.status === 'Not Started' && <button onClick={() => handleWOStart(wo)} style={{ cursor: 'pointer', border: 'none', display: 'inline-flex', gap: '4px', alignItems: 'center', background: COLOR_SECONDARY, color: 'white', padding: '4px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 600, whiteSpace: 'nowrap' }} title="Ambil Bahan dr Gudang (Transfer)"><PlayCircle size={11}/> Start</button>}
+                          
+                          {/* JIKA IN PROCESS, BUKA TERMINAL UNTUK FINISH & BIKIN BARANG JADI */}
+                          {wo.status === 'In Process' && (
+                            <>
+                              <button onClick={() => handleWOFinish(wo)} className="badge badge-success" style={{ cursor: 'pointer', border: 'none', display: 'inline-flex', gap: '4px', alignItems: 'center', whiteSpace: 'nowrap' }} title="Rakitan Selesai, Ubah jadi Barang Jadi"><CheckCircle size={11}/> Finish</button>
+                              <button onClick={() => { setActiveTab('jobcards'); router.push('/dashboard/manufacturing?tab=jobcards'); }} style={{ fontSize: '10px', color: COLOR_PRIMARY, fontWeight: 700, background: '#eff6ff', border: '1px solid #bfdbfe', padding: '4px 6px', borderRadius: '6px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}>Job Cards→</button>
+                            </>
+                          )}
+                          
+                          {wo.status === 'Completed' && <span style={{ fontSize: '10px', color: '#059669', fontWeight: 600, padding: '3px 7px', background: '#ecfdf5', borderRadius: '6px', border: '1px solid #a7f3d0', display: 'inline-flex', alignItems: 'center', gap: '3px', whiteSpace: 'nowrap' }}><CheckCircle size={11}/> Selesai</span>}
+                          
                           <button onClick={() => setSelectedWO(wo)} style={{ background: '#e0f2fe', border: 'none', color: COLOR_PRIMARY, borderRadius: '6px', padding: '5px', cursor: 'pointer', display: 'inline-flex' }} title="Lihat Rincian Tugas"><Eye size={13} /></button>
                           {(wo.docstatus === 0 || wo.docstatus === 2) && <button onClick={() => handleSmartDelete('Work Order', wo.name, wo.docstatus)} style={{ background: '#fee2e2', border: 'none', color: '#dc2626', borderRadius: '6px', padding: '5px', cursor: 'pointer', display: 'inline-flex' }} title="Hapus"><Trash2 size={13} /></button>}
                         </div>
                       </td>
                     </tr>
                   ))}
-                  {filteredWOs.length === 0 && <tr><td colSpan={7} style={{ textAlign: 'center', padding: '40px', color: '#6B7280', fontSize: '13px' }}>Belum ada Work Order yang tercatat.</td></tr>}
+                  {filteredWOs.length === 0 && <tr><td colSpan={6} style={{ textAlign: 'center', padding: '40px', color: '#6B7280', fontSize: '13px' }}>Belum ada Work Order (Surat Perintah Kerja) yang berjalan.</td></tr>}
                 </tbody>
               </table>
             </div>
           )}
 
-          {/* TABEL JOB CARDS */}
+          {/* TABEL JOB CARDS (KOLOM SESUAI FRAPPE GAMBAR) */}
           {activeTab === 'jobcards' && (
             <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
               <table className="erp-table" style={{ minWidth: '800px' }}>
-                <thead><tr><th style={{ width: '40px', textAlign: 'center' }}>No.</th><th>ID Job Card</th><th>Work Order</th><th>Operation</th><th>Status</th><th style={{ textAlign: 'right' }}>For Qty</th><th style={{ width: '170px', textAlign: 'center' }}>Tindakan</th></tr></thead>
+                <thead><tr>
+                  <th>Operation</th>
+                  <th>Status</th>
+                  <th>Work Order</th>
+                  <th style={{ textAlign: 'center' }}>Qty To Manufacture</th>
+                  <th>Workstation</th>
+                  <th>ID</th>
+                  <th style={{ width: '130px', textAlign: 'center' }}>Tindakan</th>
+                </tr></thead>
                 <tbody>
                   {isFetchingJC ? (
                     <tr><td colSpan={7} style={{ textAlign: 'center', padding: '40px' }}><Loader2 className="animate-spin" color={COLOR_PRIMARY} style={{margin:'0 auto'}} /></td></tr>
                   ) : filteredJCs.map((jc: any, index: number) => {
                     const isActive = activeTimers[jc.name] !== undefined;
+                    const elapsedSeconds = isActive ? activeTimers[jc.name] : 0;
+                    
+                    let badgeClass = 'badge-gray';
+                    if (jc.status === 'Completed' || jc.docstatus === 1) badgeClass = 'badge-success';
+                    else if (jc.status === 'Work In Progress' || isActive) badgeClass = 'badge-info';
+                    else if (jc.docstatus === 2) badgeClass = 'badge-danger';
+
                     return (
-                      <tr key={jc.name} className="table-row-hover" style={{ background: isActive ? '#f0fdf4' : 'transparent' }}>
-                        <td style={{ textAlign: 'center', fontWeight: 600, color: '#6B7280' }}>{index + 1}</td>
+                      <tr key={jc.name} className="table-row-hover" style={{ background: isActive ? '#f0fdf4' : 'transparent', transition: 'background 0.3s' }}>
+                        <td style={{ fontWeight: 700, color: '#111827', fontSize: '13px' }}>{jc.operation || '-'}</td>
                         <td>
-                          <div style={{ fontWeight: 800, color: '#f59e0b', fontSize: '13px' }}>{jc.name}</div>
-                          {jc.creation && <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '2px' }}>{formatCreationTime(jc.creation)}</div>}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-start' }}>
+                            <span className={`badge ${badgeClass}`}>
+                              {jc.docstatus === 1 ? 'Completed' : (isActive ? 'Work In Progress' : jc.status)}
+                            </span>
+                            {isActive && (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#10b981', color: 'white', padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 800, fontFamily: 'monospace', boxShadow: '0 0 10px rgba(16, 185, 129, 0.4)', animation: 'pulse 1.5s infinite' }}>
+                                <Timer size={14} /> {formatTimer(elapsedSeconds)}
+                              </span>
+                            )}
+                          </div>
                         </td>
-                        <td style={{ fontWeight: 700, color: COLOR_PRIMARY, fontSize: '12px' }}>{jc.work_order}</td>
-                        <td style={{ fontWeight: 600, color: '#374151', fontSize: '12px' }}>{jc.operation || '-'}</td>
+                        <td style={{ color: '#4B5563', fontSize: '13px' }}>{jc.work_order}</td>
+                        <td style={{ textAlign: 'center', fontWeight: 800, fontSize: '14px' }}>{jc.for_quantity}</td>
+                        <td style={{ color: '#4B5563', fontSize: '13px' }}>{jc.workstation || '-'}</td>
                         <td>
-                          <span className={`badge ${jc.docstatus === 1 ? 'badge-success' : jc.docstatus === 2 ? 'badge-danger' : 'badge-gray'}`}>
-                            {jc.docstatus === 1 ? 'Submitted' : jc.docstatus === 2 ? 'Cancelled' : 'Draft'}
-                          </span>
+                          <div style={{ fontWeight: 700, color: '#6B7280', fontSize: '12px' }}>{jc.name}</div>
+                          {jc.creation && <div style={{ fontSize: '10px', color: '#9CA3AF', marginTop: '2px' }}>{formatCreationTime(jc.creation)}</div>}
                         </td>
-                        <td style={{ textAlign: 'right', fontWeight: 800, fontSize: '14px' }}>{jc.for_quantity}</td>
                         <td>
                           <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', flexWrap: 'wrap' }}>
-                            {jc.docstatus === 0 && <button onClick={() => handleJCStartTerminal(jc)} className="badge badge-purple" style={{ cursor: 'pointer', border: 'none', display: 'flex', gap: '4px', alignItems: 'center' }} title="Buka Terminal Mesin"><PlayCircle size={12}/> {isActive ? 'Terminal' : 'Start'}</button>}
-                            {jc.docstatus === 0 && !isActive && <button onClick={() => handleJCSubmit(jc)} className="badge badge-success" style={{ cursor: 'pointer', border: 'none', display: 'flex', gap: '4px', alignItems: 'center' }} title="Sahkan Langsung"><CheckCircle size={12}/> Submit</button>}
+                            {jc.docstatus === 0 && <button onClick={() => handleJCStart(jc)} className="badge badge-purple" style={{ cursor: 'pointer', border: 'none', display: 'flex', gap: '4px', alignItems: 'center' }} title="Buka Terminal Mesin"><PlayCircle size={12}/> {isActive ? 'Terminal' : 'Start'}</button>}
                             
                             <button onClick={() => setSelectedJC(jc)} style={{ background: '#f1f5f9', border: 'none', color: '#64748b', borderRadius: '6px', padding: '6px', cursor: 'pointer' }} title="Lihat Detail"><Eye size={14} /></button>
                             {(jc.docstatus === 0 || jc.docstatus === 2) && <button onClick={() => handleSmartDelete('Job Card', jc.name, jc.docstatus)} style={{ background: '#fee2e2', border: 'none', color: '#dc2626', borderRadius: '6px', padding: '6px', cursor: 'pointer' }} title="Hapus"><Trash2 size={14} /></button>}
@@ -1188,7 +1359,7 @@ function ManufacturingPageContent() {
                       </tr>
                     );
                   })}
-                  {!isFetchingJC && filteredJCs.length === 0 && <tr><td colSpan={7} style={{ textAlign: 'center', padding: '40px', color: '#6B7280', fontSize: '13px' }}>Belum ada data Job Card.</td></tr>}
+                  {!isFetchingJC && filteredJCs.length === 0 && <tr><td colSpan={7} style={{ textAlign: 'center', padding: '40px', color: '#6B7280', fontSize: '13px' }}>Tidak ada Kartu Tugas (Job Card).</td></tr>}
                 </tbody>
               </table>
             </div>

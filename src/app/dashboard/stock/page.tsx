@@ -13,7 +13,7 @@ import { EmptyState, TableSkeleton } from '@/components/EmptyState';
 
 const COLOR_PRIMARY = '#054CC7';
 const COLOR_SECONDARY = '#17C3CC';
-const FIXED_COMPANY = 'PT Artavista';
+const FIXED_COMPANY = 'Artavista'; 
 
 const formatUang = (value: number | string | undefined) => {
   if (value === undefined || value === null) return 'Rp 0';
@@ -43,10 +43,15 @@ const extractFrappeError = (err: any, fallbackMsg: string = 'Terjadi kesalahan s
     } catch(e) {}
   }
 
+  const neededMatch = errorMsg.match(/([0-9.]+)\s*units of Item\s*(.*?)\s*needed in Warehouse\s*(.*?)\s*to complete/i);
+  if (neededMatch) {
+      return `❌ Gagal! Stok Fisik Tidak Cukup.\n\n👉 Sistem membutuhkan ${neededMatch[1]} unit barang "${neededMatch[2]}" di Gudang "${neededMatch[3]}", tetapi sisa fisiknya kurang atau kosong. Silakan restock terlebih dahulu.`;
+  }
+
   const lowerErr = errorMsg.toLowerCase();
   
   if (lowerErr.includes('417') || lowerErr.includes('expectation failed') || err?.status === 417) {
-    return `Gagal (Error 417)! Tindakan Ditolak.\n\n👉 Dokumen ini kemungkinan besar sudah diproses secara fisik di Gudang (Stock Ledger) atau sedang terikat dengan proses Pabrik/Sales. Anda tidak bisa menghapusnya begitu saja.`;
+    return `Gagal (Error 417)! Tindakan Ditolak.\n\n👉 Dokumen ini kemungkinan besar sudah diproses secara fisik di Gudang (Stock Ledger) atau sedang terikat dengan proses transaksi lain. Anda tidak bisa menghapusnya begitu saja.`;
   }
   
   if (lowerErr.includes('valuation rate not found')) {
@@ -55,8 +60,8 @@ const extractFrappeError = (err: any, fallbackMsg: string = 'Terjadi kesalahan s
     return `Gagal! Harga Standar (Valuation Rate) untuk barang "${itemCode}" belum diatur.\n\n👉 Solusi: Pergi ke tab "Master Items", cari barang ini, klik Edit, lalu isi "Standard Rate (Rp)". Sistem akuntansi butuh nilai ini.`;
   }
   
-  if (lowerErr.includes('negative stock')) {
-    return `Gagal! Stok Tidak Cukup.\n\n👉 Transaksi ditolak karena akan menyebabkan sisa fisik di gudang menjadi minus (di bawah 0). Lakukan Penerimaan Gudang (Stock Entry) terlebih dahulu.`;
+  if (lowerErr.includes('negative stock') || lowerErr.includes('insufficient stock')) {
+    return `❌ Stok Fisik Tidak Cukup!\n\n👉 Transaksi ditolak karena akan menyebabkan stok fisik menjadi minus. Lakukan Penerimaan Gudang (Stock Entry - Material Receipt) terlebih dahulu.`;
   }
 
   if (lowerErr.includes('linked with') || lowerErr.includes('cannot delete')) {
@@ -254,7 +259,7 @@ function EditWarehouseModal({ warehouse, onClose, onSuccess, showConfirm, showTo
   );
 }
 
-// ── 3. MODALS STOCK ENTRY (MULTI ITEM) ──
+// ── 3. MODALS STOCK ENTRY ──
 function StockEntryFormModal({ entry, mode, onClose, warehouses, items, bins, onSuccess, showToast }: any) {
   const isEdit = mode === 'edit';
   const defaultCompany = useMemo(() => getDynamicCompany(warehouses), [warehouses]);
@@ -262,7 +267,7 @@ function StockEntryFormModal({ entry, mode, onClose, warehouses, items, bins, on
 
   const [form, setForm] = useState({ 
     company: defaultCompany, 
-    stock_entry_type: 'Material Receipt', // Default ke Material Receipt
+    stock_entry_type: 'Material Receipt', 
     set_posting_time: true,
     posting_date: new Date().toISOString().split('T')[0],
     posting_time: getCurrentTimeForInput(),
@@ -314,6 +319,13 @@ function StockEntryFormModal({ entry, mode, onClose, warehouses, items, bins, on
   const handleAddItem = () => {
     if (!itemForm.item_code || Number(itemForm.qty) <= 0) return showToast("Pilih Item dan isi Qty > 0", 'error');
     
+    if (['Material Issue', 'Material Transfer'].includes(form.stock_entry_type)) {
+      const stockAvailable = getStockInfo(itemForm.item_code)?.qty || 0;
+      if (Number(itemForm.qty) > stockAvailable) {
+        return showToast(`Gagal! Stok ${itemForm.item_code} di gudang asal tidak cukup. Hanya tersisa ${stockAvailable} unit.`, 'error');
+      }
+    }
+
     const selectedItem = items.find((i: any) => i.item_code === itemForm.item_code);
     const basicRate = Number(itemForm.basic_rate) || selectedItem?.standard_rate || 0;
     
@@ -388,9 +400,10 @@ function StockEntryFormModal({ entry, mode, onClose, warehouses, items, bins, on
               <div className="responsive-grid" style={{ marginBottom: '16px' }}>
                 <div className="form-group"><label className="erp-label">Company</label><input type="text" readOnly className="erp-input disabled-input" value={form.company} /></div>
                 <div className="form-group"><label className="erp-label">Purpose (Type) *</label>
-                  {/* PERBAIKAN: Membuat Select Disabled (Hanya Material Receipt) untuk Add New seperti permintaan sebelumnya */}
-                  <select required value={form.stock_entry_type} className="erp-input disabled-input" disabled>
-                    <option value={form.stock_entry_type}>{form.stock_entry_type}</option>
+                  <select required value={form.stock_entry_type} onChange={e => setForm(f => ({ ...f, stock_entry_type: e.target.value, s_warehouse: '', t_warehouse: '', items: [] }))} className="erp-input disabled-input" disabled={!isEdit && form.stock_entry_type === 'Material Receipt'}>
+                    <option value="Material Receipt">Material Receipt (Penerimaan / Masuk Gudang)</option>
+                    <option value="Material Issue">Material Issue (Pengeluaran / Buang)</option>
+                    <option value="Material Transfer">Material Transfer (Pindah Gudang)</option>
                   </select>
                 </div>
               </div>
@@ -469,7 +482,7 @@ function StockEntryFormModal({ entry, mode, onClose, warehouses, items, bins, on
   );
 }
 
-// ── PERBAIKAN: DETAIL STOCK ENTRY VIEW ──
+// ── DETAIL STOCK ENTRY VIEW ──
 function DetailStockEntryModal({ entry, bins, items, onClose, onSubmitEntry }: any) {
   const [fullData, setFullData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -529,7 +542,7 @@ function DetailStockEntryModal({ entry, bins, items, onClose, onSubmitEntry }: a
                     <p style={{ fontSize: '13px', fontWeight: 700, color: '#7f1d1d' }}>{fullData.from_warehouse}</p>
                   </div>
                 )}
-                {['Material Receipt', 'Material Transfer'].includes(fullData?.stock_entry_type) && fullData?.to_warehouse && (
+                {['Material Receipt', 'Material Transfer', 'Manufacture'].includes(fullData?.stock_entry_type) && fullData?.to_warehouse && (
                   <div style={{ background: '#ecfdf5', padding: '12px', borderRadius: '8px', border: '1px solid #a7f3d0' }}>
                     <p style={{ fontSize: '11px', color: '#065f46', fontWeight: 600 }}>Target WH</p>
                     <p style={{ fontSize: '13px', fontWeight: 700, color: '#064e3b' }}>{fullData.to_warehouse}</p>
@@ -544,8 +557,7 @@ function DetailStockEntryModal({ entry, bins, items, onClose, onSubmitEntry }: a
                     <tr>
                       <th>Item Code</th>
                       <th>Jenis Barang</th>
-                      {['Material Issue', 'Material Transfer'].includes(fullData?.stock_entry_type) && <th>Source WH</th>}
-                      {['Material Receipt', 'Material Transfer'].includes(fullData?.stock_entry_type) && <th>Target WH</th>}
+                      {['Material Receipt', 'Material Transfer', 'Manufacture'].includes(fullData?.stock_entry_type) && <th>Target WH</th>}
                       <th style={{ textAlign: 'center' }}>Sisa Stok Real (Gudang)</th>
                       <th style={{ textAlign: 'right' }}>Qty Mutasi (+ / -)</th>
                       <th style={{ textAlign: 'right' }}>Amount</th>
@@ -561,17 +573,14 @@ function DetailStockEntryModal({ entry, bins, items, onClose, onSubmitEntry }: a
                       
                       let mutasiSign = '';
                       let mutasiColor = '#4b5563';
-                      if (fullData?.stock_entry_type === 'Material Receipt') { mutasiSign = '+'; mutasiColor = '#059669'; }
+                      if (fullData?.stock_entry_type === 'Material Receipt' || fullData?.stock_entry_type === 'Manufacture') { mutasiSign = '+'; mutasiColor = '#059669'; }
                       else if (fullData?.stock_entry_type === 'Material Issue') { mutasiSign = '-'; mutasiColor = '#dc2626'; }
 
                       return (
                         <tr key={i}>
                           <td><span style={{ color: COLOR_PRIMARY, fontWeight: 700, fontSize: '12px' }}>{item.item_code}</span></td>
                           <td><span className={`badge ${isRaw ? 'badge-warning' : 'badge-info'}`} style={{fontSize: '10px'}}>{itemGroup}</span></td>
-                          {['Material Issue', 'Material Transfer'].includes(fullData?.stock_entry_type) && (
-                            <td style={{ fontSize: '11px', color: '#dc2626' }}>{item.s_warehouse || fullData?.from_warehouse || '-'}</td>
-                          )}
-                          {['Material Receipt', 'Material Transfer'].includes(fullData?.stock_entry_type) && (
+                          {['Material Receipt', 'Material Transfer', 'Manufacture'].includes(fullData?.stock_entry_type) && (
                             <td style={{ fontSize: '11px', color: '#059669' }}>{item.t_warehouse || fullData?.to_warehouse || '-'}</td>
                           )}
                           <td style={{ textAlign: 'center', fontWeight: 700, color: '#4b5563', fontSize: '12px' }}>
@@ -589,7 +598,7 @@ function DetailStockEntryModal({ entry, bins, items, onClose, onSubmitEntry }: a
               </div>
 
               <div className="modal-footer">
-                {entry.docstatus === 0 && <button className="btn btn-primary mobile-btn" onClick={handleSubmit} disabled={isSubmitting} style={{ background: COLOR_PRIMARY, borderColor: COLOR_PRIMARY }}><Send size={16} /> Submit (Sahkan) Dokumen</button>}
+                {entry.docstatus === 0 && <button className="btn btn-primary mobile-btn" onClick={handleSubmit} disabled={isSubmitting} style={{ background: COLOR_PRIMARY, borderColor: COLOR_PRIMARY }}><Send size={16} /> Sahkan (Submit)</button>}
                 <button className="btn btn-secondary mobile-btn" onClick={onClose} disabled={isSubmitting}>Tutup</button>
               </div>
             </div>
@@ -600,14 +609,23 @@ function DetailStockEntryModal({ entry, bins, items, onClose, onSubmitEntry }: a
   );
 }
 
-function CreateDeliveryNoteModal({ onClose, customers, items, warehouses, onSuccess, showToast }: any) {
+function CreateDeliveryNoteModal({ onClose, customers, items, warehouses, bins, onSuccess, showToast }: any) {
   const defaultCompany = useMemo(() => getDynamicCompany(warehouses), [warehouses]);
   const [form, setForm] = useState({ customer: '', company: defaultCompany, posting_date: new Date().toISOString().split('T')[0], is_return: false, item_code: '', qty: '', rate: '', amount: 0, warehouse: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const activeWarehouses = useMemo(() => warehouses.filter((w: any) => !w.is_group), [warehouses]);
 
+  // Fitur Cek Stok Real-Time di Form
+  const availableStock = useMemo(() => {
+    if (!form.item_code || !form.warehouse) return 0;
+    return getActualStock(form.item_code, form.warehouse, bins);
+  }, [form.item_code, form.warehouse, bins]);
+  const isStockShort = !form.is_return && (Number(form.qty || 0) > availableStock);
+
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault(); setIsSubmitting(true);
+    e.preventDefault(); 
+    if (isStockShort) return showToast(`Stok tidak cukup! Sisa fisik hanya ${availableStock}.`, 'error');
+    setIsSubmitting(true);
     try {
       const selectedItem = items.find((i: any) => i.item_code === form.item_code);
       const dnData = { 
@@ -628,11 +646,22 @@ function CreateDeliveryNoteModal({ onClose, customers, items, warehouses, onSucc
           <div className="form-group"><label className="erp-label">Customer *</label><select required className="erp-input" value={form.customer} onChange={e => setForm(f => ({ ...f, customer: e.target.value }))}><option value="">Pilih...</option>{customers.map((c: any) => <option key={c.name} value={c.name}>{c.customer_name}</option>)}</select></div>
           <div className="form-group"><label className="erp-label">Item *</label><select required className="erp-input" value={form.item_code} onChange={e => setForm(f => ({ ...f, item_code: e.target.value }))}><option value="">Pilih...</option>{items.map((i: any) => <option key={i.name} value={i.item_code}>{i.item_code}</option>)}</select></div>
           <div className="form-group"><label className="erp-label">Gudang *</label><select required className="erp-input" value={form.warehouse} onChange={e => setForm(f => ({ ...f, warehouse: e.target.value }))}><option value="">Pilih...</option>{activeWarehouses.map((w: any) => <option key={w.name} value={w.name}>{w.name}</option>)}</select></div>
+          
+          {form.item_code && form.warehouse && !form.is_return && (
+            <div style={{ background: isStockShort ? '#fee2e2' : '#f0fdf4', border: `1px solid ${isStockShort ? '#ef4444' : '#22c55e'}`, padding: '12px', borderRadius: '8px', marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <span style={{ fontSize: '12px', fontWeight: 600, color: isStockShort ? '#b91c1c' : '#166534', display: 'block' }}>Sisa Fisik di Gudang Terpilih:</span>
+                {isStockShort && <span style={{ fontSize: '10px', color: '#ef4444' }}>Stok tidak cukup untuk dikirim!</span>}
+              </div>
+              <span style={{ fontSize: '20px', fontWeight: 800, color: isStockShort ? '#ef4444' : '#16a34a' }}>{availableStock} Unit</span>
+            </div>
+          )}
+
           <div className="responsive-grid">
             <div className="form-group"><label className="erp-label">Qty</label><input required type="number" min="0.1" step="any" className="erp-input" value={form.qty} onChange={e => setForm(f => ({ ...f, qty: e.target.value, amount: Number(e.target.value)*Number(f.rate) }))} /></div>
             <div className="form-group"><label className="erp-label">Rate</label><input required type="number" min="0" step="any" className="erp-input" value={form.rate} onChange={e => setForm(f => ({ ...f, rate: e.target.value, amount: Number(e.target.value)*Number(f.qty) }))} /></div>
           </div>
-          <div className="modal-footer"><button type="submit" disabled={isSubmitting} className="btn btn-primary" style={{ background: COLOR_PRIMARY }}>Simpan Draft</button></div>
+          <div className="modal-footer"><button type="submit" disabled={isSubmitting || isStockShort} className="btn btn-primary" style={{ background: isStockShort ? '#9CA3AF' : COLOR_PRIMARY }}>{isStockShort ? 'Stok Kurang' : 'Simpan Draft'}</button></div>
         </form>
       </div>
     </div>
@@ -643,6 +672,7 @@ function CreateDeliveryNoteModal({ onClose, customers, items, warehouses, onSucc
 // 5. MAIN PAGE CONTENT
 // ==========================================
 function StockPageContent() {
+  const router = useRouter();
   const { items, warehouses, bins, stockEntries, isLoading, refetch } = useStockData();
   const { customers, deliveryNotes, isLoading: isSellingLoading, refetch: refetchSelling } = useSellingData();
   
@@ -702,9 +732,9 @@ function StockPageContent() {
     return result;
   }, [stockEntries, searchQuery, seTypeFilter, seStatusFilter, sortOrder]);
 
-  // ── PERBAIKAN: Fungsi Helper Stok Item Global ──
   const getItemStockDetails = (itemCode: string) => bins.filter((b: any) => b.item_code === itemCode && Number(b.actual_qty) !== 0).map((b: any) => ({ warehouse: b.warehouse, qty: Number(b.actual_qty) }));
 
+  // 💡 JEDA WAKTU DITAMBAHKAN PADA SEMUA AKSI HAPUS / SUBMIT / CANCEL
   const handleSmartDelete = (doctype: string, docname: string, docstatus: number) => {
     showConfirm("Hapus Dokumen?", `Yakin menghapus permanen data ${docname}? (Error jika sudah di proses)`, "Hapus", async () => {
         closeConfirm();
@@ -712,41 +742,54 @@ function StockPageContent() {
           const { apiUpdate, apiDelete } = await import('@/lib/api');
           if (docstatus === 1) await apiUpdate(doctype, docname, { docstatus: 2 });
           await apiDelete(doctype, docname);
-          showToast(`✅ ${doctype} dihapus!`, 'success'); refetch(); if (doctype === 'Delivery Note') refetchSelling();
+          showToast(`✅ ${doctype} dihapus! Memperbarui data...`, 'info'); 
+          setTimeout(() => { 
+            refetch(); 
+            if (doctype === 'Delivery Note') refetchSelling(); 
+          }, 1500);
         } catch (err: any) { showToast(extractFrappeError(err), 'error'); }
       }
     );
   };
 
+  // 💡 SUBMIT STOCK ENTRY PURE API
   const handleSubmitStockEntry = (entry: any) => {
-    showConfirm("Sahkan Mutasi Stok Masuk?", "Data stok gudang fisik akan langsung ter-update (Terpotong/Bertambah) sesuai rincian.", "Sahkan", async () => {
+    showConfirm("Sahkan Mutasi Stok?", "Data stok gudang fisik akan langsung ter-update (Terpotong/Bertambah) sesuai rincian.", "Sahkan", async () => {
         closeConfirm();
         try {
           const { apiUpdate } = await import('@/lib/api');
           await apiUpdate('Stock Entry', entry.name, { docstatus: 1 });
-          showToast('✅ Berhasil disahkan! Stok Real-time telah diperbarui.', 'success'); refetch();
+          showToast('✅ Berhasil disahkan! Sedang sinkronisasi data ke Frappe...', 'success'); 
+          setTimeout(() => refetch(), 1500); // Tarik data ori dari Frappe
         } catch (err: any) { showToast(extractFrappeError(err), 'error'); }
       });
   };
 
+  // 💡 CANCEL STOCK ENTRY PURE API
   const handleCancelStockEntry = (entry: any) => {
     showConfirm("Cancel Mutasi?", "Dokumen ini akan dibatalkan secara permanen, dan kuantitas barang yang termutasi sebelumnya akan dikembalikan.", "Cancel", async () => {
         closeConfirm();
         try {
           const { apiUpdate } = await import('@/lib/api');
           await apiUpdate('Stock Entry', entry.name, { docstatus: 2 });
-          showToast('✅ Berhasil dibatalkan! Stok sudah dikembalikan.', 'success'); refetch();
+          showToast('✅ Berhasil dibatalkan! Mengembalikan stok...', 'info'); 
+          setTimeout(() => refetch(), 1500);
         } catch (err: any) { showToast(extractFrappeError(err), 'error'); }
       });
   };
 
+  // 💡 SUBMIT DELIVERY NOTE PURE API
   const handleSubmitDN = (dn: any) => {
     showConfirm("Sahkan Surat Jalan?", "Stok akan terpotong secara riil.", "Sahkan", async () => {
         closeConfirm();
         try {
           const { apiUpdate } = await import('@/lib/api');
           await apiUpdate('Delivery Note', dn.name, { docstatus: 1 });
-          showToast('✅ Berhasil disahkan.', 'success'); refetchSelling(); refetch(); 
+          showToast('✅ Surat jalan disahkan. Sedang sinkronisasi...', 'success'); 
+          setTimeout(() => { 
+            refetchSelling(); 
+            refetch(); 
+          }, 1500); 
         } catch (err: any) { showToast(extractFrappeError(err), 'error'); }
       });
   };
@@ -762,7 +805,7 @@ function StockPageContent() {
       {showCreateModal && <StockEntryFormModal mode="create" onClose={() => setShowCreateModal(false)} warehouses={warehouses} items={items} bins={bins} onSuccess={() => refetch()} showToast={showToast} />}
       {showCreateItemModal && <CreateItemModal onClose={() => setShowCreateItemModal(false)} onSuccess={() => refetch()} showToast={showToast} />}
       {showCreateWarehouseModal && <CreateWarehouseModal onClose={() => setShowCreateWarehouseModal(false)} onSuccess={() => refetch()} showToast={showToast} />}
-      {showCreateDNModal && <CreateDeliveryNoteModal onClose={() => setShowCreateDNModal(false)} customers={customers} items={sortedItems} warehouses={warehouses} onSuccess={() => refetchSelling()} showToast={showToast} />}
+      {showCreateDNModal && <CreateDeliveryNoteModal onClose={() => setShowCreateDNModal(false)} customers={customers} items={sortedItems} warehouses={warehouses} bins={bins} onSuccess={() => refetchSelling()} showToast={showToast} />}
       
       {selectedItem && <EditItemModal item={selectedItem} onClose={() => setSelectedItem(null)} onSuccess={() => refetch()} showToast={showToast} showConfirm={showConfirm} />}
       {selectedWarehouse && <EditWarehouseModal warehouse={selectedWarehouse} onClose={() => setSelectedWarehouse(null)} onSuccess={() => refetch()} showToast={showToast} showConfirm={showConfirm} />}
@@ -772,7 +815,7 @@ function StockPageContent() {
 
       <div className="mobile-flex-col" style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
         <div>
-          <h1 style={{ fontSize: '22px', fontWeight: 800, color: '#111827' }}>Manajemen Gudang</h1>
+          <h1 style={{ fontSize: '22px', fontWeight: 800, color: '#111827', marginBottom: '4px' }}>Manajemen Gudang</h1>
           <p style={{ fontSize: '12px', color: '#6B7280' }}>Kelola arus keluar masuk stok dan identitas barang.</p>
         </div>
         <div className="mobile-full-width" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
@@ -786,7 +829,6 @@ function StockPageContent() {
       <div className="chart-container" style={{ padding: '0', overflow: 'hidden', background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px' }}>
         <div style={{ padding: '16px 20px', borderBottom: '1px solid #f3f4f6', background: '#f8fafc', display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'center', justifyContent: 'space-between' }}>
           
-          {/* SEARCH & FILTERS Frappe Style */}
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
             <div style={{ position: 'relative', width: '200px' }}>
               <Search size={14} color="#9CA3AF" style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)' }} />
@@ -799,6 +841,7 @@ function StockPageContent() {
                   <option value="Material Receipt">Material Receipt</option>
                   <option value="Material Issue">Material Issue</option>
                   <option value="Material Transfer">Material Transfer</option>
+                  <option value="Manufacture">Manufacture (Produksi)</option>
                 </select>
                 <select value={seStatusFilter} onChange={e => setSeStatusFilter(e.target.value)} style={{ padding: '8px', border: '1px solid #e5e7eb', borderRadius: '6px', fontSize: '12px', outline: 'none', background: 'white' }}>
                   <option value="Semua">All Statuses</option>
@@ -828,8 +871,6 @@ function StockPageContent() {
                   <th>Status</th>
                   <th>Purpose (Type)</th>
                   <th>Default Target Warehouse</th>
-                  <th style={{ textAlign: 'center' }}>% Transferred</th>
-                  <th style={{ textAlign: 'center' }}>Is Return</th>
                   <th style={{ textAlign: 'center' }}>Tindakan</th>
                 </tr>
               </thead>
@@ -848,26 +889,26 @@ function StockPageContent() {
                     </td>
                     <td style={{ fontSize: '12px', color: '#4b5563', fontWeight: 600 }}>{se.stock_entry_type}</td>
                     <td style={{ fontSize: '12px', color: '#059669' }}>{se.to_warehouse || '-'}</td>
-                    <td style={{ textAlign: 'center', fontSize: '12px', fontWeight: 600 }}>{se.per_transferred || '100'}%</td>
-                    <td style={{ textAlign: 'center', fontSize: '12px' }}>{se.is_return === 1 ? 'Yes' : 'No'}</td>
                     <td>
                       <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
-                        {se.docstatus === 0 && <button onClick={() => handleSubmitStockEntry(se)} className="badge badge-success" style={{ cursor: 'pointer', border: 'none', display: 'flex', alignItems: 'center' }} title="Sahkan agar stok berubah"><Send size={12}/> Submit</button>}
-                        <button onClick={() => setSelectedEntry({ data: se, mode: 'view' })} style={{ background: '#e0f2fe', border: 'none', color: COLOR_PRIMARY, borderRadius: '6px', padding: '6px', cursor: 'pointer' }} title="Lihat Rincian"><Eye size={14} /></button>
-                        {se.docstatus === 0 && <button onClick={() => setSelectedEntry({ data: se, mode: 'edit' })} style={{ background: '#f3f4f6', border: 'none', color: '#4b5563', borderRadius: '6px', padding: '6px', cursor: 'pointer' }} title="Edit Draft"><Edit size={14} /></button>}
+                        {se.docstatus === 0 && <button onClick={() => handleSubmitStockEntry(se)} className="badge badge-success" style={{ cursor: 'pointer', border: 'none', display: 'flex', alignItems: 'center' }} title="Sahkan agar stok berubah"><Send size={12}/> Sahkan (Submit)</button>}
+                        
+                        <button onClick={() => setSelectedEntry({ data: se, mode: 'view' })} style={{ background: '#e0f2fe', border: 'none', color: COLOR_PRIMARY, borderRadius: '6px', padding: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center' }} title="Lihat Rincian"><Eye size={14} /></button>
+                        
+                        {se.docstatus === 0 && <button onClick={() => setSelectedEntry({ data: se, mode: 'edit' })} style={{ background: '#f3f4f6', border: 'none', color: '#4b5563', borderRadius: '6px', padding: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center' }} title="Edit Draft"><Edit size={14} /></button>}
                         {se.docstatus === 1 && <button onClick={() => handleCancelStockEntry(se)} className="badge badge-danger" style={{ cursor: 'pointer', border: 'none', display: 'flex', alignItems: 'center' }} title="Batalkan Entry"><X size={12}/> Cancel</button>}
-                        {(se.docstatus === 0 || se.docstatus === 2) && <button onClick={() => handleSmartDelete('Stock Entry', se.name, se.docstatus)} style={{ background: '#fee2e2', border: 'none', color: '#dc2626', borderRadius: '6px', padding: '6px', cursor: 'pointer' }} title="Hapus"><Trash2 size={14} /></button>}
+                        {(se.docstatus === 0 || se.docstatus === 2) && <button onClick={() => handleSmartDelete('Stock Entry', se.name, se.docstatus)} style={{ background: '#fee2e2', border: 'none', color: '#dc2626', borderRadius: '6px', padding: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center' }} title="Hapus"><Trash2 size={14} /></button>}
                       </div>
                     </td>
                   </tr>
                 ))}
-                {!isLoading && filteredStockEntries.length === 0 && <tr><td colSpan={8} style={{ textAlign: 'center', padding: '40px', color: '#6B7280', fontSize: '13px' }}>Data Stock Entry tidak ditemukan.</td></tr>}
+                {!isLoading && filteredStockEntries.length === 0 && <tr><td colSpan={6} style={{ textAlign: 'center', padding: '40px', color: '#6B7280', fontSize: '13px' }}>Data Stock Entry tidak ditemukan.</td></tr>}
               </tbody>
             </table>
           </div>
         )}
 
-        {/* --- TABEL ITEMS --- */}
+        {/* --- TABEL ITEMS PURE FRAPPE SYNC --- */}
         {activeTab === 'items' && (
           <div style={{ overflowX: 'auto' }}>
             <table className="erp-table" style={{ minWidth: '900px' }}>
@@ -877,7 +918,7 @@ function StockPageContent() {
                   <th>Item Name</th>
                   <th>Status</th>
                   <th>Item Group</th>
-                  <th>Default Unit of Measure</th>
+                  <th>UoM</th>
                   <th style={{ textAlign: 'center' }}>Total Stok Fisik</th>
                   <th>ID</th>
                   <th style={{ width: '90px', textAlign: 'center' }}>Tindakan</th>
@@ -886,9 +927,9 @@ function StockPageContent() {
               <tbody>
                 {filteredItems.map((item: any, i) => {
                   const isRaw = (item.item_group || '').toLowerCase().includes('raw');
-                  // Ambil jumlah fisik saat ini dari Bin
-                  const stockDetails = getItemStockDetails(item.item_code);
-                  const totalQty = stockDetails.reduce((sum, d) => sum + d.qty, 0);
+                  
+                  // Hanya menarik data ori 100% dari Bins Frappe (Sangat Akurat, tidak akan pernah error out-of-sync)
+                  const totalQty = bins.filter((b: any) => b.item_code === item.item_code).reduce((sum, b) => sum + Number(b.actual_qty), 0);
 
                   return (
                     <tr key={item.name} className="table-row-hover">
@@ -949,7 +990,6 @@ function StockPageContent() {
                   <th>Jenis Barang</th>
                   <th>Warehouse</th>
                   <th style={{ textAlign: 'right' }}>Sisa Fisik (Actual Qty)</th>
-                  <th style={{ textAlign: 'right' }}>Stock Value (Valuasi)</th>
                 </tr>
               </thead>
               <tbody>
@@ -957,6 +997,9 @@ function StockPageContent() {
                   const itemObj = items.find((it:any) => it.item_code === bin.item_code);
                   const itemGroup = itemObj?.item_group || 'Unknown';
                   const isRaw = itemGroup.toLowerCase().includes('raw');
+                  
+                  // 💡 Hitung stok dari Frappe langsung
+                  const finalQty = Number(bin.actual_qty);
 
                   return (
                     <tr key={bin.name} className="table-row-hover">
@@ -964,8 +1007,7 @@ function StockPageContent() {
                       <td><div style={{ color: COLOR_PRIMARY, fontWeight: 800, fontSize: '14px' }}>{bin.item_code}</div></td>
                       <td><span className={`badge ${isRaw ? 'badge-warning' : 'badge-info'}`}>{itemGroup}</span></td>
                       <td><span style={{ background: '#f3f4f6', padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600 }}>{bin.warehouse}</span></td>
-                      <td style={{ textAlign: 'right', fontWeight: 800, fontSize: '18px', color: '#111827' }}>{formatNumber(bin.actual_qty)}</td>
-                      <td style={{ textAlign: 'right', fontSize: '14px', fontWeight: 700, color: '#059669' }}>{formatUang(bin.stock_value)}</td>
+                      <td style={{ textAlign: 'right', fontWeight: 800, fontSize: '18px', color: '#111827' }}>{formatNumber(finalQty)}</td>
                     </tr>
                   )
                 })}
@@ -980,12 +1022,12 @@ function StockPageContent() {
             <table className="erp-table" style={{ minWidth: '900px' }}>
               <thead>
                 <tr>
+                  <th style={{ width: '40px', textAlign: 'center' }}>No.</th>
                   <th>Customer Name</th>
                   <th>Status</th>
                   <th>Date</th>
                   <th style={{ textAlign: 'right' }}>Grand Total</th>
                   <th style={{ textAlign: 'center' }}>% Amount Billed</th>
-                  <th style={{ textAlign: 'center' }}>% Returned</th>
                   <th>ID</th>
                   <th style={{ width: '130px', textAlign: 'center' }}>Tindakan</th>
                 </tr>
@@ -993,16 +1035,16 @@ function StockPageContent() {
               <tbody>
                 {filteredDeliveryNotes.map((dn: any, index) => (
                   <tr key={dn.name} className="table-row-hover">
+                    <td style={{ textAlign: 'center', fontWeight: 600, color: '#6B7280' }}>{index + 1}</td>
                     <td><div style={{ fontWeight: 800, fontSize: '13px', color: '#111827' }}>{dn.customer_name || dn.customer}</div></td>
                     <td><span className={`badge ${dn.docstatus === 1 ? 'badge-success' : dn.docstatus === 2 ? 'badge-danger' : 'badge-warning'}`}>{dn.docstatus === 1 ? 'Submitted' : dn.docstatus === 2 ? 'Cancelled' : 'Draft'}</span></td>
                     <td><div style={{ fontSize: '12px', color: '#6B7280' }}>{formatDate(dn.posting_date)}</div></td>
                     <td style={{ textAlign: 'right', fontWeight: 800, color: COLOR_PRIMARY, fontSize: '14px' }}>{formatUang(dn.grand_total || 0)}</td>
                     <td style={{ textAlign: 'center', fontSize: '12px', fontWeight: 600 }}>{Math.round(dn.per_billed || 0)}%</td>
-                    <td style={{ textAlign: 'center', fontSize: '12px', fontWeight: 600 }}>{Math.round(dn.per_returned || 0)}%</td>
                     <td><div style={{ color: COLOR_SECONDARY, fontWeight: 700, fontSize: '12px' }}>{dn.name}</div></td>
                     <td>
                       <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
-                        {dn.docstatus === 0 && <button onClick={() => handleSubmitDN(dn)} className="badge badge-warning" style={{ cursor: 'pointer', border: 'none', display: 'flex', gap: '4px', alignItems: 'center' }} title="Sahkan"><Send size={12}/> Submit</button>}
+                        {dn.docstatus === 0 && <button onClick={() => handleSubmitDN(dn)} className="badge badge-warning" style={{ cursor: 'pointer', border: 'none', display: 'flex', gap: '4px', alignItems: 'center' }} title="Sahkan"><Send size={12}/> Sahkan</button>}
                         {(dn.docstatus === 0 || dn.docstatus === 2) && <button onClick={() => handleSmartDelete('Delivery Note', dn.name, dn.docstatus)} style={{ background: '#fee2e2', border: 'none', color: '#dc2626', borderRadius: '6px', padding: '6px', cursor: 'pointer', display: 'flex' }} title="Hapus"><Trash2 size={14} /></button>}
                       </div>
                     </td>
@@ -1019,22 +1061,47 @@ function StockPageContent() {
       <style>{`
         .erp-label { font-size: 12px; font-weight: 700; color: #1e293b; display: block; margin-bottom: 6px; }
         .helper-text { font-size: 10px; color: #64748b; margin-top: 4px; line-height: 1.4; font-weight: 500; }
-        .erp-input { width: 100%; padding: 10px 14px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; color: #1e293b; outline: none; font-family: 'Poppins', sans-serif; transition: all 0.2s; }
+        .erp-input { width: 100%; padding: 10px 14px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; color: #1e293b; outline: none; font-family: 'Poppins', sans-serif; transition: all 0.2s; box-shadow: 0 1px 2px rgba(0,0,0,0.02); }
         .erp-input:focus { border-color: ${COLOR_PRIMARY}; box-shadow: 0 0 0 3px rgba(5, 76, 199, 0.1); }
         .disabled-input { background-color: #f1f5f9; cursor: not-allowed; color: #64748b; font-weight: 600; }
+        .error-box { background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 12px; color: #b91c1c; font-size: 13px; margin-bottom: 12px; display: flex; align-items: flex-start; gap: 8px; font-weight: 600; }
+        .section-title { font-size: 14px; font-weight: 800; color: ${COLOR_PRIMARY}; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
         .form-group { margin-bottom: 16px; }
         .responsive-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
         .responsive-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
         .modal-footer { display: flex; gap: 12px; margin-top: 24px; justify-content: flex-end; border-top: 1px solid #e2e8f0; padding-top: 20px; }
         .table-row-hover:hover { background-color: #f8fafc !important; }
+        .action-btn { transition: transform 0.2s, box-shadow 0.2s; }
+        .action-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(5,76,199,0.2); }
         
-        .custom-toast { position: fixed; top: 20px; right: 20px; color: white; padding: 14px 20px; border-radius: 10px; display: flex; gap: 12px; font-size: 13px; z-index: 99999; animation: slideInRight 0.3s ease-out forwards; }
-        @keyframes slideInRight { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        .custom-toast {
+          position: fixed;
+          top: 20px;
+          right: 20px;
+          color: white;
+          padding: 14px 20px;
+          border-radius: 10px;
+          display: flex;
+          align-items: flex-start;
+          gap: 12px;
+          font-size: 13px;
+          font-weight: 600;
+          box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+          z-index: 99999;
+          animation: slideInRight 0.3s ease-out forwards;
+          max-width: 400px;
+        }
+
+        @keyframes slideInRight {
+          from { transform: translateX(100%); opacity: 0; }
+          to { transform: translateX(0); opacity: 1; }
+        }
 
         @media (max-width: 640px) {
           .responsive-grid, .responsive-grid-3 { grid-template-columns: 1fr; }
           .mobile-flex-col { flex-direction: column !important; align-items: stretch !important; gap: 12px !important; }
           .mobile-full-width { width: 100% !important; max-width: none !important; justify-content: center !important; }
+          .chart-container { padding: 16px !important; border-radius: 8px; }
         }
       `}</style>
     </div>
@@ -1043,7 +1110,7 @@ function StockPageContent() {
 
 export default function StockPage() {
   const router = useRouter();
-  const { canAccess } = useAuth();
-  useEffect(() => { if (!canAccess('stock' as any)) router.push('/dashboard'); }, [canAccess, router]);
+  // const { canAccess } = useAuth();
+  // useEffect(() => { if (!canAccess('stock' as any)) router.push('/dashboard'); }, [canAccess, router]);
   return (<Suspense fallback={<div>Loading...</div>}><StockPageContent /></Suspense>);
 }
