@@ -1,289 +1,269 @@
 'use client';
 
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useStockData } from '@/hooks/useFrappeData';
-import { Package, Warehouse, AlertTriangle, BarChart3, TrendingUp, ArrowUpRight, CheckCircle2 } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import { getWarehousesByCompany } from '@/config/frappe-data';
+import { Loader2, Info, X, CheckCircle2, Package, Warehouse, DollarSign } from 'lucide-react';
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
+} from 'recharts';
 
-const COLOR_PRIMARY = '#10b981';
-const COLOR_ACCENT = '#06b6d4';
-const FIXED_COMPANY = 'PT Artavista';
+const COLOR_PRIMARY = '#054CC7';
+const TREND_COLOR_PINK = '#ec4899'; 
 
-const formatUang = (v: any) => {
-  const n = Number(v);
-  if (!v || isNaN(n)) return 'Rp 0';
-  return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n);
+const formatUang = (value: number | string | undefined | any) => {
+  if (!value) return 'Rp 0';
+  return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(Number(value));
 };
 
-const formatUangSingkat = (v: any) => {
-  const n = Number(v);
-  if (!v || isNaN(n)) return 'Rp 0';
-  if (n >= 1_000_000_000) return `Rp ${(n / 1_000_000_000).toFixed(1)}M`;
-  if (n >= 1_000_000) return `Rp ${(n / 1_000_000).toFixed(0)}Jt`;
-  if (n >= 1_000) return `Rp ${(n / 1_000).toFixed(0)}Rb`;
-  return formatUang(n);
+const formatNumber = (value: number | string | undefined | any) => {
+  if (!value) return '0';
+  return new Intl.NumberFormat('id-ID').format(Number(value));
 };
 
-const BAR_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4', '#f97316'];
+const formatShortAxis = (num: number) => {
+  if (num === 0) return '0';
+  if (num >= 1000000000) return (num / 1000000000).toFixed(1).replace(/\.0$/, '') + ' B';
+  if (num >= 1000000) return (num / 1000000).toFixed(1).replace(/\.0$/, '') + ' M';
+  if (num >= 1000) return (num / 1000).toFixed(1).replace(/\.0$/, '') + ' K';
+  return num.toString();
+};
+
+const formatCompact = (value: number | string | undefined | any, isCurrency = false) => {
+  if (!value) return isCurrency ? 'Rp 0' : '0';
+  const num = Number(value);
+  if (isNaN(num)) return isCurrency ? 'Rp 0' : '0';
+  
+  let formatted = '';
+  if (num >= 1000000000) formatted = (num / 1000000000).toFixed(2).replace(/\.?0+$/, '') + ' B';
+  else if (num >= 1000000) formatted = (num / 1000000).toFixed(2).replace(/\.?0+$/, '') + ' M';
+  else if (num >= 1000) formatted = (num / 1000).toFixed(2).replace(/\.?0+$/, '') + ' K';
+  else formatted = new Intl.NumberFormat('id-ID').format(num);
+
+  return isCurrency ? `Rp ${formatted}` : formatted;
+};
+
+// ── CUSTOM TOOLTIP ALA FRAPPE ──
+const FrappeChartTooltip = ({ active, payload, label, isCurrency = false }: any) => {
+  if (active && payload && payload.length) {
+    return (
+      <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px 16px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}>
+        <div style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '8px', letterSpacing: '0.05em' }}>{label}</div>
+        {payload.map((entry: any, index: number) => {
+          const valStr = isCurrency ? formatUang(entry.value) : formatNumber(entry.value);
+          return (
+            <div key={index} style={{ marginBottom: index !== payload.length - 1 ? '10px' : 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                <div style={{ width: 10, height: 10, borderRadius: '2px', background: entry.color || TREND_COLOR_PINK }} />
+                <div style={{ fontSize: '14px', fontWeight: 700, color: '#111827', lineHeight: 1 }}>{valStr}</div>
+              </div>
+              <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 500, marginLeft: '16px' }}>{entry.name}</div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+  return null;
+};
+
+function InfoModal({ show, title, text, onClose }: { show: boolean, title: string, text: string, onClose: () => void }) {
+  if (!show) return null;
+  return (
+    <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(4px)', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'fadeIn 0.2s ease-out' }} onClick={onClose}>
+      <div style={{ background: 'white', width: '100%', maxWidth: '420px', borderRadius: '16px', padding: '24px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', margin: '0 16px', animation: 'scaleIn 0.2s ease-out' }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+          <div style={{ width: '48px', height: '48px', background: '#eff6ff', color: COLOR_PRIMARY, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Info size={24} />
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', padding: '4px' }}>
+            <X size={20} />
+          </button>
+        </div>
+        <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#111827', marginBottom: '8px', fontFamily: "'Poppins', sans-serif" }}>{title}</h3>
+        <p style={{ fontSize: '13px', color: '#4b5563', lineHeight: 1.6, marginBottom: '24px', whiteSpace: 'pre-wrap', fontFamily: "'Poppins', sans-serif" }}>{text}</p>
+        <button onClick={onClose} className="btn-understand" style={{ width: '100%', padding: '12px 16px', background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s', fontFamily: "'Poppins', sans-serif" }}>
+          Mengerti
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export default function StockHomePage() {
-  const { items, bins, isLoading } = useStockData();
-  const warehouses = getWarehousesByCompany(FIXED_COMPANY);
-  const [localLedger, setLocalLedger] = useState<Record<string, number>>({});
-
-  useEffect(() => {
-    const l = localStorage.getItem('erp_mock_stock_ledger');
-    if (l) setLocalLedger(JSON.parse(l));
-  }, []);
+  // FIX: Tarik `warehouses` langsung dari database ERPNext melalui useStockData
+  const { items, bins, warehouses, isLoading } = useStockData();
+  const [infoData, setInfoData] = useState<{show: boolean, title: string, text: string}>({ show: false, title: '', text: '' });
 
   const stats = useMemo(() => {
-    const totalActiveItems = items.filter((i: any) => !i.disabled).length;
-    const totalWarehouses = warehouses.length;
-
-    const binMap: Record<string, any> = {};
-    bins.forEach((b: any) => {
-      binMap[`${b.item_code}_${b.warehouse}`] = { ...b, actual_qty: Number(b.actual_qty) || 0 };
-    });
-    Object.entries(localLedger).forEach(([key, qty]) => {
-      if (binMap[key]) { binMap[key].actual_qty += Number(qty); }
-      else {
-        const [item_code, warehouse] = key.split('_');
-        binMap[key] = { item_code, warehouse, actual_qty: Number(qty) };
-      }
-    });
-
-    const simulatedBins = Object.values(binMap).map((b: any) => {
-      const item = items.find((i: any) => i.item_code === b.item_code);
-      const rate = item?.standard_rate || 0;
-      return { ...b, stock_value: b.actual_qty * rate };
-    });
-
-    const nvBins = simulatedBins.filter((b: any) =>
-      b.warehouse.includes(FIXED_COMPANY) || b.warehouse.includes('- NV') || b.warehouse.includes('- ARTA')
-    );
+    const totalActiveItems = (items || []).filter((i: any) => !i.disabled).length;
+    
+    // FIX: Hitung jumlah Gudang murni dari Master Warehouse, BUKAN dari Bin (Hasilnya akan persis 7)
+    const totalWarehouses = (warehouses || []).length; 
 
     let totalStockValue = 0;
     const groupData: Record<string, number> = {};
 
-    nvBins.forEach((b: any) => {
-      const val = Number(b.stock_value) || 0;
+    (bins || []).forEach((b: any) => {
+      const item = (items || []).find((i: any) => i.item_code === b.item_code);
+      const rate = item?.standard_rate || b.valuation_rate || 0; 
+      const actualQty = Number(b.actual_qty) || 0;
+      const val = actualQty * rate;
+      
       totalStockValue += val;
-      const itemGroup = items.find((i: any) => i.item_code === b.item_code)?.item_group || 'Products';
-      groupData[itemGroup] = (groupData[itemGroup] || 0) + val;
+      const itemGroup = item?.item_group || 'Products';
+      
+      if(groupData[itemGroup] !== undefined) {
+         groupData[itemGroup] += val;
+      } else {
+         groupData[itemGroup] = val; 
+      }
     });
 
     const stockByGroup = Object.entries(groupData)
       .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value);
+      .filter(g => g.value > 0)
+      .sort((a, b) => b.value - a.value); 
 
-    // Low stock items (actual_qty < 10)
-    const lowStockItems = simulatedBins
-      .filter((b: any) => b.actual_qty > 0 && b.actual_qty < 10)
-      .slice(0, 5);
+    return { totalActiveItems, totalWarehouses, totalStockValue, stockByGroup };
+  }, [items, bins, warehouses]);
 
-    return { totalActiveItems, totalWarehouses, totalStockValue, stockByGroup, lowStockItems };
-  }, [items, warehouses, bins, localLedger]);
+  if (isLoading) return <div style={{ textAlign: 'center', padding: '80px 20px' }}><Loader2 className="animate-spin" size={32} color={COLOR_PRIMARY} style={{ margin: '0 auto 16px' }} /><p style={{ color: '#6B7280', fontSize: '13px' }}>Memuat data Dashboard...</p></div>;
 
-  const STATS = [
-    {
-      label: 'Total Stock Value', value: formatUangSingkat(stats.totalStockValue),
-      icon: TrendingUp, color: '#10b981', bg: 'linear-gradient(135deg,#ecfdf5,#d1fae5)', sub: 'Nilai total inventaris'
-    },
-    {
-      label: 'Active Items', value: stats.totalActiveItems,
-      icon: Package, color: '#3b82f6', bg: 'linear-gradient(135deg,#eff6ff,#dbeafe)', sub: 'Produk aktif terdaftar'
-    },
-    {
-      label: 'Warehouses', value: stats.totalWarehouses,
-      icon: Warehouse, color: '#8b5cf6', bg: 'linear-gradient(135deg,#f5f3ff,#ede9fe)', sub: 'Gudang aktif'
-    },
-    {
-      label: 'Item Groups', value: stats.stockByGroup.length,
-      icon: BarChart3, color: '#f59e0b', bg: 'linear-gradient(135deg,#fffbeb,#fef3c7)', sub: 'Kategori barang'
-    },
-  ];
+  const MetricCard = ({ title, value, color, icon, infoText }: any) => (
+    <div className="metric-card">
+      <div className="metric-card-content">
+        <div className="metric-card-header">
+          <span className="metric-title">{title}</span>
+          {infoText && (
+            <button 
+              onClick={() => setInfoData({ show: true, title, text: infoText })}
+              className="metric-info-btn"
+              title="Lihat Detail Nilai"
+            >
+              <Info size={14} />
+            </button>
+          )}
+        </div>
+        <div className="metric-value" style={{ color }}>{value}</div>
+      </div>
+      <div className="metric-icon" style={{ background: `${color}15`, color }}>
+        {icon}
+      </div>
+    </div>
+  );
 
-  if (isLoading) return (
-    <div className="ih-loading">
-      <div className="ih-spinner" />
-      <p>Memuat data Inventory...</p>
+  const ChartHeader = ({ title, subtitle, infoText }: any) => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
+      <div>
+        <h3 style={{ fontSize: '15px', fontWeight: 600, color: '#1f2937' }}>{title}</h3>
+        {subtitle && <p style={{ fontSize: '12px', color: '#6B7280', marginTop: '4px' }}>{subtitle}</p>}
+      </div>
+      <div>
+        <button 
+          onClick={() => setInfoData({ show: true, title, text: infoText })} 
+          style={{ background: '#f3f4f6', border: 'none', borderRadius: '6px', padding: '6px', cursor: 'pointer', color: '#4b5563', transition: 'all 0.2s', display: 'flex', alignItems: 'center' }} 
+          title="Lihat Informasi"
+        >
+          <Info size={16} />
+        </button>
+      </div>
     </div>
   );
 
   return (
-    <div className="ih-root">
-      {/* Page Header */}
-      <div className="ih-page-header">
+    <div style={{ animation: 'fadeIn 0.4s ease-out', fontFamily: "'Inter', 'Poppins', sans-serif" }}>
+      
+      <InfoModal show={infoData.show} title={infoData.title} text={infoData.text} onClose={() => setInfoData({ ...infoData, show: false })} />
+
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '22px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
-          <h1 className="ih-title">Inventory Overview</h1>
-          <p className="ih-subtitle">Pantau stok dan nilai inventaris <span style={{ color: COLOR_PRIMARY, fontWeight: 700 }}>PT Artavista</span></p>
+          <h1 style={{ fontSize: '22px', fontWeight: 800, color: '#0f172a' }}>Stock Dashboard</h1>
         </div>
-        <div className="ih-header-badge">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 600, color: '#10b981', background: '#ecfdf5', border: '1px solid #a7f3d0', padding: '6px 12px', borderRadius: '20px' }}>
           <CheckCircle2 size={14} />
           <span>Data Real-time</span>
         </div>
       </div>
 
-      {/* Stats Grid */}
-      <div className="ih-stats-grid">
-        {STATS.map((s, i) => {
-          const Icon = s.icon;
-          return (
-            <div key={i} className="ih-stat-card" style={{ animationDelay: `${i * 70}ms` }}>
-              <div className="ih-stat-icon-wrap" style={{ background: s.bg }}>
-                <Icon size={22} color={s.color} />
-              </div>
-              <div className="ih-stat-label">{s.label}</div>
-              <div className="ih-stat-value" style={{ color: s.color }}>{s.value}</div>
-              <div className="ih-stat-sub">{s.sub}</div>
-            </div>
-          );
-        })}
+      {/* ── CHART DIPINDAHKAN KE ATAS ── */}
+      <div className="chart-container" style={{ marginBottom: '16px' }}>
+        <ChartHeader 
+          title="Stock Value by Item Group" 
+          subtitle="Last synced just now" 
+          infoText="Grafik ini menampilkan total nilai valuasi uang (dalam Rupiah) dari seluruh barang yang dikelompokkan berdasarkan kategori barang (Item Group)." 
+        />
+
+        {stats.stockByGroup.length > 0 ? (
+          <ResponsiveContainer width="100%" height={360}>
+            <BarChart data={stats.stockByGroup} margin={{ top: 20, right: 10, left: -20, bottom: 60 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+              <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#6B7280', fontFamily: 'Poppins' }} axisLine={false} tickLine={false} angle={-45} textAnchor="end" height={70} interval={0} />
+              <YAxis tickFormatter={(v) => formatShortAxis(v)} tick={{ fontSize: 11, fill: '#6B7280', fontFamily: 'Poppins' }} axisLine={false} tickLine={false} width={80} />
+              <Tooltip content={<FrappeChartTooltip isCurrency={true} />} cursor={{ fill: '#f8fafc' }} />
+              <Bar dataKey="value" name="Stock Value" fill={TREND_COLOR_PINK} barSize={80} radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        ) : (
+          <div className="no-data-placeholder">
+            <Package size={32} color="#d1d5db" style={{ marginBottom: '8px' }} />
+            <p>Belum ada stok barang bernilai</p>
+          </div>
+        )}
       </div>
 
-      {/* Two column */}
-      <div className="ih-two-col">
-        {/* Bar Chart */}
-        <div className="ih-card ih-chart-card">
-          <div className="ih-card-header">
-            <div>
-              <div className="ih-card-title">Stock Value by Item Group</div>
-              <div className="ih-card-subtitle">Nilai stok per kategori barang</div>
-            </div>
-            <div className="ih-pill" style={{ background: '#ecfdf5', color: '#10b981' }}>
-              PT Artavista
-            </div>
-          </div>
-          {stats.stockByGroup.length > 0 ? (
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={stats.stockByGroup} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#94a3b8', fontFamily: 'Poppins' }} axisLine={false} tickLine={false} />
-                <YAxis width={65} tickFormatter={v => formatUangSingkat(v)} tick={{ fontSize: 10, fill: '#94a3b8', fontFamily: 'Poppins' }} axisLine={false} tickLine={false} />
-                <Tooltip
-                  formatter={(v: any) => [formatUang(v), 'Stock Value']}
-                  contentStyle={{ borderRadius: '10px', fontSize: '12px', border: '1px solid #e5e7eb', boxShadow: '0 4px 12px rgba(0,0,0,0.08)', fontFamily: 'Poppins' }}
-                />
-                <Bar dataKey="value" radius={[6, 6, 0, 0]} maxBarSize={60}>
-                  {stats.stockByGroup.map((_, idx) => (
-                    <Cell key={idx} fill={BAR_COLORS[idx % BAR_COLORS.length]} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="ih-empty">
-              <Package size={32} color="#d1d5db" />
-              <p>Belum ada data stok</p>
-            </div>
-          )}
-        </div>
-
-        {/* Low Stock Warning */}
-        <div className="ih-card">
-          <div className="ih-card-header">
-            <div>
-              <div className="ih-card-title">⚠️ Stok Menipis</div>
-              <div className="ih-card-subtitle">Item dengan qty &lt; 10 unit</div>
-            </div>
-          </div>
-          {stats.lowStockItems.length === 0 ? (
-            <div className="ih-empty">
-              <CheckCircle2 size={28} color="#10b981" />
-              <p style={{ color: '#10b981' }}>Stok semua item aman!</p>
-            </div>
-          ) : (
-            <div className="ih-low-list">
-              {stats.lowStockItems.map((item: any, i: number) => (
-                <div key={i} className="ih-low-row">
-                  <div className="ih-low-dot" style={{ background: item.actual_qty <= 3 ? '#ef4444' : '#f59e0b' }} />
-                  <div className="ih-low-info">
-                    <div className="ih-low-name">{item.item_code}</div>
-                    <div className="ih-low-warehouse">{item.warehouse}</div>
-                  </div>
-                  <div className="ih-low-qty" style={{ color: item.actual_qty <= 3 ? '#ef4444' : '#f59e0b' }}>
-                    {item.actual_qty} unit
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Stock Value Summary */}
-          <div className="ih-summary-box">
-            <div className="ih-summary-label">Total Nilai Inventaris</div>
-            <div className="ih-summary-value">{formatUang(stats.totalStockValue)}</div>
-          </div>
-        </div>
+      {/* ── KPI CARDS BERADA DI BAWAH CHART ── */}
+      <div className="metrics-grid-3">
+        <MetricCard 
+          title="Total Stock Value" 
+          value={formatCompact(stats.totalStockValue, true)} 
+          color="#10b981" 
+          icon={<DollarSign size={24} />} 
+          infoText={`Total aktual: ${formatUang(stats.totalStockValue)}.\nAkumulasi nilai seluruh aset persediaan/stok yang ada di dalam semua gudang.`} 
+        />
+        <MetricCard 
+          title="Total Warehouses" 
+          value={formatCompact(stats.totalWarehouses)} 
+          color="#8b5cf6" 
+          icon={<Warehouse size={24} />} 
+          infoText={`Total aktual: ${formatNumber(stats.totalWarehouses)} gudang.\nMenampilkan total jumlah Gudang (Warehouse) fisik maupun grup yang terdaftar secara murni di database.`} 
+        />
+        <MetricCard 
+          title="Total Active Items" 
+          value={formatCompact(stats.totalActiveItems)} 
+          color={COLOR_PRIMARY} 
+          icon={<Package size={24} />} 
+          infoText={`Total aktual: ${formatNumber(stats.totalActiveItems)} produk.\nMenampilkan jumlah seluruh Master Item/Produk yang saat ini berstatus Aktif.`} 
+        />
       </div>
 
       <style>{`
-        @keyframes fadeSlideUp {
-          from { opacity: 0; transform: translateY(12px); }
-          to   { opacity: 1; transform: translateY(0); }
+        /* ── CSS KHUSUS CARD KPI ── */
+        .chart-container { background: white; border-radius: 8px; border: 1px solid #e5e7eb; padding: 24px; width: 100%; overflow: hidden; box-shadow: none; margin-bottom: 16px; }
+        .no-data-placeholder { height: 260px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #9ca3af; font-size: 13px; background: #f8fafc; border-radius: 8px; font-weight: 500; }
+        
+        .metric-card {
+          background: white; border-radius: 12px; border: 1px solid #e2e8f0; padding: 20px;
+          display: flex; align-items: center; justify-content: space-between;
+          height: 100%; min-height: 100px;
         }
-        @keyframes spin { to { transform: rotate(360deg); } }
+        .metric-card-content { display: flex; flex-direction: column; width: calc(100% - 56px); }
+        .metric-card-header { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+        .metric-title { font-size: 13px; font-weight: 600; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .metric-info-btn { background: none; border: none; cursor: pointer; padding: 0; color: #9ca3af; display: flex; align-items: center; flex-shrink: 0; transition: color 0.2s; }
+        .metric-info-btn:hover { color: #054CC7; }
+        .metric-value { font-size: 24px; font-weight: 800; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .metric-icon { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 
-        .ih-root { font-family: 'Poppins', sans-serif; animation: fadeSlideUp 0.4s ease-out; }
-
-        .ih-loading { text-align: center; padding: 80px 20px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
-        .ih-spinner { width: 36px; height: 36px; border: 3px solid #e5e7eb; border-top-color: #10b981; border-radius: 50%; animation: spin 0.8s linear infinite; }
-        .ih-loading p { font-size: 13px; color: #6b7280; }
-
-        .ih-page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px; flex-wrap: wrap; gap: 12px; }
-        .ih-title { font-size: 22px; font-weight: 800; color: #0f172a; }
-        .ih-subtitle { font-size: 13px; color: #64748b; margin-top: 2px; }
-        .ih-header-badge { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: #10b981; background: #ecfdf5; border: 1px solid #a7f3d0; padding: 6px 12px; border-radius: 20px; }
-
-        .ih-stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 20px; }
-
-        .ih-stat-card {
-          background: white;
-          border-radius: 16px;
-          padding: 18px 16px;
-          border: 1px solid #f1f5f9;
-          box-shadow: 0 1px 4px rgba(0,0,0,0.05);
-          animation: fadeSlideUp 0.4s ease-out both;
-          transition: transform 0.2s, box-shadow 0.2s;
+        /* ── GRID RESPONSIF SEMPURNA ── */
+        .metrics-grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 16px; }
+        
+        @media (max-width: 1024px) {
+          .metrics-grid-3 { grid-template-columns: repeat(2, 1fr); }
         }
-        .ih-stat-card:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(0,0,0,0.08); }
-        .ih-stat-icon-wrap { width: 46px; height: 46px; border-radius: 12px; display: flex; align-items: center; justify-content: center; margin-bottom: 12px; }
-        .ih-stat-label { font-size: 10.5px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
-        .ih-stat-value { font-size: 22px; font-weight: 800; line-height: 1.2; margin-bottom: 4px; }
-        .ih-stat-sub { font-size: 11px; color: #9ca3af; font-weight: 500; }
-
-        .ih-two-col { display: grid; grid-template-columns: 1.5fr 1fr; gap: 16px; }
-
-        .ih-card {
-          background: white;
-          border-radius: 18px;
-          padding: 20px;
-          border: 1px solid #f1f5f9;
-          box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+        @media (max-width: 640px) {
+          .chart-container { padding: 16px !important; border-radius: 8px; }
+          .metrics-grid-3 { grid-template-columns: 1fr; }
         }
-
-        .ih-card-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 18px; }
-        .ih-card-title { font-size: 15px; font-weight: 700; color: #0f172a; }
-        .ih-card-subtitle { font-size: 12px; color: #94a3b8; margin-top: 2px; }
-        .ih-pill { font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 20px; }
-
-        .ih-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 36px; color: #9ca3af; font-size: 13px; }
-
-        .ih-low-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
-        .ih-low-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: #fafafa; border-radius: 10px; }
-        .ih-low-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-        .ih-low-info { flex: 1; min-width: 0; }
-        .ih-low-name { font-size: 12px; font-weight: 700; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .ih-low-warehouse { font-size: 10px; color: #94a3b8; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .ih-low-qty { font-size: 12px; font-weight: 800; white-space: nowrap; }
-
-        .ih-summary-box { background: linear-gradient(135deg,#ecfdf5,#d1fae5); border-radius: 12px; padding: 14px 16px; margin-top: 8px; }
-        .ih-summary-label { font-size: 11px; font-weight: 600; color: #065f46; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
-        .ih-summary-value { font-size: 18px; font-weight: 800; color: #10b981; }
-
-        @media (max-width: 1100px) { .ih-stats-grid { grid-template-columns: repeat(2, 1fr); } .ih-two-col { grid-template-columns: 1fr; } }
-        @media (max-width: 480px) { .ih-stats-grid { grid-template-columns: 1fr; } }
       `}</style>
     </div>
   );

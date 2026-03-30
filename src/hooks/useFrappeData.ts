@@ -1,5 +1,6 @@
 // src/hooks/useFrappeData.ts
 // Custom hooks — fetch data dari Frappe/ERPNext menggunakan Proxy API Next.js (Bebas CORS)
+// *SUDAH DIBERSIHKAN DARI MOCK/DUMMY DATA*
 
 import { useState, useEffect, useCallback } from 'react';
 import { apiGetList, apiCreate, apiUpdate, apiDelete } from '@/lib/api'; 
@@ -8,21 +9,6 @@ import type {
   DeliveryNote, BOM, WorkOrder, StockEntry,
   FrappeUser,
 } from '@/lib/frappe-types';
-import {
-  mockRevenueTrend,
-  mockStockByCategory,
-  mockProductionTrend,
-  mockWorkOrderStatus,
-  mockCustomers,
-  mockSalesOrders,
-  mockDeliveryNotes,
-  mockItems,
-  mockWarehouses,
-  mockBins,
-  mockStockEntries,
-  mockBOMs,
-  mockWorkOrders,
-} from '@/lib/mock-data';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -38,7 +24,7 @@ interface BaseState { isLoading: boolean; error: string | null; }
 
 function buildRevenueTrend(salesOrders: SalesOrder[]): RevenueTrendPoint[] {
   const now = new Date();
-  const shortMonth = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const shortMonth = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
   const revenueMap: Record<string, number> = {};
   const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
 
@@ -111,27 +97,23 @@ export function useDashboardData(): DashboardData {
         apiGetList<WorkOrder>('Work Order', { limit: 1000, fields: ['*'] }),
       ]);
 
-      const rSalesOrders = (salesOrders.status === 'fulfilled' && salesOrders.value.length > 0 ? salesOrders.value : mockSalesOrders).map((o: any) => ({ ...o, items: o.items || [] }));
-      const rItems = items.status === 'fulfilled' && items.value.length > 0 ? items.value : mockItems;
-      const rBins = bins.status === 'fulfilled' && bins.value.length > 0 ? bins.value : mockBins;
-      const rWorkOrders = workOrders.status === 'fulfilled' && workOrders.value.length > 0 ? workOrders.value : mockWorkOrders;
+      const rSalesOrders = salesOrders.status === 'fulfilled' ? salesOrders.value.map((o: any) => ({ ...o, items: o.items || [] })) : [];
+      const rItems = items.status === 'fulfilled' ? items.value : [];
+      const rBins = bins.status === 'fulfilled' ? bins.value : [];
+      const rWorkOrders = workOrders.status === 'fulfilled' ? workOrders.value : [];
 
-      if (salesOrders.status === 'rejected' || (salesOrders.status === 'fulfilled' && salesOrders.value.length === 0)) console.warn('Sales Order: tidak ada data, menggunakan mock');
-      if (items.status === 'rejected' || (items.status === 'fulfilled' && items.value.length === 0)) console.warn('Item: tidak ada data, menggunakan mock');
-      if (bins.status === 'rejected' || (bins.status === 'fulfilled' && bins.value.length === 0)) console.warn('Bin: tidak ada data, menggunakan mock');
-
-      const revenueTrend = buildRevenueTrend(rSalesOrders.length > 0 ? rSalesOrders : []);
+      const revenueTrend = buildRevenueTrend(rSalesOrders);
       const stockByCategory = buildStockByCategory(rBins, rItems);
       const productionTrend = revenueTrend.map(r => ({ month: r.month, planned: 100000, produced: Math.floor(r.revenue / 12000) }));
-      const workOrderStatus = buildWorkOrderStatus(rWorkOrders.length > 0 ? rWorkOrders : []);
+      const workOrderStatus = buildWorkOrderStatus(rWorkOrders);
 
       setData({
-        salesOrders: rSalesOrders.length > 0 ? rSalesOrders : [],
-        items: rItems.length > 0 ? rItems : [],
-        bins: rBins.length > 0 ? rBins : [],
-        workOrders: rWorkOrders.length > 0 ? rWorkOrders : [],
+        salesOrders: rSalesOrders,
+        items: rItems,
+        bins: rBins,
+        workOrders: rWorkOrders,
         revenueTrend,
-        stockByCategory: stockByCategory.length > 0 ? stockByCategory : [],
+        stockByCategory,
         productionTrend,
         workOrderStatus,
         stats: {
@@ -161,14 +143,9 @@ export function useDashboardData(): DashboardData {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const fallback = { 
-    salesOrders: [], 
-    items: [], 
-    bins: [], 
-    workOrders: [], 
-    revenueTrend: mockRevenueTrend, 
-    stockByCategory: mockStockByCategory, 
-    productionTrend: mockProductionTrend, 
-    workOrderStatus: mockWorkOrderStatus, 
+    salesOrders: [], items: [], bins: [], workOrders: [], 
+    revenueTrend: [], stockByCategory: [], productionTrend: [], 
+    workOrderStatus: { total: 0, completed: 0, inProcess: 0, pending: 0, rejected: 0 }, 
     stats: { totalOrders: 0, totalRevenue: 0, activeItems: 0, lowStockCount: 0 } 
   };
   return { ...(data || fallback), isLoading, error, refetch: fetchData };
@@ -199,20 +176,20 @@ export function useSellingData(): SellingData {
         apiGetList<SalesOrder>('Sales Order', { limit: 1000, fields: ['*'] }),
         apiGetList<Customer>('Customer', { limit: 1000, fields: ['*'] }),
       ]);
-      setSalesOrders(so.status === 'fulfilled' ? so.value.map((o: any) => ({ ...o, items: o.items || [] })) : mockSalesOrders);
-      setCustomers(cust.status === 'fulfilled' ? cust.value : mockCustomers);
+      setSalesOrders(so.status === 'fulfilled' ? so.value.map((o: any) => ({ ...o, items: o.items || [] })) : []);
+      setCustomers(cust.status === 'fulfilled' ? cust.value : []);
     } catch (err) {
-      console.warn('Failed to fetch Sales Orders/Customers, using mock data:', err);
-      setSalesOrders(mockSalesOrders);
-      setCustomers(mockCustomers);
+      console.warn('Failed to fetch Sales Orders/Customers:', err);
+      setSalesOrders([]);
+      setCustomers([]);
     }
 
     try {
       const dn = await apiGetList<DeliveryNote>('Delivery Note', { limit: 1000, fields: ['*'] });
       setDeliveryNotes(dn.map((d: any) => ({ ...d, items: d.items || [] })));
     } catch (err) {
-      console.warn('Failed to fetch Delivery Notes, using mock data:', err);
-      setDeliveryNotes(mockDeliveryNotes);
+      console.warn('Failed to fetch Delivery Notes:', err);
+      setDeliveryNotes([]);
     }
 
     setIsLoading(false);
@@ -252,17 +229,17 @@ export function useStockData(): StockData {
         apiGetList<StockEntry>('Stock Entry', { limit: 1000, fields: ['*'] }),
       ]);
 
-      setItems(it.status === 'fulfilled' && it.value.length > 0 ? it.value : mockItems);
-      setWarehouses(wh.status === 'fulfilled' && wh.value.length > 0 ? wh.value : mockWarehouses);
-      setBins(bn.status === 'fulfilled' && bn.value.length > 0 ? bn.value : mockBins);
-      setStockEntries(se.status === 'fulfilled' && se.value.length > 0 ? se.value.map((s: any) => ({ ...s, items: s.items || [] })) : mockStockEntries);
+      setItems(it.status === 'fulfilled' ? it.value : []);
+      setWarehouses(wh.status === 'fulfilled' ? wh.value : []);
+      setBins(bn.status === 'fulfilled' ? bn.value : []);
+      setStockEntries(se.status === 'fulfilled' ? se.value.map((s: any) => ({ ...s, items: s.items || [] })) : []);
 
     } catch (err) {
-      console.warn('Failed to fetch stock data, using mock data:', err);
-      setItems(mockItems);
-      setWarehouses(mockWarehouses);
-      setBins(mockBins);
-      setStockEntries(mockStockEntries);
+      console.warn('Failed to fetch stock data:', err);
+      setItems([]);
+      setWarehouses([]);
+      setBins([]);
+      setStockEntries([]);
     } finally {
       setIsLoading(false);
     }
@@ -296,29 +273,19 @@ export function useManufacturingData(): ManufacturingData {
         apiGetList<BOM>('BOM', { limit: 1000, fields: ['*'] }),
       ]);
 
-      // Check if offline (apiGetList returns [] with __offline flag when server is down)
       const woData = wo.status === 'fulfilled' ? wo.value : [];
       const bomData = bom.status === 'fulfilled' ? bom.value : [];
-      const isOffline = (woData as any).__offline || (bomData as any).__offline;
+      
+      setWorkOrders(woData);
+      setBoms(bomData.map((b: any) => ({ ...b, items: b.items || [] })));
 
-      setWorkOrders(
-        woData.length > 0 ? woData : isOffline ? mockWorkOrders : mockWorkOrders
-      );
-      setBoms(
-        bomData.length > 0
-          ? bomData.map((b: any) => ({ ...b, items: b.items || [] }))
-          : mockBOMs
-      );
-
-      // Only show error for real API errors (not offline)
       if (wo.status === 'rejected' && !(wo.reason?.message?.includes('503') || wo.reason?.message?.includes('offline'))) {
-        console.debug('[Manufacturing] Work Order fetch failed, using mock data');
+        console.debug('[Manufacturing] Work Order fetch failed:', wo.reason);
       }
     } catch (err) {
-      // Silently fall back to mock — don't show error banner
-      console.debug('[Manufacturing] Fetch failed, using mock data:', (err as Error)?.message);
-      setWorkOrders(mockWorkOrders);
-      setBoms(mockBOMs);
+      console.debug('[Manufacturing] Fetch failed:', (err as Error)?.message);
+      setWorkOrders([]);
+      setBoms([]);
     } finally {
       setIsLoading(false);
     }
@@ -338,15 +305,6 @@ export interface UserData extends BaseState {
   deleteUser: (name: string) => Promise<void>;
 }
 
-const MOCK_USERS: FrappeUser[] = [
-  { name: 'Administrator', full_name: 'Administrator', email: 'administrator@erp.com', first_name: 'Administrator', last_name: '', enabled: 1, user_type: 'System User', creation: '2026-01-01', modified: '2026-01-01' },
-  { name: 'direktur@erp.com', full_name: 'Ahmad Wijaya', email: 'direktur@erp.com', first_name: 'Ahmad', last_name: 'Wijaya', enabled: 1, user_type: 'System User', creation: '2026-01-15', modified: '2026-03-01' },
-  { name: 'manajer@erp.com', full_name: 'Budi Santoso', email: 'manajer@erp.com', first_name: 'Budi', last_name: 'Santoso', enabled: 1, user_type: 'System User', creation: '2026-01-15', modified: '2026-03-01' },
-  { name: 'sales@erp.com', full_name: 'Citra Dewi', email: 'sales@erp.com', first_name: 'Citra', last_name: 'Dewi', enabled: 1, user_type: 'System User', creation: '2026-01-16', modified: '2026-03-01' },
-  { name: 'gudang@erp.com', full_name: 'Dedi Kurniawan', email: 'gudang@erp.com', first_name: 'Dedi', last_name: 'Kurniawan', enabled: 1, user_type: 'System User', creation: '2026-01-16', modified: '2026-03-01' },
-  { name: 'produksi@erp.com', full_name: 'Eko Prasetyo', email: 'produksi@erp.com', first_name: 'Eko', last_name: 'Prasetyo', enabled: 1, user_type: 'System User', creation: '2026-01-16', modified: '2026-03-01' },
-];
-
 export function useUserData(): UserData {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -359,22 +317,12 @@ export function useUserData(): UserData {
     try {
       const data = await apiGetList<FrappeUser>('User', { limit: 1000, fields: ['*'] });
 
-      // __offline flag is set by apiGetList when server is unreachable
-      const isOffline = (data as any).__offline;
-
-      if (isOffline || data.length < 2) {
-        // Server offline or only returned 1 user (Guest/Administrator only)
-        // Use mock data silently — no error banner
-        setUsers(MOCK_USERS);
-        setError(null); // don't show an error banner
-      } else {
-        setUsers(data);
-      }
+      // Jika offline atau hanya 1 user (biasanya cuma ada Administrator bawaan frappe), tetap set data yang didapat
+      setUsers(data || []);
     } catch (err) {
-      // Silent fallback — server being down is expected in dev
-      console.debug('[Users] Fetch failed, using mock data');
-      setUsers(MOCK_USERS);
-      setError(null);
+      console.debug('[Users] Fetch failed:', err);
+      setUsers([]);
+      setError(null); // Silent fail
     } finally {
       setIsLoading(false);
     }
@@ -395,11 +343,7 @@ export function useUserData(): UserData {
     catch { throw new Error('Gagal hapus user. Server tidak tersedia.'); }
   }, [fetchData]);
 
-  // Single fetch on mount (fetchData is stable via useCallback)
   useEffect(() => { fetchData(); }, [fetchData]);
 
   return { users, isLoading, error, refetch: fetchData, createUser, updateUser, deleteUser };
 }
-
-// ─── Legacy export (backward compat) ─────────────────────────────────────────
-export { mockRevenueTrend, mockStockByCategory, mockProductionTrend, mockWorkOrderStatus };

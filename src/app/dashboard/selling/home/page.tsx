@@ -1,19 +1,18 @@
 'use client';
 
-import React, { useMemo } from 'react';
-import { useSellingData, useDashboardData } from '@/hooks/useFrappeData';
+import React, { useMemo, useState, useEffect } from 'react';
+import { useSellingData } from '@/hooks/useFrappeData';
 import { useAuth } from '@/providers/auth-provider';
 import {
-  ShoppingCart, DollarSign, Users, TrendingUp,
-  Package, FileText, ArrowUpRight, AlertCircle,
-  CheckCircle2, Clock, ChevronRight
+  ShoppingCart, DollarSign, Calculator, ArrowUpRight, AlertCircle,
+  CheckCircle2, Info, X, Loader2
 } from 'lucide-react';
 import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, defs, linearGradient, stop
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
 
-const COLOR_PRIMARY = '#3b82f6';
-const COLOR_ACCENT = '#06b6d4';
+const COLOR_PRIMARY = '#054CC7';
+const TREND_COLOR_BLUE = '#3b82f6'; 
 
 const ROLE_TITLES: Record<string, string> = {
   admin_sales: 'Staff Selling',
@@ -22,274 +21,274 @@ const ROLE_TITLES: Record<string, string> = {
   administrator: 'Administrator',
 };
 
-const formatUang = (v: any) => {
-  const n = Number(v);
-  if (!v || isNaN(n)) return 'Rp 0';
-  return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n);
+const formatUang = (value: number | string | undefined | any) => {
+  if (value === undefined || value === null) return 'Rp 0,00';
+  const num = Number(value);
+  if (isNaN(num)) return 'Rp 0,00';
+  return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num);
 };
 
-const formatUangSingkat = (v: any) => {
-  const n = Number(v);
-  if (!v || isNaN(n)) return 'Rp 0';
-  if (n >= 1_000_000_000) return `Rp ${(n / 1_000_000_000).toFixed(1)}M`;
-  if (n >= 1_000_000) return `Rp ${(n / 1_000_000).toFixed(0)}Jt`;
-  if (n >= 1_000) return `Rp ${(n / 1_000).toFixed(0)}Rb`;
-  return formatUang(n);
+const formatNumber = (value: number | string | undefined | any) => {
+  if (value === undefined || value === null) return '0';
+  const num = Number(value);
+  if (isNaN(num)) return '0';
+  return new Intl.NumberFormat('id-ID').format(num);
 };
 
-export default function SellingHomePage() {
-  const { user } = useAuth();
-  const { salesOrders, customers, isLoading } = useSellingData();
-  const { revenueTrend } = useDashboardData();
-  const roleTitle = user ? ROLE_TITLES[user.role] || 'User' : 'User';
+const formatShortAxis = (num: number) => {
+  if (num === 0) return '0';
+  if (num >= 1000000000) return (num / 1000000000).toFixed(0) + ' B';
+  if (num >= 1000000) return (num / 1000000).toFixed(0) + ' M';
+  if (num >= 1000) return (num / 1000).toFixed(0) + ' K';
+  return num.toString();
+};
 
-  const stats = useMemo(() => {
-    const rawSales = salesOrders as any[];
-    const totalSalesOrders = rawSales.length;
-    const totalSalesAmount = rawSales.reduce((sum, o) => sum + (o.grand_total || 0), 0);
-    const activeCustomers = customers.filter((c: any) => !c.disabled).length;
-    const soToDeliver = rawSales.filter(o => o.docstatus === 1 && o.per_delivered < 100 && o.status !== 'Completed').length;
-    const soToBill = rawSales.filter(o => o.docstatus === 1 && (o.per_billed || 0) < 100 && o.status !== 'Completed').length;
-    const completedOrders = rawSales.filter(o => o.status === 'Completed').length;
-    const pendingOrders = rawSales.filter(o => o.status === 'Draft' || o.status === 'On Hold').length;
-    return { totalSalesOrders, totalSalesAmount, activeCustomers, soToDeliver, soToBill, completedOrders, pendingOrders };
-  }, [salesOrders, customers]);
+const formatCompact = (value: number | string | undefined | any, isCurrency = false) => {
+  if (!value) return isCurrency ? 'Rp 0' : '0';
+  const num = Number(value);
+  if (isNaN(num)) return isCurrency ? 'Rp 0' : '0';
+  
+  let formatted = '';
+  if (num >= 1000000000) formatted = (num / 1000000000).toFixed(2).replace(/\.?0+$/, '') + ' B';
+  else if (num >= 1000000) formatted = (num / 1000000).toFixed(2).replace(/\.?0+$/, '') + ' M';
+  else if (num >= 1000) formatted = (num / 1000).toFixed(2).replace(/\.?0+$/, '') + ' K';
+  else formatted = new Intl.NumberFormat('id-ID').format(num);
 
-  const STATS = [
-    {
-      key: 'totalSalesAmount', label: 'Total Revenue', value: formatUangSingkat(stats.totalSalesAmount),
-      icon: DollarSign, color: '#3b82f6', bg: 'linear-gradient(135deg,#eff6ff,#dbeafe)', change: '+12%', positive: true
-    },
-    {
-      key: 'totalSalesOrders', label: 'Sales Orders', value: stats.totalSalesOrders,
-      icon: ShoppingCart, color: '#8b5cf6', bg: 'linear-gradient(135deg,#f5f3ff,#ede9fe)', change: `${stats.pendingOrders} pending`, positive: null
-    },
-    {
-      key: 'activeCustomers', label: 'Active Customers', value: stats.activeCustomers,
-      icon: Users, color: '#10b981', bg: 'linear-gradient(135deg,#ecfdf5,#d1fae5)', change: 'Terdaftar', positive: true
-    },
-    {
-      key: 'soToDeliver', label: 'To Deliver', value: stats.soToDeliver,
-      icon: Package, color: '#f59e0b', bg: 'linear-gradient(135deg,#fffbeb,#fef3c7)', change: 'Perlu dikirim', positive: null
-    },
-    {
-      key: 'soToBill', label: 'To Bill', value: stats.soToBill,
-      icon: FileText, color: '#ef4444', bg: 'linear-gradient(135deg,#fff1f2,#ffe4e6)', change: 'Perlu ditagih', positive: null
-    },
-  ];
+  return isCurrency ? `Rp ${formatted}` : formatted;
+};
 
-  // Recent orders (mock last 4)
-  const recentOrders = (salesOrders as any[]).slice(0, 5).map(o => ({
-    name: o.name || '-',
-    customer: o.customer || '-',
-    amount: o.grand_total || 0,
-    status: o.status || 'Draft',
-  }));
-
-  const statusColor = (s: string) => {
-    if (s === 'Completed') return { bg: '#dcfce7', color: '#16a34a' };
-    if (s === 'On Hold') return { bg: '#fee2e2', color: '#dc2626' };
-    if (s === 'Draft') return { bg: '#f3f4f6', color: '#6b7280' };
-    return { bg: '#dbeafe', color: '#1d4ed8' };
-  };
-
-  if (isLoading) return (
-    <div className="sh-loading">
-      <div className="sh-spinner" />
-      <p>Memuat data Selling...</p>
-    </div>
-  );
-
-  return (
-    <div className="sh-root">
-      {/* Page Header */}
-      <div className="sh-page-header">
-        <div>
-          <h1 className="sh-title">Selling Overview</h1>
-          <p className="sh-subtitle">Dashboard penjualan untuk <span style={{ color: COLOR_PRIMARY, fontWeight: 700 }}>{roleTitle}</span></p>
-        </div>
-        <div className="sh-header-badge">
-          <CheckCircle2 size={14} />
-          <span>Sinkron ERPNext</span>
-        </div>
-      </div>
-
-      {/* Stats Grid */}
-      <div className="sh-stats-grid">
-        {STATS.map((s, i) => {
-          const Icon = s.icon;
+// ── CUSTOM TOOLTIP ALA FRAPPE ──
+const FrappeChartTooltip = ({ active, payload, label, isCurrency = false }: any) => {
+  if (active && payload && payload.length) {
+    return (
+      <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px 16px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}>
+        <div style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '8px', letterSpacing: '0.05em' }}>{label}</div>
+        {payload.map((entry: any, index: number) => {
+          const valStr = isCurrency ? formatUang(entry.value) : formatNumber(entry.value);
           return (
-            <div key={s.key} className="sh-stat-card" style={{ animationDelay: `${i * 60}ms` }}>
-              <div className="sh-stat-icon-wrap" style={{ background: s.bg }}>
-                <Icon size={22} color={s.color} />
+            <div key={index} style={{ marginBottom: index !== payload.length - 1 ? '10px' : 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                <div style={{ width: 10, height: 10, borderRadius: '2px', background: entry.color || TREND_COLOR_BLUE }} />
+                <div style={{ fontSize: '14px', fontWeight: 700, color: '#111827', lineHeight: 1 }}>{valStr}</div>
               </div>
-              <div className="sh-stat-label">{s.label}</div>
-              <div className="sh-stat-value" style={{ color: s.color }}>{s.value}</div>
-              <div className="sh-stat-change">
-                {s.positive === true && <ArrowUpRight size={12} color="#10b981" />}
-                <span style={{ color: s.positive === true ? '#10b981' : s.positive === false ? '#ef4444' : '#9ca3af' }}>
-                  {s.change}
-                </span>
-              </div>
+              <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 500, marginLeft: '16px' }}>{entry.name}</div>
             </div>
           );
         })}
       </div>
+    );
+  }
+  return null;
+};
 
-      {/* Two Column Layout: Chart + Recent Orders */}
-      <div className="sh-two-col">
-        {/* Revenue Chart */}
-        <div className="sh-card sh-chart-card">
-          <div className="sh-card-header">
-            <div>
-              <div className="sh-card-title">Revenue Trend</div>
-              <div className="sh-card-subtitle">Grafik penjualan per bulan</div>
-            </div>
-            <div className="sh-legend-pill" style={{ background: '#eff6ff', color: COLOR_PRIMARY }}>
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: COLOR_PRIMARY, display: 'inline-block' }} />
-              Penjualan
-            </div>
+function InfoModal({ show, title, text, onClose }: { show: boolean, title: string, text: string, onClose: () => void }) {
+  if (!show) return null;
+  return (
+    <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(4px)', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'fadeIn 0.2s ease-out' }} onClick={onClose}>
+      <div style={{ background: 'white', width: '100%', maxWidth: '420px', borderRadius: '16px', padding: '24px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', margin: '0 16px', animation: 'scaleIn 0.2s ease-out' }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+          <div style={{ width: '48px', height: '48px', background: '#eff6ff', color: COLOR_PRIMARY, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Info size={24} />
           </div>
-          <ResponsiveContainer width="100%" height={240}>
-            <AreaChart data={revenueTrend} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
-              <defs>
-                <linearGradient id="gradRev" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={COLOR_PRIMARY} stopOpacity={0.2} />
-                  <stop offset="95%" stopColor={COLOR_PRIMARY} stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-              <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#94a3b8', fontFamily: 'Poppins' }} axisLine={false} tickLine={false} />
-              <YAxis width={65} tickFormatter={v => formatUangSingkat(v)} tick={{ fontSize: 10, fill: '#94a3b8', fontFamily: 'Poppins' }} axisLine={false} tickLine={false} />
-              <Tooltip
-                formatter={(v: any) => [formatUang(v), 'Revenue']}
-                contentStyle={{ borderRadius: '10px', fontSize: '12px', border: '1px solid #e5e7eb', boxShadow: '0 4px 12px rgba(0,0,0,0.08)', fontFamily: 'Poppins' }}
-              />
-              <Area type="monotone" dataKey="revenue" stroke={COLOR_PRIMARY} strokeWidth={2.5} fill="url(#gradRev)" activeDot={{ r: 5, fill: COLOR_PRIMARY, stroke: '#fff', strokeWidth: 2 }} />
-            </AreaChart>
-          </ResponsiveContainer>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', padding: '4px' }}>
+            <X size={20} />
+          </button>
         </div>
+        <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#111827', marginBottom: '8px', fontFamily: "'Poppins', sans-serif" }}>{title}</h3>
+        <p style={{ fontSize: '13px', color: '#4b5563', lineHeight: 1.6, marginBottom: '24px', fontFamily: "'Poppins', sans-serif" }}>{text}</p>
+        <button onClick={onClose} className="btn-understand" style={{ width: '100%', padding: '12px 16px', background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s', fontFamily: "'Poppins', sans-serif" }}>
+          Mengerti
+        </button>
+      </div>
+    </div>
+  );
+}
 
-        {/* Recent Orders */}
-        <div className="sh-card">
-          <div className="sh-card-header">
-            <div>
-              <div className="sh-card-title">Sales Orders Terbaru</div>
-              <div className="sh-card-subtitle">{recentOrders.length} order terakhir</div>
-            </div>
-          </div>
-          {recentOrders.length === 0 ? (
-            <div className="sh-empty">
-              <AlertCircle size={28} color="#d1d5db" />
-              <p>Belum ada data order</p>
-            </div>
-          ) : (
-            <div className="sh-orders-list">
-              {recentOrders.map((o, i) => {
-                const sc = statusColor(o.status);
-                return (
-                  <div key={i} className="sh-order-row">
-                    <div className="sh-order-num">{o.name}</div>
-                    <div className="sh-order-customer">{o.customer}</div>
-                    <div className="sh-order-amount">{formatUangSingkat(o.amount)}</div>
-                    <div className="sh-status-pill" style={{ background: sc.bg, color: sc.color }}>{o.status}</div>
-                  </div>
-                );
-              })}
-            </div>
+export default function SellingHomePage() {
+  const { user } = useAuth();
+  const { salesOrders, isLoading, refetch } = useSellingData();
+  const roleTitle = user ? ROLE_TITLES[user.role] || 'User' : 'User';
+
+  const [infoData, setInfoData] = useState<{show: boolean, title: string, text: string}>({ show: false, title: '', text: '' });
+
+  useEffect(() => {
+    refetch();
+  }, [refetch]);
+
+  const stats = useMemo(() => {
+    const rawSales = salesOrders || [];
+    const validSales = rawSales.filter((o: any) => o.docstatus === 1);
+
+    const totalSalesOrders = validSales.length;
+    const totalSalesAmount = validSales.reduce((sum: number, o: any) => sum + (Number(o.grand_total) || 0), 0);
+    const averageOrderValue = totalSalesOrders > 0 ? (totalSalesAmount / totalSalesOrders) : 0;
+    
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const monthlyRevenue = monthNames.map(m => ({ month: m, revenue: 0 }));
+
+    validSales.forEach((so: any) => {
+      const dateStr = so.transaction_date || so.delivery_date || so.creation;
+      if (dateStr) {
+        const date = new Date(dateStr);
+        const mIdx = date.getMonth(); 
+        if (mIdx >= 0 && mIdx < 12) {
+          monthlyRevenue[mIdx].revenue += (Number(so.grand_total) || 0);
+        }
+      }
+    });
+
+    return { totalSalesOrders, totalSalesAmount, averageOrderValue, monthlyRevenue };
+  }, [salesOrders]);
+
+  if (isLoading) return (
+    <div style={{ textAlign: 'center', padding: '80px 20px' }}>
+      <Loader2 className="animate-spin" size={36} color={COLOR_PRIMARY} style={{ margin: '0 auto 12px' }} />
+      <p style={{ color: '#64748b', fontSize: '13px' }}>Memuat data Selling Dashboard...</p>
+    </div>
+  );
+
+  const MetricCard = ({ title, value, color, icon, infoText }: any) => (
+    <div className="metric-card">
+      <div className="metric-card-content">
+        <div className="metric-card-header">
+          <span className="metric-title">{title}</span>
+          {infoText && (
+            <button 
+              onClick={() => setInfoData({ show: true, title, text: infoText })}
+              className="metric-info-btn"
+              title="Lihat Detail Nilai"
+            >
+              <Info size={14} />
+            </button>
           )}
+        </div>
+        <div className="metric-value" style={{ color }}>{value}</div>
+      </div>
+      <div className="metric-icon" style={{ background: `${color}15`, color }}>
+        {icon}
+      </div>
+    </div>
+  );
+
+  const ChartHeader = ({ title, subtitle, infoText }: any) => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
+      <div>
+        <h3 style={{ fontSize: '15px', fontWeight: 600, color: '#1f2937' }}>{title}</h3>
+        {subtitle && <p style={{ fontSize: '12px', color: '#6B7280', marginTop: '4px' }}>{subtitle}</p>}
+      </div>
+      <div>
+        <button 
+          onClick={() => setInfoData({ show: true, title, text: infoText })} 
+          style={{ background: '#f3f4f6', border: 'none', borderRadius: '6px', padding: '6px', cursor: 'pointer', color: '#4b5563', transition: 'all 0.2s', display: 'flex', alignItems: 'center' }} 
+          title="Lihat Informasi"
+          onMouseOver={e => e.currentTarget.style.color = COLOR_PRIMARY}
+          onMouseOut={e => e.currentTarget.style.color = '#4b5563'}
+        >
+          <Info size={16} />
+        </button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{ animation: 'fadeIn 0.4s ease-out', fontFamily: "'Inter', 'Poppins', sans-serif" }}>
+      
+      <InfoModal 
+        show={infoData.show} 
+        title={infoData.title} 
+        text={infoData.text} 
+        onClose={() => setInfoData({ ...infoData, show: false })} 
+      />
+
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '22px', flexWrap: 'wrap', gap: '12px' }}>
+        <div>
+          <h1 style={{ fontSize: '22px', fontWeight: 800, color: '#0f172a' }}>Selling Dashboard</h1>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 600, color: '#10b981', background: '#ecfdf5', border: '1px solid #a7f3d0', padding: '6px 12px', borderRadius: '20px' }}>
+          <CheckCircle2 size={14} />
+          <span>Data Real-time</span>
         </div>
       </div>
 
-      {/* Completion Rate Banner */}
-      <div className="sh-card sh-banner">
-        <div className="sh-banner-left">
-          <CheckCircle2 size={28} color="#10b981" />
-          <div>
-            <div className="sh-banner-title">Order Completion Rate</div>
-            <div className="sh-banner-sub">{stats.completedOrders} dari {stats.totalSalesOrders} order selesai</div>
+      <div style={{ marginBottom: '16px', padding: '24px', borderRadius: '12px', border: '1px solid #e5e7eb', background: '#fff' }}>
+        <ChartHeader 
+          title="Sales Order Trends" 
+          subtitle="Last synced just now" 
+          infoText="Grafik ini menampilkan tren fluktuasi total pendapatan (Revenue) bulanan dari seluruh Sales Order yang berhasil disahkan (Submitted) dalam kurun waktu satu tahun." 
+        />
+        
+        {stats.monthlyRevenue.some(m => m.revenue > 0) ? (
+          <ResponsiveContainer width="100%" height={360}>
+            <AreaChart data={stats.monthlyRevenue} margin={{ top: 20, right: 20, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="gradRev" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor={TREND_COLOR_BLUE} stopOpacity={0.2} />
+                  <stop offset="95%" stopColor={TREND_COLOR_BLUE} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+              <XAxis dataKey="month" interval={0} tick={{ fontSize: 11, fill: '#6B7280', fontFamily: 'Poppins' }} axisLine={false} tickLine={false} dy={10} />
+              <YAxis width={60} tickFormatter={(v) => formatShortAxis(v)} tick={{ fontSize: 11, fill: '#6B7280', fontFamily: 'Poppins' }} axisLine={false} tickLine={false} />
+              <Tooltip content={<FrappeChartTooltip isCurrency={true} />} cursor={{ stroke: '#e2e8f0', strokeWidth: 1, strokeDasharray: '4 4' }} />
+              <Area type="monotone" dataKey="revenue" name="Total Sales Revenue" stroke={TREND_COLOR_BLUE} strokeWidth={2.5} fill="url(#gradRev)" activeDot={{ r: 5, fill: TREND_COLOR_BLUE }} />
+            </AreaChart>
+          </ResponsiveContainer>
+        ) : (
+          <div style={{ display: 'flex', height: '300px', alignItems: 'center', justifyContent: 'center', color: '#9CA3AF', fontSize: '14px', background: '#f8fafc', borderRadius: '8px', flexDirection: 'column', gap: '8px' }}>
+            <AlertCircle size={32} color="#d1d5db" />
+            <p>Belum ada data pendapatan (Belum ada pesanan disahkan)</p>
           </div>
-        </div>
-        <div className="sh-banner-right">
-          <div className="sh-rate-value" style={{ color: '#10b981' }}>
-            {stats.totalSalesOrders > 0 ? Math.round((stats.completedOrders / stats.totalSalesOrders) * 100) : 0}%
-          </div>
-        </div>
+        )}
+      </div>
+
+      <div className="metrics-grid-3">
+        <MetricCard 
+          title="Sales Orders" 
+          value={formatCompact(stats.totalSalesOrders)} 
+          color="#3b82f6" 
+          icon={<ShoppingCart size={24} />} 
+          infoText={`Total aktual: ${formatNumber(stats.totalSalesOrders)} pesanan.\nMenampilkan total kuantitas dokumen pesanan penjualan yang sudah disahkan/aktif di sistem.`} 
+        />
+        <MetricCard 
+          title="Total Sales Amount" 
+          value={formatCompact(stats.totalSalesAmount, true)} 
+          color="#10b981" 
+          icon={<DollarSign size={24} />} 
+          infoText={`Total aktual: ${formatUang(stats.totalSalesAmount)}.\nTotal akumulasi uang dari seluruh pesanan penjualan yang sah.`} 
+        />
+        <MetricCard 
+          title="Average Order Value" 
+          value={formatCompact(stats.averageOrderValue, true)} 
+          color="#f59e0b" 
+          icon={<Calculator size={24} />} 
+          infoText={`Rata-rata aktual: ${formatUang(stats.averageOrderValue)}.\nNilai rata-rata dari setiap transaksi pesanan yang sah.`} 
+        />
       </div>
 
       <style>{`
-        @keyframes fadeSlideUp {
-          from { opacity: 0; transform: translateY(12px); }
-          to   { opacity: 1; transform: translateY(0); }
+        /* ── CSS KHUSUS CARD KPI ── */
+        .metric-card {
+          background: white; border-radius: 12px; border: 1px solid #e2e8f0; padding: 20px;
+          display: flex; align-items: center; justify-content: space-between;
+          height: 100%; min-height: 100px;
         }
-        @keyframes spin { to { transform: rotate(360deg); } }
+        .metric-card-content { display: flex; flex-direction: column; width: calc(100% - 56px); }
+        .metric-card-header { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+        .metric-title { font-size: 13px; font-weight: 600; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .metric-info-btn { background: none; border: none; cursor: pointer; padding: 0; color: #9ca3af; display: flex; align-items: center; flex-shrink: 0; transition: color 0.2s; }
+        .metric-info-btn:hover { color: #054CC7; }
+        .metric-value { font-size: 24px; font-weight: 800; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .metric-icon { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 
-        .sh-root { font-family: 'Poppins', sans-serif; animation: fadeSlideUp 0.4s ease-out; }
-
-        .sh-loading { text-align: center; padding: 80px 20px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
-        .sh-spinner { width: 36px; height: 36px; border: 3px solid #e5e7eb; border-top-color: #3b82f6; border-radius: 50%; animation: spin 0.8s linear infinite; }
-        .sh-loading p { font-size: 13px; color: #6b7280; }
-
-        .sh-page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px; flex-wrap: wrap; gap: 12px; }
-        .sh-title { font-size: 22px; font-weight: 800; color: #0f172a; }
-        .sh-subtitle { font-size: 13px; color: #64748b; margin-top: 2px; }
-        .sh-header-badge { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: #10b981; background: #ecfdf5; border: 1px solid #a7f3d0; padding: 6px 12px; border-radius: 20px; }
-
-        .sh-stats-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin-bottom: 20px; }
-
-        .sh-stat-card {
-          background: white;
-          border-radius: 16px;
-          padding: 18px 16px;
-          border: 1px solid #f1f5f9;
-          box-shadow: 0 1px 4px rgba(0,0,0,0.05);
-          animation: fadeSlideUp 0.4s ease-out both;
-          transition: transform 0.2s, box-shadow 0.2s;
+        /* ── GRID RESPONSIF SEMPURNA ── */
+        .metrics-grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 16px; }
+        
+        @media (max-width: 1024px) {
+          .metrics-grid-3 { grid-template-columns: repeat(2, 1fr); }
         }
-        .sh-stat-card:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(0,0,0,0.08); }
-
-        .sh-stat-icon-wrap { width: 46px; height: 46px; border-radius: 12px; display: flex; align-items: center; justify-content: center; margin-bottom: 12px; }
-        .sh-stat-label { font-size: 10.5px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
-        .sh-stat-value { font-size: 22px; font-weight: 800; line-height: 1.2; margin-bottom: 6px; }
-        .sh-stat-change { display: flex; align-items: center; gap: 3px; font-size: 11px; font-weight: 600; }
-
-        .sh-two-col { display: grid; grid-template-columns: 1.5fr 1fr; gap: 16px; margin-bottom: 16px; }
-
-        .sh-card {
-          background: white;
-          border-radius: 18px;
-          padding: 20px;
-          border: 1px solid #f1f5f9;
-          box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+        @media (max-width: 640px) {
+          .metrics-grid-3 { grid-template-columns: 1fr; }
         }
-
-        .sh-card-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 18px; }
-        .sh-card-title { font-size: 15px; font-weight: 700; color: #0f172a; }
-        .sh-card-subtitle { font-size: 12px; color: #94a3b8; margin-top: 2px; }
-        .sh-legend-pill { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; padding: 5px 10px; border-radius: 20px; }
-
-        .sh-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 40px; color: #9ca3af; font-size: 13px; }
-
-        .sh-orders-list { display: flex; flex-direction: column; gap: 8px; }
-        .sh-order-row { display: grid; grid-template-columns: 1.2fr 1.4fr 1fr auto; gap: 8px; align-items: center; padding: 10px 12px; background: #f8fafc; border-radius: 10px; transition: background 0.15s; }
-        .sh-order-row:hover { background: #eff6ff; }
-        .sh-order-num { font-size: 11px; font-weight: 700; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .sh-order-customer { font-size: 11px; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .sh-order-amount { font-size: 12px; font-weight: 700; color: #3b82f6; white-space: nowrap; }
-        .sh-status-pill { font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 20px; white-space: nowrap; }
-
-        .sh-banner { display: flex; align-items: center; justify-content: space-between; background: linear-gradient(135deg, #ecfdf5, #d1fae5); border-color: #a7f3d0; }
-        .sh-banner-left { display: flex; align-items: center; gap: 14px; }
-        .sh-banner-title { font-size: 14px; font-weight: 700; color: #065f46; }
-        .sh-banner-sub { font-size: 12px; color: #059669; margin-top: 2px; }
-        .sh-rate-value { font-size: 28px; font-weight: 800; }
-
-        @media (max-width: 1200px) { .sh-stats-grid { grid-template-columns: repeat(3, 1fr); } }
-        @media (max-width: 900px) {
-          .sh-stats-grid { grid-template-columns: repeat(2, 1fr); }
-          .sh-two-col { grid-template-columns: 1fr; }
-        }
-        @media (max-width: 480px) { .sh-stats-grid { grid-template-columns: 1fr; } }
       `}</style>
     </div>
   );

@@ -1,243 +1,457 @@
 'use client';
 
 import React, { useMemo, useState, useEffect } from 'react';
-import { useSellingData, useDashboardData, useStockData } from '@/hooks/useFrappeData';
-import { Filter, MoreHorizontal } from 'lucide-react';
+import { useSellingData, useStockData } from '@/hooks/useFrappeData';
+import { Info, X, Loader2, ShieldAlert, TrendingUp, Package, FileText, Users } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, BarChart, Bar
+  PieChart, Pie, Cell, BarChart, Bar, Legend
 } from 'recharts';
 
 const COLOR_PRIMARY = '#054CC7';
-const COLOR_SECONDARY = '#17C3CC';
-const DONUT_COLORS = ['#10b981', COLOR_PRIMARY, '#f59e0b', '#6B7280', '#ef4444'];
-const ITEM_COLORS = [COLOR_PRIMARY, COLOR_SECONDARY, '#8b5cf6', '#f59e0b', '#10b981'];
+const TREND_COLOR_PINK = '#f472b6'; 
+const DONUT_COLORS = ['#10b981', '#3b82f6', '#cbd5e1', '#f59e0b', '#ef4444'];
+const BAR_COLOR_BLUE = '#6366f1';
 
 const formatUang = (value: number | string | undefined | any) => {
-  if (value === undefined || value === null) return 'Rp 0';
+  if (!value) return 'Rp 0,00';
   const num = Number(value);
-  if (isNaN(num)) return 'Rp 0';
-  return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(num);
+  return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num);
 };
 
-export default function SellingAnalyticsPage() {
-  const { salesOrders, customers, isLoading } = useSellingData();
-  const { items } = useStockData(); 
-  const { revenueTrend } = useDashboardData();
+const formatNumber = (v: any) => {
+  const n = Number(v);
+  if (!v || isNaN(n)) return '0';
+  return new Intl.NumberFormat('id-ID').format(n);
+};
 
-  const [localDocStatus, setLocalDocStatus] = useState<Record<string, number>>({});
-  const [localSOProgress, setLocalSOProgress] = useState<Record<string, { delivered: number, billed: number }>>({});
+const formatShortAxis = (num: number) => {
+  if (num === 0) return '0';
+  if (num >= 1000000000) return (num / 1000000000).toFixed(0) + ' B';
+  if (num >= 1000000) return (num / 1000000).toFixed(0) + ' M';
+  if (num >= 1000) return (num / 1000).toFixed(0) + ' K';
+  return num.toString();
+};
+
+const formatCompact = (value: number | string | undefined | any, isCurrency = false) => {
+  if (!value) return isCurrency ? 'Rp 0' : '0';
+  const num = Number(value);
+  if (isNaN(num)) return isCurrency ? 'Rp 0' : '0';
+  
+  let formatted = '';
+  if (num >= 1000000000) formatted = (num / 1000000000).toFixed(2).replace(/\.?0+$/, '') + ' B';
+  else if (num >= 1000000) formatted = (num / 1000000).toFixed(2).replace(/\.?0+$/, '') + ' M';
+  else if (num >= 1000) formatted = (num / 1000).toFixed(2).replace(/\.?0+$/, '') + ' K';
+  else formatted = new Intl.NumberFormat('id-ID').format(num);
+
+  return isCurrency ? `Rp ${formatted}` : formatted;
+};
+
+// ── CUSTOM TOOLTIP ALA FRAPPE ──
+const FrappeChartTooltip = ({ active, payload, label, isCurrency = false }: any) => {
+  if (active && payload && payload.length) {
+    return (
+      <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px 16px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}>
+        <div style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '8px', letterSpacing: '0.05em' }}>{label}</div>
+        {payload.map((entry: any, index: number) => {
+          const valStr = isCurrency ? formatUang(entry.value) : formatNumber(entry.value);
+          return (
+            <div key={index} style={{ marginBottom: index !== payload.length - 1 ? '10px' : 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                <div style={{ width: 10, height: 10, borderRadius: '2px', background: entry.color }} />
+                <div style={{ fontSize: '14px', fontWeight: 700, color: '#111827', lineHeight: 1 }}>{valStr}</div>
+              </div>
+              <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 500, marginLeft: '16px' }}>{entry.name}</div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+  return null;
+};
+
+const FrappePieTooltip = ({ active, payload }: any) => {
+  if (active && payload && payload.length) {
+    const data = payload[0];
+    return (
+      <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px 16px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}>
+        <div style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '6px', letterSpacing: '0.05em' }}>{data.name}</div>
+        <div style={{ fontSize: '22px', fontWeight: 800, color: data.payload.fill, lineHeight: 1 }}>{formatNumber(data.value)}</div>
+      </div>
+    );
+  }
+  return null;
+};
+
+function InfoModal({ show, title, text, onClose }: { show: boolean, title: string, text: string, onClose: () => void }) {
+  if (!show) return null;
+  return (
+    <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(4px)', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'fadeIn 0.2s ease-out' }} onClick={onClose}>
+      <div style={{ background: 'white', width: '100%', maxWidth: '420px', borderRadius: '16px', padding: '24px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', margin: '0 16px', animation: 'scaleIn 0.2s ease-out' }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+          <div style={{ width: '48px', height: '48px', background: '#eff6ff', color: COLOR_PRIMARY, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Info size={24} /></div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', padding: '4px' }}><X size={20} /></button>
+        </div>
+        <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#111827', marginBottom: '8px', fontFamily: "'Poppins', sans-serif" }}>{title}</h3>
+        <p style={{ fontSize: '13px', color: '#4b5563', lineHeight: 1.6, marginBottom: '24px', fontFamily: "'Poppins', sans-serif" }}>{text}</p>
+        <button onClick={onClose} className="btn-understand" style={{ width: '100%', padding: '12px 16px', background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s', fontFamily: "'Poppins', sans-serif" }}>Mengerti</button>
+      </div>
+    </div>
+  );
+}
+
+export default function SellingAnalyticsPage() {
+  const { salesOrders, customers, isLoading, refetch } = useSellingData();
+  const [infoData, setInfoData] = useState({ show: false, title: '', text: '' });
+  
+  const [soItems, setSoItems] = useState<any[]>([]);
+  const [isFetchingItems, setIsFetchingItems] = useState(false);
+  const [apiPermissionError, setApiPermissionError] = useState(false);
+
+  useEffect(() => { 
+    refetch(); 
+  }, [refetch]);
 
   useEffect(() => {
-    const savedStatus = localStorage.getItem('erp_mock_selling_status');
-    if (savedStatus) { try { setLocalDocStatus(JSON.parse(savedStatus)); } catch (e) {} }
-    const savedProgress = localStorage.getItem('erp_mock_so_progress');
-    if (savedProgress) { try { setLocalSOProgress(JSON.parse(savedProgress)); } catch (e) {} }
-  }, []);
+    const fetchChildDataFromParents = async () => {
+      const rawSales = salesOrders || [];
+      const validSoNames = rawSales.filter((o: any) => o.docstatus === 1).map((o: any) => o.name);
 
-  const dynamicRevenueTrend = useMemo(() => {
-    const targetPatterns = [500000000, 450000000, 600000000, 550000000, 750000000, 800000000];
-    return revenueTrend.map((item, index) => ({
-      ...item,
-      target: targetPatterns[index % targetPatterns.length]
-    }));
-  }, [revenueTrend]);
-
-  const patchedSalesOrders = useMemo(() => {
-    return (salesOrders as any[]).map((so: any) => {
-      const localStatus = localDocStatus[so.name];
-      const progress = localSOProgress[so.name] || { delivered: 0, billed: 0 };
-      
-      let finalDelivered = progress.delivered > 0 ? progress.delivered : (so.per_delivered || 0);
-      let finalBilled = progress.billed > 0 ? progress.billed : (so.per_billed || 0);
-      let finalStatus = so.status;
-      let finalDocstatus = so.docstatus;
-
-      if (localStatus !== undefined) {
-         finalDocstatus = localStatus;
-         if (localStatus === 1) finalStatus = 'To Deliver and Bill'; 
-         if (localStatus === 2) finalStatus = 'Cancelled';
+      if (validSoNames.length === 0) {
+        setSoItems([]);
+        return;
       }
-      if (finalDocstatus === 1 && finalDelivered >= 100 && finalBilled >= 100) {
-         finalStatus = 'Completed';
+
+      setIsFetchingItems(true);
+      try {
+        const promises = validSoNames.map((name: string) =>
+          fetch(`/api/frappe/resource/Sales Order/${encodeURIComponent(name)}`)
+            .then(res => {
+                if(!res.ok) throw new Error("Gagal fetch");
+                return res.json();
+            })
+            .catch(() => null) 
+        );
+
+        const results = await Promise.all(promises);
+
+        let allItems: any[] = [];
+        results.forEach((res) => {
+          if (res && res.data && res.data.items) {
+            allItems = [...allItems, ...res.data.items]; 
+          }
+        });
+
+        setSoItems(allItems);
+        setApiPermissionError(false);
+      } catch (e: any) {
+        setApiPermissionError(true);
+      } finally {
+        setIsFetchingItems(false);
       }
-      return { ...so, docstatus: finalDocstatus, status: finalStatus, per_delivered: finalDelivered, per_billed: finalBilled };
-    });
-  }, [salesOrders, localDocStatus, localSOProgress]);
+    };
+
+    if (salesOrders && salesOrders.length > 0) {
+      fetchChildDataFromParents();
+    }
+  }, [salesOrders]);
 
   const stats = useMemo(() => {
-    const totalSalesAmount = patchedSalesOrders.reduce((sum: number, order: any) => sum + (order.grand_total || 0), 0);
-    
-    const soToDeliver = patchedSalesOrders.filter((o: any) => o.docstatus === 1 && o.per_delivered < 100 && o.status !== 'Completed').length;
-    const soToBill = patchedSalesOrders.filter((o: any) => o.docstatus === 1 && o.per_billed < 100 && o.status !== 'Completed').length;
-    const activeCustomers = customers.filter(c => !c.disabled).length;
+    const rawSales = salesOrders || [];
+    const validSales = rawSales.filter((o: any) => o.docstatus === 1); 
 
-    const customerSales: Record<string, number> = {};
-    patchedSalesOrders.forEach((so: any) => {
-      if(so.customer_name && so.grand_total) {
-        customerSales[so.customer_name] = (customerSales[so.customer_name] || 0) + so.grand_total;
+    const totalSalesAmount = validSales.reduce((sum, o: any) => sum + (Number(o.grand_total) || 0), 0);
+    const soToDeliver = validSales.filter((o: any) => (o.per_delivered || 0) < 100 && o.status !== 'Completed').length;
+    const soToBill = validSales.filter((o: any) => (o.per_billed || 0) < 100 && o.status !== 'Completed').length;
+    const activeCustomers = (customers || []).filter((c: any) => !c.disabled).length;
+
+    const monthNamesShort = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const trendData = monthNamesShort.map(m => ({ month: m, revenue: 0 }));
+
+    validSales.forEach((so: any) => {
+      const dateStr = so.transaction_date || so.delivery_date || so.creation;
+      if (dateStr) {
+        const monthIdx = new Date(dateStr).getMonth();
+        if (monthIdx >= 0 && monthIdx < 12) {
+          trendData[monthIdx].revenue += (Number(so.grand_total) || 0);
+        }
+      }
+    });
+
+    const custMap: Record<string, number> = {};
+    validSales.forEach((so: any) => {
+      if (so.customer_name) {
+        custMap[so.customer_name] = (custMap[so.customer_name] || 0) + (Number(so.grand_total) || 0);
+      }
+    });
+    const topCustomers = Object.entries(custMap)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 5);
+
+    // ── 4. ITEM-WISE ANNUAL SALES ──
+    const itemMap: Record<string, number> = {};
+
+    if (soItems && soItems.length > 0) {
+      soItems.forEach((item: any) => {
+        const key = item.item_code || item.item_name || 'Unknown';
+        const val = Number(item.base_net_amount) || Number(item.net_amount) || Number(item.amount) || Number(item.base_amount) || 0;
+        itemMap[key] = (itemMap[key] || 0) + val;
+      });
+    }
+
+    const itemWiseSales = Object.entries(itemMap)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 10);
+
+    // 5. SALES ORDER ANALYSIS (PIE)
+    const soStatusCounts = { 'Completed': 0, 'To Deliver': 0, 'Draft': 0 };
+    rawSales.forEach((wo: any) => {
+      if (wo.docstatus === 2) return;
+      if (wo.docstatus === 0) {
+        soStatusCounts['Draft']++;
+      } else if (wo.docstatus === 1) {
+        if ((wo.per_delivered || 0) >= 100 && (wo.per_billed || 0) >= 100) {
+          soStatusCounts['Completed']++;
+        } else {
+          soStatusCounts['To Deliver']++;
+        }
       }
     });
     
-    const topCustomers = Object.entries(customerSales).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 5);
+    const soAnalysisData = [
+      { name: 'Completed', value: soStatusCounts['Completed'], color: '#10b981' },
+      { name: 'To Deliver', value: soStatusCounts['To Deliver'], color: '#3b82f6' },
+      { name: 'Draft', value: soStatusCounts['Draft'], color: '#cbd5e1' }
+    ];
 
-    let itemWiseSales: any[] = [];
-    const activeItems = items.filter((i: any) => i.is_stock_item).map((i: any) => i.item_code);
-    
-    if (activeItems.length > 0 && totalSalesAmount > 0) {
-      const numItems = Math.min(activeItems.length, 5);
-      let remaining = totalSalesAmount;
-      for(let i=0; i<numItems; i++) {
-        const share = i === numItems - 1 ? remaining : remaining * (Math.random() * 0.4 + 0.1);
-        itemWiseSales.push({ name: activeItems[i], value: share });
-        remaining -= share;
-      }
-      itemWiseSales.sort((a, b) => b.value - a.value);
-    } else {
-      itemWiseSales = [ { name: 'Belum ada transaksi', value: 0 } ];
-    }
+    return { totalSalesAmount, soToDeliver, soToBill, activeCustomers, trendData, topCustomers, itemWiseSales, soAnalysisData };
+  }, [salesOrders, customers, soItems]);
 
-    return { totalSalesAmount, soToDeliver, soToBill, activeCustomers, topCustomers, itemWiseSales };
-  }, [patchedSalesOrders, customers, items]);
+  if (isLoading) return (
+    <div style={{ textAlign: 'center', padding: '60px' }}>
+      <Loader2 className="animate-spin" size={32} color={COLOR_PRIMARY} style={{ margin: '0 auto 16px' }} />
+      <p style={{ color: '#6B7280' }}>Sinkronisasi Analitik Selling...</p>
+    </div>
+  );
 
-  if (isLoading) return <div style={{ padding: '20px', textAlign: 'center', color: '#6B7280' }}>Memuat analitik dashboard...</div>;
-
-  const CardHeader = ({ title }: { title: string }) => (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-      <h3 style={{ fontSize: '14px', fontWeight: 700, color: '#111827' }}>{title}</h3>
-      <div style={{ display: 'flex', gap: '6px' }}>
-        <button style={{ background: 'none', border: '1px solid #e5e7eb', borderRadius: '6px', padding: '4px 6px', cursor: 'pointer', color: '#6B7280' }}><Filter size={14} /></button>
-        <button style={{ background: 'none', border: '1px solid #e5e7eb', borderRadius: '6px', padding: '4px 6px', cursor: 'pointer', color: '#6B7280' }}><MoreHorizontal size={14} /></button>
+  const MetricCard = ({ title, value, color, icon, infoText }: any) => (
+    <div className="metric-card">
+      <div className="metric-card-content">
+        <div className="metric-card-header">
+          <span className="metric-title">{title}</span>
+          {infoText && (
+            <button 
+              onClick={() => setInfoData({ show: true, title, text: infoText })}
+              className="metric-info-btn"
+              title="Lihat Detail Nilai"
+            >
+              <Info size={14} />
+            </button>
+          )}
+        </div>
+        <div className="metric-value" style={{ color }}>{value}</div>
+      </div>
+      <div className="metric-icon" style={{ background: `${color}15`, color }}>
+        {icon}
       </div>
     </div>
   );
 
+  const ChartHeader = ({ title, infoText }: { title: string, infoText?: string }) => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
+      <h3 style={{ fontSize: '15px', fontWeight: 600, color: '#374151' }}>{title}</h3>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+        {infoText && (
+          <button onClick={() => setInfoData({ show: true, title, text: infoText })} style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '6px', padding: '4px 6px', cursor: 'pointer', color: '#64748b', display: 'flex' }}>
+            <Info size={14} />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+
+  const FrappePieChart = ({ data, title, infoText }: any) => {
+    const [activeName, setActiveName] = useState(data[0]?.name || '');
+    const total = data.reduce((sum: number, item: any) => sum + item.value, 0);
+    const activeItem = data.find((d: any) => d.name === activeName) || data[0] || { name: '', value: 0 };
+    const activePercent = total > 0 ? ((activeItem.value / total) * 100).toFixed(1) : '0.0';
+
+    return (
+      <div className="chart-container">
+        <ChartHeader title={title} infoText={infoText} />
+        <div className="pie-chart-wrapper">
+          <ResponsiveContainer width="50%" height="100%" className="pie-responsive">
+            <PieChart>
+              {total === 0 ? (
+                <Pie data={[{value: 1, color: '#f1f5f9'}]} cx="50%" cy="50%" innerRadius={65} outerRadius={85} dataKey="value" isAnimationActive={false}>
+                  <Cell fill="#f1f5f9" />
+                </Pie>
+              ) : (
+                <Pie data={data.filter((d: any) => d.value > 0)} cx="50%" cy="50%" innerRadius={65} outerRadius={85} paddingAngle={2} dataKey="value" onMouseEnter={(dataItem: any) => setActiveName(dataItem.name)}>
+                  {data.filter((d: any) => d.value > 0).map((entry: any, i: number) => <Cell key={i} fill={entry.color} />)}
+                </Pie>
+              )}
+              <Tooltip content={<FrappePieTooltip />} />
+            </PieChart>
+          </ResponsiveContainer>
+
+          <div className="pie-legend-wrapper">
+            <div style={{ fontSize: '11px', fontWeight: 800, color: '#475569', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              {activeItem.name}: <span style={{ color: '#111827' }}>{activePercent}%</span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {data.map((d: any) => (
+                <div 
+                  key={d.name} 
+                  onMouseEnter={() => setActiveName(d.name)}
+                  style={{ 
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center', 
+                    cursor: 'pointer', padding: '4px 8px', borderRadius: '6px',
+                    background: activeName === d.name ? '#f8fafc' : 'transparent',
+                    transition: 'background 0.2s'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: d.color }} />
+                    <span style={{ fontSize: '12px', color: '#475569', fontWeight: activeName === d.name ? 700 : 500 }}>{d.name}</span>
+                  </div>
+                  <span style={{ fontSize: '13px', fontWeight: 800, color: '#111827' }}>{formatNumber(d.value)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
-    <div style={{ animation: 'fadeIn 0.4s ease-out', fontFamily: "'Poppins', sans-serif" }}>
+    <div style={{ animation: 'fadeIn 0.4s ease-out', fontFamily: "'Inter', 'Poppins', sans-serif" }}>
       
-      {/* ROW 1: Top Metrics */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '16px' }}>
-        <div className="chart-container" style={{ padding: '16px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><span style={{ fontSize: '12px', fontWeight: 600, color: '#4B5563' }}>Annual Sales</span><MoreHorizontal size={14} color="#9CA3AF" /></div>
-          <div style={{ fontSize: '20px', fontWeight: 800, color: COLOR_PRIMARY }}>{formatUang(stats.totalSalesAmount)}</div>
-        </div>
-        <div className="chart-container" style={{ padding: '16px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><span style={{ fontSize: '12px', fontWeight: 600, color: '#4B5563' }}>Sales Orders to Deliver</span><MoreHorizontal size={14} color="#9CA3AF" /></div>
-          <div style={{ fontSize: '20px', fontWeight: 800, color: '#111827' }}>{stats.soToDeliver}</div>
-        </div>
-        <div className="chart-container" style={{ padding: '16px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><span style={{ fontSize: '12px', fontWeight: 600, color: '#4B5563' }}>Sales Orders to Bill</span><MoreHorizontal size={14} color="#9CA3AF" /></div>
-          <div style={{ fontSize: '20px', fontWeight: 800, color: '#111827' }}>{stats.soToBill}</div>
-        </div>
-        <div className="chart-container" style={{ padding: '16px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><span style={{ fontSize: '12px', fontWeight: 600, color: '#4B5563' }}>Active Customers</span><MoreHorizontal size={14} color="#9CA3AF" /></div>
-          <div style={{ fontSize: '20px', fontWeight: 800, color: '#111827' }}>{stats.activeCustomers}</div>
-        </div>
+      <InfoModal show={infoData.show} title={infoData.title} text={infoData.text} onClose={() => setInfoData({ ...infoData, show: false })} />
+
+      {/* ROW 1: Metrics */}
+      <div className="metrics-grid-4">
+        <MetricCard title="Annual Sales" value={formatCompact(stats.totalSalesAmount, true)} color={COLOR_PRIMARY} icon={<TrendingUp size={24} />} infoText={`Total aktual: ${formatUang(stats.totalSalesAmount)}.\nTotal akumulasi penjualan dari order aktif.`} />
+        <MetricCard title="Sales Orders to Deliver" value={formatCompact(stats.soToDeliver)} color="#f59e0b" icon={<Package size={24} />} infoText={`Total: ${formatNumber(stats.soToDeliver)} pesanan.\nJumlah pesanan yang belum sepenuhnya dikirim.`} />
+        <MetricCard title="Sales Orders to Bill" value={formatCompact(stats.soToBill)} color="#ef4444" icon={<FileText size={24} />} infoText={`Total: ${formatNumber(stats.soToBill)} pesanan.\nJumlah pesanan yang belum ditagihkan.`} />
+        <MetricCard title="Active Customers" value={formatCompact(stats.activeCustomers)} color="#10b981" icon={<Users size={24} />} infoText={`Total: ${formatNumber(stats.activeCustomers)} pelanggan.\nJumlah pelanggan yang aktif di sistem.`} />
       </div>
 
       {/* ROW 2: Sales Order Trends */}
       <div className="chart-container" style={{ marginBottom: '16px' }}>
-        <CardHeader title="Sales Order Trends" />
-        <ResponsiveContainer width="100%" height={220}>
-          <AreaChart data={dynamicRevenueTrend} margin={{ top: 10, right: 10, left: 30, bottom: 0 }}>
-            <defs>
-              <linearGradient id="colorSalesDash" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor={COLOR_PRIMARY} stopOpacity={0.2} />
-                <stop offset="95%" stopColor={COLOR_PRIMARY} stopOpacity={0} />
-              </linearGradient>
-            </defs>
+        <ChartHeader title="Sales Order Trends" infoText="Grafik tren pendapatan dari pesanan dari bulan Januari sampai Desember." />
+        <ResponsiveContainer width="100%" height={300}>
+          <AreaChart data={stats.trendData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-            <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} />
-            <YAxis tickFormatter={(v: any) => formatUang(v).replace(/,\d{2}/, '')} tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} />
-            <Tooltip formatter={(value: any) => formatUang(value)} contentStyle={{ borderRadius: '8px', fontSize: '12px', fontFamily: 'Poppins' }} />
-            <Area type="monotone" dataKey="revenue" name="Total Sales" fill="url(#colorSalesDash)" stroke={COLOR_PRIMARY} strokeWidth={3} dot={{ r: 4, fill: COLOR_PRIMARY }} />
+            <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#6B7280', fontFamily: 'Poppins' }} axisLine={false} tickLine={false} interval={0} dy={10} />
+            <YAxis tickFormatter={(v) => formatShortAxis(v)} tick={{ fontSize: 11, fill: '#6B7280', fontFamily: 'Poppins' }} axisLine={false} tickLine={false} width={80} />
+            <Tooltip content={<FrappeChartTooltip isCurrency={true} />} cursor={{ stroke: '#e2e8f0', strokeWidth: 1, strokeDasharray: '4 4' }} />
+            <Area type="monotone" dataKey="revenue" name="Total Sales Amount" stroke={TREND_COLOR_PINK} strokeWidth={2} fill={`${TREND_COLOR_PINK}15`} activeDot={{ r: 5, fill: TREND_COLOR_PINK }} />
           </AreaChart>
         </ResponsiveContainer>
       </div>
 
-      {/* ROW 3: Top Customers & SO Analysis */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px', marginBottom: '16px' }}>
-        
-        {/* Top Customers Chart */}
+      {/* ROW 3: Customers & Analysis (DIJAMIN SEJAJAR 50/50) */}
+      <div className="charts-grid-2">
         <div className="chart-container">
-          <CardHeader title="Top Customers" />
+          <ChartHeader title="Top Customers" infoText="Daftar pelanggan dengan akumulasi nilai transaksi terbesar." />
           {stats.topCustomers.length > 0 ? (
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={stats.topCustomers} layout="vertical" margin={{ top: 0, right: 20, left: 40, bottom: 0 }}>
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={stats.topCustomers} layout="vertical" margin={{ left: 10, right: 30, top: 10, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f3f4f6" />
-                <XAxis type="number" tickFormatter={(v: any) => formatUang(v)} tick={{ fontSize: 10, fill: '#6B7280' }} axisLine={false} tickLine={false} />
-                <YAxis dataKey="name" type="category" tick={{ fontSize: 11, fill: '#374151', fontWeight: 600 }} axisLine={false} tickLine={false} />
-                <Tooltip formatter={(value: any) => formatUang(value)} cursor={{ fill: '#f3f4f6' }} contentStyle={{ borderRadius: '8px', fontSize: '12px', fontFamily: 'Poppins' }} />
-                <Bar dataKey="value" name="Total Beli" fill={COLOR_SECONDARY} radius={[0, 4, 4, 0]} barSize={20} />
+                <XAxis type="number" hide />
+                <YAxis dataKey="name" type="category" tick={{ fontSize: 12, fill: '#374151' }} axisLine={false} tickLine={false} width={120} />
+                <Tooltip content={<FrappeChartTooltip isCurrency={true} />} cursor={{ fill: '#f8fafc' }} />
+                <Bar dataKey="value" name="Total Sales Amount" fill={COLOR_PRIMARY} radius={[0, 4, 4, 0]} barSize={20} />
               </BarChart>
             </ResponsiveContainer>
-          ) : (
-            <div style={{ height: '200px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9CA3AF', fontSize: '13px' }}>Belum ada data Top Customer</div>
-          )}
+          ) : <div className="no-data-placeholder">No Data</div>}
         </div>
 
-        {/* Sales Order Analysis Pie Chart */}
-        <div className="chart-container">
-          <CardHeader title="Sales Order Analysis" />
-          {patchedSalesOrders.length > 0 ? (
-            <div style={{ display: 'flex', height: '200px', alignItems: 'center' }}>
-              <ResponsiveContainer width="50%" height="100%">
-                <PieChart>
-                  <Pie data={[
-                    { name: 'Selesai', value: patchedSalesOrders.filter((o: any) => o.status === 'Completed').length },
-                    { name: 'Proses', value: patchedSalesOrders.filter((o: any) => o.status === 'In Process').length },
-                    { name: 'Siap Kirim', value: patchedSalesOrders.filter((o: any) => o.status === 'To Deliver and Bill').length },
-                    { name: 'Draft', value: patchedSalesOrders.filter((o: any) => o.status === 'Draft').length },
-                    { name: 'Batal', value: patchedSalesOrders.filter((o: any) => o.status === 'Cancelled').length }
-                  ].filter(d => d.value > 0)} cx="50%" cy="50%" innerRadius={45} outerRadius={70} paddingAngle={2} dataKey="value" stroke="none">
-                    {DONUT_COLORS.map((color, index) => <Cell key={`cell-${index}`} fill={color} />)}
-                  </Pie>
-                  <Tooltip contentStyle={{ borderRadius: '8px', fontSize: '12px', fontFamily: 'Poppins' }} />
-                </PieChart>
-              </ResponsiveContainer>
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px', paddingLeft: '16px' }}>
-                {['Completed', 'To Deliver and Bill', 'Draft'].map((status, i) => {
-                  const count = patchedSalesOrders.filter((o: any) => o.status === status).length;
-                  return (
-                    <div key={status} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', alignItems: 'center' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: DONUT_COLORS[i] }} />
-                        <span style={{ color: '#4B5563', fontWeight: 500 }}>{status === 'To Deliver and Bill' ? 'Siap Kirim' : status}</span>
-                      </div>
-                      <span style={{ fontWeight: 700, color: '#111827' }}>{count}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ) : (
-            <div style={{ height: '200px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9CA3AF', fontSize: '13px' }}>No Data</div>
-          )}
-        </div>
+        <FrappePieChart data={stats.soAnalysisData} title="Sales Order Analysis" infoText="Persentase status dokumen Sales Order yang ada di sistem." />
       </div>
 
       {/* ROW 4: Item-wise Annual Sales */}
       <div className="chart-container">
-        <CardHeader title="Item-wise Annual Sales" />
-        {stats.totalSalesAmount > 0 ? (
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={stats.itemWiseSales} margin={{ top: 10, right: 10, left: 30, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-              <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} />
-              <YAxis tickFormatter={(v: any) => formatUang(v).replace(/,\d{2}/, '')} tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={false} tickLine={false} />
-              <Tooltip formatter={(value: any) => formatUang(value)} cursor={{ fill: '#f3f4f6' }} contentStyle={{ borderRadius: '8px', fontSize: '12px', fontFamily: 'Poppins' }} />
-              <Bar dataKey="value" name="Sales Revenue" radius={[4, 4, 0, 0]} barSize={40}>
-                {stats.itemWiseSales.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={ITEM_COLORS[index % ITEM_COLORS.length]} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+        <ChartHeader title="Item-wise Annual Sales" infoText="Analisis kontribusi nominal penjualan tahunan per masing-masing produk ditarik murni dari database." />
+        
+        {apiPermissionError && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#fef2f2', border: '1px solid #fecaca', padding: '12px 16px', borderRadius: '8px', marginBottom: '16px', color: '#b91c1c', fontSize: '12px', fontWeight: 500 }}>
+            <ShieldAlert size={16} />
+            <span>Gagal mengambil detail item karena diblokir oleh sistem Role Permission Frappe. Pastikan Role Read telah diaktifkan untuk Sales Order Item.</span>
+          </div>
+        )}
+
+        {isFetchingItems ? (
+            <div className="no-data-placeholder">
+                <Loader2 className="animate-spin" size={24} style={{ marginRight: '8px' }} color={COLOR_PRIMARY} />
+                Memuat rincian produk...
+            </div>
+        ) : stats.itemWiseSales.length > 0 ? (
+            <ResponsiveContainer width="100%" height={320}>
+                <BarChart data={stats.itemWiseSales} layout="vertical" margin={{ top: 20, right: 30, left: 10, bottom: 40 }}>
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f3f4f6" />
+                    <XAxis type="number" tickFormatter={(v) => formatShortAxis(v)} tick={{ fontSize: 11, fill: '#6B7280', fontFamily: 'Poppins' }} axisLine={false} tickLine={false} />
+                    <YAxis dataKey="name" type="category" width={140} tick={{ fontSize: 11, fontWeight: 600, fill: '#111827', fontFamily: 'Poppins' }} axisLine={false} tickLine={false} />
+                    
+                    <Tooltip content={<FrappeChartTooltip isCurrency={true} />} cursor={{ fill: '#f8fafc' }} />
+                    <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px', fontFamily: 'Poppins', paddingBottom: '10px' }} />
+                    <Bar dataKey="value" name="Total Sales Amount" fill={BAR_COLOR_BLUE} barSize={24} radius={[0, 4, 4, 0]} />
+                </BarChart>
+            </ResponsiveContainer>
         ) : (
-          <div style={{ height: '220px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9CA3AF', fontSize: '13px' }}>Belum ada data item terjual</div>
+            <div className="no-data-placeholder">
+              {apiPermissionError ? 'Menunggu izin akses API dibuka...' : 'No Data'}
+            </div>
         )}
       </div>
 
+      <style>{`
+        /* ── CSS KHUSUS CARD KOTAK ── */
+        .chart-container { background: white; border-radius: 8px; border: 1px solid #e5e7eb; padding: 24px; width: 100%; overflow: hidden; box-shadow: none; }
+        .no-data-placeholder { height: 260px; display: flex; align-items: center; justify-content: center; color: #9ca3af; font-size: 13px; background: #f8fafc; border-radius: 8px; font-weight: 500; }
+        
+        /* ── CSS KHUSUS CARD KPI ── */
+        .metric-card {
+          background: white; border-radius: 12px; border: 1px solid #e2e8f0; padding: 20px;
+          display: flex; align-items: center; justify-content: space-between;
+          height: 100%; min-height: 100px;
+        }
+        .metric-card-content { display: flex; flex-direction: column; width: calc(100% - 56px); }
+        .metric-card-header { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+        .metric-title { font-size: 13px; font-weight: 600; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .metric-info-btn { background: none; border: none; cursor: pointer; padding: 0; color: #9ca3af; display: flex; align-items: center; flex-shrink: 0; transition: color 0.2s; }
+        .metric-info-btn:hover { color: #054CC7; }
+        .metric-value { font-size: 24px; font-weight: 800; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .metric-icon { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+
+        /* ── GRID RESPONSIF SEMPURNA ── */
+        .metrics-grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 16px; }
+        .charts-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+        
+        /* Layout Pembungkus Pie Chart agar responsif */
+        .pie-chart-wrapper { display: flex; align-items: center; height: 260px; }
+        .pie-legend-wrapper { flex: 1; padding-left: 16px; }
+
+        /* Tablet Responsive */
+        @media (max-width: 1024px) {
+          .metrics-grid-4 { grid-template-columns: repeat(2, 1fr); }
+          .charts-grid-2 { grid-template-columns: 1fr; }
+        }
+
+        /* Mobile Responsive */
+        @media (max-width: 640px) {
+          .chart-container { padding: 16px !important; border-radius: 8px; }
+          .metrics-grid-4 { grid-template-columns: 1fr; }
+          .pie-chart-wrapper { flex-direction: column; height: auto; }
+          .pie-chart-wrapper .pie-responsive { width: 100% !important; height: 220px !important; }
+          .pie-legend-wrapper { width: 100%; padding-left: 0; padding-top: 16px; }
+        }
+      `}</style>
     </div>
   );
 }

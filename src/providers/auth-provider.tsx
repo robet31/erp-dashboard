@@ -32,19 +32,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Restore session from localStorage
+// Restore session from localStorage
   useEffect(() => {
     const savedUser = localStorage.getItem('erp_user');
-    const STORAGE_VERSION = 'v2';
-    const storedVersion = localStorage.getItem('erp_users_version');
     
-    if (savedUser && storedVersion !== STORAGE_VERSION) {
-      localStorage.removeItem('erp_user');
-      setUser(null);
-    } else if (savedUser) {
+    if (savedUser) {
       try {
         setUser(JSON.parse(savedUser));
-      } catch { /* ignore */ }
+      } catch { 
+        localStorage.removeItem('erp_user'); 
+      }
     }
     setIsLoading(false);
   }, []);
