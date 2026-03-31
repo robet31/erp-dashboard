@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useMemo, useState, useEffect } from 'react';
-import { useSellingData, useStockData } from '@/hooks/useFrappeData';
-import { Info, X, Loader2, ShieldAlert, TrendingUp, Package, FileText, Users } from 'lucide-react';
+import Link from 'next/link';
+import { useSellingData } from '@/hooks/useFrappeData';
+import { Info, X, Loader2, ShieldAlert, TrendingUp, Package, FileText, Users, ArrowUpRight, Activity, CheckCircle2 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, BarChart, Bar, Legend
@@ -10,7 +11,6 @@ import {
 
 const COLOR_PRIMARY = '#054CC7';
 const TREND_COLOR_PINK = '#f472b6'; 
-const DONUT_COLORS = ['#10b981', '#3b82f6', '#cbd5e1', '#f59e0b', '#ef4444'];
 const BAR_COLOR_BLUE = '#6366f1';
 
 const formatUang = (value: number | string | undefined | any) => {
@@ -51,14 +51,14 @@ const formatCompact = (value: number | string | undefined | any, isCurrency = fa
 const FrappeChartTooltip = ({ active, payload, label, isCurrency = false }: any) => {
   if (active && payload && payload.length) {
     return (
-      <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px 16px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}>
+      <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '12px 16px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}>
         <div style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '8px', letterSpacing: '0.05em' }}>{label}</div>
         {payload.map((entry: any, index: number) => {
           const valStr = isCurrency ? formatUang(entry.value) : formatNumber(entry.value);
           return (
             <div key={index} style={{ marginBottom: index !== payload.length - 1 ? '10px' : 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
-                <div style={{ width: 10, height: 10, borderRadius: '2px', background: entry.color }} />
+                <div style={{ width: 10, height: 10, borderRadius: '3px', background: entry.color }} />
                 <div style={{ fontSize: '14px', fontWeight: 700, color: '#111827', lineHeight: 1 }}>{valStr}</div>
               </div>
               <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 500, marginLeft: '16px' }}>{entry.name}</div>
@@ -75,7 +75,7 @@ const FrappePieTooltip = ({ active, payload }: any) => {
   if (active && payload && payload.length) {
     const data = payload[0];
     return (
-      <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px 16px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}>
+      <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '12px 16px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}>
         <div style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '6px', letterSpacing: '0.05em' }}>{data.name}</div>
         <div style={{ fontSize: '22px', fontWeight: 800, color: data.payload.fill, lineHeight: 1 }}>{formatNumber(data.value)}</div>
       </div>
@@ -88,14 +88,14 @@ function InfoModal({ show, title, text, onClose }: { show: boolean, title: strin
   if (!show) return null;
   return (
     <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(4px)', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'fadeIn 0.2s ease-out' }} onClick={onClose}>
-      <div style={{ background: 'white', width: '100%', maxWidth: '420px', borderRadius: '16px', padding: '24px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', margin: '0 16px', animation: 'scaleIn 0.2s ease-out' }} onClick={e => e.stopPropagation()}>
+      <div style={{ background: 'white', width: '100%', maxWidth: '420px', borderRadius: '20px', padding: '24px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', margin: '0 16px', animation: 'scaleIn 0.2s ease-out' }} onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
           <div style={{ width: '48px', height: '48px', background: '#eff6ff', color: COLOR_PRIMARY, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Info size={24} /></div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', padding: '4px' }}><X size={20} /></button>
         </div>
         <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#111827', marginBottom: '8px', fontFamily: "'Poppins', sans-serif" }}>{title}</h3>
         <p style={{ fontSize: '13px', color: '#4b5563', lineHeight: 1.6, marginBottom: '24px', fontFamily: "'Poppins', sans-serif" }}>{text}</p>
-        <button onClick={onClose} className="btn-understand" style={{ width: '100%', padding: '12px 16px', background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s', fontFamily: "'Poppins', sans-serif" }}>Mengerti</button>
+        <button onClick={onClose} className="btn-understand" style={{ width: '100%', padding: '12px 16px', background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: '12px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s', fontFamily: "'Poppins', sans-serif" }}>Mengerti</button>
       </div>
     </div>
   );
@@ -231,14 +231,14 @@ export default function SellingAnalyticsPage() {
   }, [salesOrders, customers, soItems]);
 
   if (isLoading) return (
-    <div style={{ textAlign: 'center', padding: '60px' }}>
+    <div className="tw-root" style={{ textAlign: 'center', padding: '60px' }}>
       <Loader2 className="animate-spin" size={32} color={COLOR_PRIMARY} style={{ margin: '0 auto 16px' }} />
       <p style={{ color: '#6B7280' }}>Sinkronisasi Analitik Selling...</p>
     </div>
   );
 
-  const MetricCard = ({ title, value, color, icon, infoText }: any) => (
-    <div className="metric-card">
+  const MetricCard = ({ title, value, gradFrom, gradTo, icon, infoText }: any) => (
+    <div className="metric-card" style={{ background: `linear-gradient(135deg, ${gradFrom} 0%, ${gradTo} 100%)` }}>
       <div className="metric-card-content">
         <div className="metric-card-header">
           <span className="metric-title">{title}</span>
@@ -252,9 +252,9 @@ export default function SellingAnalyticsPage() {
             </button>
           )}
         </div>
-        <div className="metric-value" style={{ color }}>{value}</div>
+        <div className="metric-value">{value}</div>
       </div>
-      <div className="metric-icon" style={{ background: `${color}15`, color }}>
+      <div className="metric-icon">
         {icon}
       </div>
     </div>
@@ -262,11 +262,11 @@ export default function SellingAnalyticsPage() {
 
   const ChartHeader = ({ title, infoText }: { title: string, infoText?: string }) => (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
-      <h3 style={{ fontSize: '15px', fontWeight: 600, color: '#374151' }}>{title}</h3>
+      <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#111827', margin: 0 }}>{title}</h3>
       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
         {infoText && (
-          <button onClick={() => setInfoData({ show: true, title, text: infoText })} style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '6px', padding: '4px 6px', cursor: 'pointer', color: '#64748b', display: 'flex' }}>
-            <Info size={14} />
+          <button onClick={() => setInfoData({ show: true, title, text: infoText })} style={{ background: '#f8fafc', border: 'none', borderRadius: '8px', padding: '6px', cursor: 'pointer', color: '#64748b', display: 'flex', transition: 'all 0.2s' }}>
+            <Info size={16} />
           </button>
         )}
       </div>
@@ -309,7 +309,7 @@ export default function SellingAnalyticsPage() {
                   onMouseEnter={() => setActiveName(d.name)}
                   style={{ 
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center', 
-                    cursor: 'pointer', padding: '4px 8px', borderRadius: '6px',
+                    cursor: 'pointer', padding: '6px 10px', borderRadius: '8px',
                     background: activeName === d.name ? '#f8fafc' : 'transparent',
                     transition: 'background 0.2s'
                   }}
@@ -329,33 +329,50 @@ export default function SellingAnalyticsPage() {
   };
 
   return (
-    <div style={{ animation: 'fadeIn 0.4s ease-out', fontFamily: "'Inter', 'Poppins', sans-serif" }}>
+    <div className="tw-root" style={{ animation: 'fadeIn 0.4s ease-out', fontFamily: "'Inter', 'Poppins', sans-serif" }}>
       
       <InfoModal show={infoData.show} title={infoData.title} text={infoData.text} onClose={() => setInfoData({ ...infoData, show: false })} />
 
-      {/* ROW 1: Metrics */}
-      <div className="metrics-grid-4">
-        <MetricCard title="Annual Sales" value={formatCompact(stats.totalSalesAmount, true)} color={COLOR_PRIMARY} icon={<TrendingUp size={24} />} infoText={`Total aktual: ${formatUang(stats.totalSalesAmount)}.\nTotal akumulasi penjualan dari order aktif.`} />
-        <MetricCard title="Sales Orders to Deliver" value={formatCompact(stats.soToDeliver)} color="#f59e0b" icon={<Package size={24} />} infoText={`Total: ${formatNumber(stats.soToDeliver)} pesanan.\nJumlah pesanan yang belum sepenuhnya dikirim.`} />
-        <MetricCard title="Sales Orders to Bill" value={formatCompact(stats.soToBill)} color="#ef4444" icon={<FileText size={24} />} infoText={`Total: ${formatNumber(stats.soToBill)} pesanan.\nJumlah pesanan yang belum ditagihkan.`} />
-        <MetricCard title="Active Customers" value={formatCompact(stats.activeCustomers)} color="#10b981" icon={<Users size={24} />} infoText={`Total: ${formatNumber(stats.activeCustomers)} pelanggan.\nJumlah pelanggan yang aktif di sistem.`} />
+      <div className="page-header-row">
+        <div>
+          <h1 style={{ fontSize: '24px', fontWeight: 800, color: '#111827', margin: '0 0 4px 0' }}>Selling Analytics</h1>
+          <p style={{ fontSize: '13px', color: '#6B7280', margin: 0 }}>Analisis performa mendalam dan riwayat transaksi real-time.</p>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 600, color: '#10b981', background: '#d1fae5', padding: '6px 12px', borderRadius: '20px' }}>
+          <CheckCircle2 size={14} />
+          <span>Data Real-time</span>
+        </div>
       </div>
 
-      {/* ROW 2: Sales Order Trends */}
+      {/* ROW 1: KPI Metrics (GRADIENT BIRU KONTINU ALA STOCK) */}
+      <div className="metrics-grid-4">
+        <MetricCard title="Annual Sales" value={formatCompact(stats.totalSalesAmount, true)} gradFrom="#054CC7" gradTo="#0869C8" icon={<TrendingUp size={24} />} infoText={`Total aktual: ${formatUang(stats.totalSalesAmount)}.\nTotal akumulasi penjualan dari order aktif.`} />
+        <MetricCard title="Sales Orders to Deliver" value={formatCompact(stats.soToDeliver)} gradFrom="#0869C8" gradTo="#0C88C9" icon={<Package size={24} />} infoText={`Total: ${formatNumber(stats.soToDeliver)} pesanan.\nJumlah pesanan yang belum sepenuhnya dikirim.`} />
+        <MetricCard title="Sales Orders to Bill" value={formatCompact(stats.soToBill)} gradFrom="#0C88C9" gradTo="#11A7CA" icon={<FileText size={24} />} infoText={`Total: ${formatNumber(stats.soToBill)} pesanan.\nJumlah pesanan yang belum ditagihkan.`} />
+        <MetricCard title="Active Customers" value={formatCompact(stats.activeCustomers)} gradFrom="#11A7CA" gradTo="#17C3CC" icon={<Users size={24} />} infoText={`Total: ${formatNumber(stats.activeCustomers)} pelanggan.\nJumlah pelanggan yang aktif di sistem.`} />
+      </div>
+
+      {/* ROW 2: AREA CHART TRENDS */}
       <div className="chart-container" style={{ marginBottom: '16px' }}>
         <ChartHeader title="Sales Order Trends" infoText="Grafik tren pendapatan dari pesanan dari bulan Januari sampai Desember." />
         <ResponsiveContainer width="100%" height={300}>
           <AreaChart data={stats.trendData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+            <defs>
+                <linearGradient id="gradPinkRev" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={TREND_COLOR_PINK} stopOpacity={0.15} />
+                    <stop offset="95%" stopColor={TREND_COLOR_PINK} stopOpacity={0} />
+                </linearGradient>
+            </defs>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
             <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#6B7280', fontFamily: 'Poppins' }} axisLine={false} tickLine={false} interval={0} dy={10} />
             <YAxis tickFormatter={(v) => formatShortAxis(v)} tick={{ fontSize: 11, fill: '#6B7280', fontFamily: 'Poppins' }} axisLine={false} tickLine={false} width={80} />
             <Tooltip content={<FrappeChartTooltip isCurrency={true} />} cursor={{ stroke: '#e2e8f0', strokeWidth: 1, strokeDasharray: '4 4' }} />
-            <Area type="monotone" dataKey="revenue" name="Total Sales Amount" stroke={TREND_COLOR_PINK} strokeWidth={2} fill={`${TREND_COLOR_PINK}15`} activeDot={{ r: 5, fill: TREND_COLOR_PINK }} />
+            <Area type="monotone" dataKey="revenue" name="Total Sales Amount" stroke={TREND_COLOR_PINK} strokeWidth={3} fill="url(#gradPinkRev)" activeDot={{ r: 6, fill: TREND_COLOR_PINK, stroke: 'white', strokeWidth: 2 }} />
           </AreaChart>
         </ResponsiveContainer>
       </div>
 
-      {/* ROW 3: Customers & Analysis (DIJAMIN SEJAJAR 50/50) */}
+      {/* ROW 3: Customers & Analysis */}
       <div className="charts-grid-2">
         <div className="chart-container">
           <ChartHeader title="Top Customers" infoText="Daftar pelanggan dengan akumulasi nilai transaksi terbesar." />
@@ -364,9 +381,9 @@ export default function SellingAnalyticsPage() {
               <BarChart data={stats.topCustomers} layout="vertical" margin={{ left: 10, right: 30, top: 10, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f3f4f6" />
                 <XAxis type="number" hide />
-                <YAxis dataKey="name" type="category" tick={{ fontSize: 12, fill: '#374151' }} axisLine={false} tickLine={false} width={120} />
+                <YAxis dataKey="name" type="category" tick={{ fontSize: 12, fill: '#374151', fontWeight: 500 }} axisLine={false} tickLine={false} width={120} />
                 <Tooltip content={<FrappeChartTooltip isCurrency={true} />} cursor={{ fill: '#f8fafc' }} />
-                <Bar dataKey="value" name="Total Sales Amount" fill={COLOR_PRIMARY} radius={[0, 4, 4, 0]} barSize={20} />
+                <Bar dataKey="value" name="Total Sales Amount" fill={COLOR_PRIMARY} radius={[0, 6, 6, 0]} barSize={20} />
               </BarChart>
             </ResponsiveContainer>
           ) : <div className="no-data-placeholder">No Data</div>}
@@ -380,8 +397,8 @@ export default function SellingAnalyticsPage() {
         <ChartHeader title="Item-wise Annual Sales" infoText="Analisis kontribusi nominal penjualan tahunan per masing-masing produk ditarik murni dari database." />
         
         {apiPermissionError && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#fef2f2', border: '1px solid #fecaca', padding: '12px 16px', borderRadius: '8px', marginBottom: '16px', color: '#b91c1c', fontSize: '12px', fontWeight: 500 }}>
-            <ShieldAlert size={16} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#fef2f2', border: '1px solid #fecaca', padding: '14px 16px', borderRadius: '12px', marginBottom: '16px', color: '#b91c1c', fontSize: '13px', fontWeight: 500 }}>
+            <ShieldAlert size={18} />
             <span>Gagal mengambil detail item karena diblokir oleh sistem Role Permission Frappe. Pastikan Role Read telah diaktifkan untuk Sales Order Item.</span>
           </div>
         )}
@@ -396,11 +413,11 @@ export default function SellingAnalyticsPage() {
                 <BarChart data={stats.itemWiseSales} layout="vertical" margin={{ top: 20, right: 30, left: 10, bottom: 40 }}>
                     <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f3f4f6" />
                     <XAxis type="number" tickFormatter={(v) => formatShortAxis(v)} tick={{ fontSize: 11, fill: '#6B7280', fontFamily: 'Poppins' }} axisLine={false} tickLine={false} />
-                    <YAxis dataKey="name" type="category" width={140} tick={{ fontSize: 11, fontWeight: 600, fill: '#111827', fontFamily: 'Poppins' }} axisLine={false} tickLine={false} />
+                    <YAxis dataKey="name" type="category" width={140} tick={{ fontSize: 12, fontWeight: 600, fill: '#111827', fontFamily: 'Poppins' }} axisLine={false} tickLine={false} />
                     
                     <Tooltip content={<FrappeChartTooltip isCurrency={true} />} cursor={{ fill: '#f8fafc' }} />
-                    <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px', fontFamily: 'Poppins', paddingBottom: '10px' }} />
-                    <Bar dataKey="value" name="Total Sales Amount" fill={BAR_COLOR_BLUE} barSize={24} radius={[0, 4, 4, 0]} />
+                    <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px', fontFamily: 'Poppins', paddingBottom: '10px', fontWeight: 500 }} />
+                    <Bar dataKey="value" name="Total Sales Amount" fill={BAR_COLOR_BLUE} barSize={24} radius={[0, 6, 6, 0]} />
                 </BarChart>
             </ResponsiveContainer>
         ) : (
@@ -411,23 +428,43 @@ export default function SellingAnalyticsPage() {
       </div>
 
       <style>{`
-        /* ── CSS KHUSUS CARD KOTAK ── */
-        .chart-container { background: white; border-radius: 8px; border: 1px solid #e5e7eb; padding: 24px; width: 100%; overflow: hidden; box-shadow: none; }
-        .no-data-placeholder { height: 260px; display: flex; align-items: center; justify-content: center; color: #9ca3af; font-size: 13px; background: #f8fafc; border-radius: 8px; font-weight: 500; }
-        
-        /* ── CSS KHUSUS CARD KPI ── */
-        .metric-card {
-          background: white; border-radius: 12px; border: 1px solid #e2e8f0; padding: 20px;
-          display: flex; align-items: center; justify-content: space-between;
-          height: 100%; min-height: 100px;
+        .tw-root {
+           background-color: #EEF2F6; 
+           min-height: calc(100vh - 80px);
+           padding: 20px;
+           border-radius: 16px;
+           margin: -10px; 
         }
+        
+        .page-header-row {
+           display: flex; 
+           align-items: center; 
+           justify-content: space-between; 
+           margin-bottom: 24px; 
+           flex-wrap: wrap; 
+           gap: 12px;
+        }
+
+        /* ── CSS KHUSUS CARD KOTAK ── */
+        .chart-container { background: white; border-radius: 16px; padding: 24px; width: 100%; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.02); border: none; margin-bottom: 20px; }
+        .no-data-placeholder { height: 260px; display: flex; align-items: center; justify-content: center; color: #9ca3af; font-size: 13px; background: #f8fafc; border-radius: 12px; font-weight: 500; flex-direction: column; }
+        
+        /* ── CSS KHUSUS CARD KPI ALA FRAPPE (GRADIENT WARNA) ── */
+        .metric-card {
+          border-radius: 16px; border: none; padding: 24px;
+          display: flex; align-items: center; justify-content: space-between;
+          height: 100%; min-height: 100px; box-shadow: 0 4px 20px rgba(0,0,0,0.02);
+          color: white;
+          transition: transform 0.2s;
+        }
+        .metric-card:hover { transform: translateY(-3px); }
         .metric-card-content { display: flex; flex-direction: column; width: calc(100% - 56px); }
         .metric-card-header { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
-        .metric-title { font-size: 13px; font-weight: 600; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .metric-info-btn { background: none; border: none; cursor: pointer; padding: 0; color: #9ca3af; display: flex; align-items: center; flex-shrink: 0; transition: color 0.2s; }
-        .metric-info-btn:hover { color: #054CC7; }
-        .metric-value { font-size: 24px; font-weight: 800; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .metric-icon { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .metric-title { font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.9); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .metric-info-btn { background: none; border: none; cursor: pointer; padding: 0; color: rgba(255,255,255,0.7); display: flex; align-items: center; flex-shrink: 0; transition: color 0.2s, transform 0.2s; }
+        .metric-info-btn:hover { color: #ffffff; transform: scale(1.1); }
+        .metric-value { font-size: 24px; font-weight: 800; line-height: 1.2; color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .metric-icon { width: 48px; height: 48px; border-radius: 14px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; background: rgba(255,255,255,0.2); }
 
         /* ── GRID RESPONSIF SEMPURNA ── */
         .metrics-grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 16px; }
@@ -445,7 +482,7 @@ export default function SellingAnalyticsPage() {
 
         /* Mobile Responsive */
         @media (max-width: 640px) {
-          .chart-container { padding: 16px !important; border-radius: 8px; }
+          .chart-container { padding: 16px !important; border-radius: 12px; }
           .metrics-grid-4 { grid-template-columns: 1fr; }
           .pie-chart-wrapper { flex-direction: column; height: auto; }
           .pie-chart-wrapper .pie-responsive { width: 100% !important; height: 220px !important; }

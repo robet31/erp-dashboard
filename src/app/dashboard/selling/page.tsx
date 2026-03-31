@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useEffect, Suspense } from 'react';
+import React, { useState, useMemo, useEffect, Suspense, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/providers/auth-provider';
 import { useSellingData, useStockData } from '@/hooks/useFrappeData';
@@ -8,13 +8,14 @@ import { getWarehousesByCompany } from '@/config/frappe-data';
 import { 
   Users, FileText, FileCheck, DollarSign, Plus, Download, Search, X, 
   Edit, Trash2, Eye, Send, CheckCircle, AlertCircle, Loader2, Building, 
-  ArrowUpRight, Filter, Calendar, MapPin, Phone, Mail, Briefcase, User, Link as LinkIcon, Info, AlertTriangle, Package
+  ArrowUpRight, Filter, Calendar, MapPin, Phone, Mail, Briefcase, User, Link as LinkIcon, Info, AlertTriangle, Package, MoreHorizontal
 } from 'lucide-react';
 import { formatDate, getStatusBadgeClass, getStatusLabel } from '@/lib/utils';
 
 const STATUS_FILTERS = ['Semua', 'Draft', 'To Deliver and Bill', 'Completed', 'Cancelled'];
-const COLOR_PRIMARY = '#1d4ed8';
-const COLOR_SECONDARY = '#3b82f6';
+const COLOR_PRIMARY = '#054CC7'; // UI Code 1 Primary Color
+const COLOR_SECONDARY = '#FFB800'; // UI Code 1 Secondary Color
+const FIXED_COMPANY = 'Artavista'; 
 
 const formatUang = (value: number | string | undefined | any) => {
   if (value === undefined || value === null) return 'Rp 0';
@@ -28,14 +29,46 @@ const getCurrentTimeForInput = () => {
   return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
 };
 
+// ── LOGIKA PENERJEMAH ERROR ──
 const extractFrappeError = (err: any, fallbackMsg: string = 'Terjadi kesalahan sistem') => {
   let errorMsg = typeof err === 'string' ? err : (err?.message || err?.error?.message || fallbackMsg);
+  
   if (err?._server_messages) {
     try { 
       const parsed = JSON.parse(err._server_messages);
       errorMsg = JSON.parse(parsed[0]).message.replace(/<[^>]*>?/gm, ''); 
     } catch(e) {}
   }
+
+  const neededMatch = errorMsg.match(/([0-9.]+)\s*units of Item\s*(.*?)\s*needed in Warehouse\s*(.*?)\s*to complete/i);
+  if (neededMatch) {
+      return `❌ Gagal! Stok Fisik Tidak Cukup.\n\n👉 Sistem membutuhkan ${neededMatch[1]} unit barang "${neededMatch[2]}" di Gudang "${neededMatch[3]}", tetapi sisa fisiknya kurang atau kosong. Silakan koordinasi dengan tim Gudang untuk restock terlebih dahulu.`;
+  }
+
+  const lowerErr = errorMsg.toLowerCase();
+  
+  if (lowerErr.includes('417') || lowerErr.includes('expectation failed') || err?.status === 417) {
+    return `Gagal (Error 417)! Tindakan Ditolak.\n\n👉 Dokumen ini kemungkinan besar sudah diproses atau terikat dengan proses transaksi lain (misal Order yang sudah ditagih/dikirim). Anda tidak bisa menghapusnya begitu saja.`;
+  }
+  
+  if (lowerErr.includes('valuation rate not found')) {
+    const match = errorMsg.match(/Item (.*?) /i) || errorMsg.match(/Item (.*?)$/i);
+    const itemCode = match ? match[1].replace(/['"]/g, '').trim() : 'tersebut';
+    return `Gagal! Harga Standar (Valuation Rate) untuk barang "${itemCode}" belum diatur.\n\n👉 Solusi: Hubungi tim Gudang untuk mengisi "Standard Rate (Rp)" di tab Master Items.`;
+  }
+  
+  if (lowerErr.includes('negative stock') || lowerErr.includes('insufficient stock')) {
+    return `❌ Stok Fisik Tidak Cukup!\n\n👉 Transaksi Pengiriman (Surat Jalan) ditolak karena akan menyebabkan stok fisik di gudang menjadi minus. Harus ada barang masuk terlebih dahulu.`;
+  }
+
+  if (lowerErr.includes('linked with') || lowerErr.includes('cannot delete')) {
+    return `Gagal Dihapus!\n\n👉 Data ini (Customer/Order/Faktur) tidak bisa dihapus karena sudah saling terhubung atau digunakan di transaksi lain yang sudah berjalan. Batalkan dokumen terkait terlebih dahulu.`;
+  }
+
+  if (lowerErr.includes('could not find company')) {
+    return `Gagal! Perusahaan tidak ditemukan. \n\n👉 Pastikan Data Company Anda sudah terdaftar dengan benar di ERPNext Frappe.`;
+  }
+
   return errorMsg;
 };
 
@@ -46,7 +79,7 @@ const getActualStock = (itemCode: string, warehouse: string, bins: any[]) => {
 
 const getDynamicCompany = (warehouses: any[]) => {
   const validWarehouse = warehouses?.find((w: any) => !w.is_group && w.company);
-  return validWarehouse ? validWarehouse.company : 'PT Artavista';
+  return validWarehouse ? validWarehouse.company : FIXED_COMPANY;
 };
 
 const buildMeta = (data: any) => `<div id="erp_dashboard_meta" style="display:none;">${JSON.stringify(data)}</div>`;
@@ -59,19 +92,38 @@ const parseMeta = (str: string) => {
   return {};
 };
 
+// ── KOMPONEN TOAST MODERN & ELEGAN ──
 function Toast({ show, message, type }: { show: boolean, message: string, type: 'success' | 'error' | 'info' }) {
-  if (!show) return null;
-  const bg = type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#3b82f6';
+  const [isVisible, setIsVisible] = useState(false);
+  const [render, setRender] = useState(false);
+
+  useEffect(() => {
+    if (show) {
+      setRender(true);
+      setTimeout(() => setIsVisible(true), 50); // Kasih jeda sedikit agar CSS transition jalan
+    } else {
+      setIsVisible(false);
+      setTimeout(() => setRender(false), 300); // Hapus DOM setelah animasi selesai
+    }
+  }, [show]);
+
+  if (!render) return null;
+
+  const colors = {
+    success: { border: '#10b981', icon: <CheckCircle size={22} color="#10b981" />, title: 'Berhasil' },
+    error: { border: '#ef4444', icon: <AlertCircle size={22} color="#ef4444" />, title: 'Gagal Memproses' },
+    info: { border: '#3b82f6', icon: <Info size={22} color="#3b82f6" />, title: 'Informasi' }
+  };
+  
+  const config = colors[type];
+
   return (
-    <div className="custom-toast" style={{ background: bg, alignItems: 'flex-start', maxWidth: '450px' }}>
-      <div style={{ marginTop: '2px' }}>
-        {type === 'success' && <CheckCircle size={18} />}
-        {type === 'error' && <AlertCircle size={18} />}
-        {type === 'info' && <Info size={18} />}
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+    <div className={`modern-toast ${isVisible ? 'show' : ''}`} style={{ borderLeft: `4px solid ${config.border}` }}>
+      <div style={{ marginTop: '2px', flexShrink: 0 }}>{config.icon}</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+        <span style={{ fontWeight: 800, color: '#111827', fontSize: '14px' }}>{config.title}</span>
         {message.split('\n').map((line, i) => (
-          <span key={i} style={{ lineHeight: 1.4, fontWeight: line.includes('👉') ? 800 : 500 }}>
+          <span key={i} style={{ color: '#4B5563', lineHeight: 1.4, fontWeight: line.includes('👉') ? 700 : 500, fontSize: '13px' }}>
             {line}
           </span>
         ))}
@@ -89,7 +141,7 @@ function ConfirmModal({ show, title, desc, onConfirm, onCancel, confirmText = "Y
           <AlertTriangle size={30} />
         </div>
         <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#111827', marginBottom: '8px' }}>{title}</h3>
-        <p style={{ fontSize: '13px', color: '#4B5563', lineHeight: 1.5, marginBottom: '24px' }}>{desc}</p>
+        <p style={{ fontSize: '13px', color: '#4B5563', lineHeight: 1.5, marginBottom: '24px', whiteSpace: 'pre-wrap' }}>{desc}</p>
         <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
           <button onClick={onCancel} className="btn btn-secondary" style={{ flex: 1 }}>Batal</button>
           <button onClick={onConfirm} className="btn btn-primary" style={{ flex: 1, background: isDanger ? '#ef4444' : COLOR_PRIMARY, borderColor: isDanger ? '#ef4444' : COLOR_PRIMARY }}>{confirmText}</button>
@@ -100,7 +152,7 @@ function ConfirmModal({ show, title, desc, onConfirm, onCancel, confirmText = "Y
 }
 
 // ==========================================
-// 1. MODALS FOR CUSTOMER
+// MODALS LOGIC
 // ==========================================
 function CreateCustomerModal({ onClose, onSuccess, showToast }: { onClose: () => void; onSuccess?: () => void; showToast: any }) {
   const [form, setForm] = useState({ customer_type: 'Company', customer_name: '', map_to_first_name: '', map_to_last_name: '', email_address: '', mobile_number: '', address_line1: '', address_line2: '', city: '', state: '', pincode: '', country: 'Indonesia' });
@@ -257,9 +309,6 @@ function DetailCustomerModal({ customer, mode, onClose, onSuccess, showToast }: 
   );
 }
 
-// ==========================================
-// 2. MODAL SALES ORDER (BUAT & EDIT DRAFT)
-// ==========================================
 function OrderModal({ order, mode, onClose, customers, items, warehouses, bins, onSuccess, showToast }: any) {
   const isEdit = mode === 'edit';
   const [form, setForm] = useState({ 
@@ -295,7 +344,17 @@ function OrderModal({ order, mode, onClose, customers, items, warehouses, bins, 
     }
   }, [isEdit, order]);
 
-  const uniqueWarehouses = useMemo(() => Array.from(new Set(bins.map((b: any) => b.warehouse))), [bins]);
+  const uniqueWarehouses = useMemo(() => {
+  if (!warehouses) return [];
+  // Ambil dari master data warehouses agar gudang yang stoknya kosong tetap muncul
+  // Filter hanya gudang yang mengandung kata "Finished Good" (abaikan case sensitive)
+  return warehouses
+    .filter((w: any) => 
+      w.name.toLowerCase().includes('finished good') || 
+      w.warehouse_name?.toLowerCase().includes('finished good')
+    )
+    .map((w: any) => w.name);
+}, [warehouses]);
 
   const availableStock = useMemo(() => {
     if (!itemForm.item_code || !itemForm.warehouse) return 0;
@@ -503,7 +562,6 @@ function OrderModal({ order, mode, onClose, customers, items, warehouses, bins, 
   );
 }
 
-// Order View Modal (Read Only)
 function OrderDetailModal({ order, onClose, onSubmitOrder }: { order: any; onClose: () => void; onSubmitOrder?: (wo: any) => void; }) {
   const [fullData, setFullData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -583,9 +641,6 @@ function OrderDetailModal({ order, onClose, onSubmitOrder }: { order: any; onClo
   );
 }
 
-// ==========================================
-// 3. MODALS FOR SALES INVOICE (CREATE & EDIT DRAFT)
-// ==========================================
 function InvoiceModal({ invoice, mode, onClose, customers, items, orders, warehouses, bins, onSuccess, showToast }: any) {
   const isEdit = mode === 'edit';
   const defaultCompany = useMemo(() => getDynamicCompany(warehouses), [warehouses]);
@@ -926,17 +981,26 @@ function SellingPageContent() {
   const { items: allItems, bins: originalBins, warehouses } = useStockData();
   const [invoices, setInvoices] = useState<any[]>([]);
 
+  // TOAST REWORKED (Prevent overlapping using timeout ref)
   const [toast, setToast] = useState<{ show: boolean, msg: string, type: 'success' | 'error' | 'info' }>({ show: false, msg: '', type: 'success' });
+  const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const showToast = (msg: string, type: 'success' | 'error' | 'info' = 'success') => {
+    setToast({ show: true, msg, type });
+    // Bersihkan timeout lama jika ada notifikasi baru masuk dengan cepat
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    
+    // Set timer baru untuk menutup notifikasi
+    toastTimeoutRef.current = setTimeout(() => {
+      setToast(prev => ({ ...prev, show: false }));
+    }, 4000);
+  };
+
   const [confirmModal, setConfirmModal] = useState<{ show: boolean, title: string, desc: string, action: any, confirmText?: string, isDanger?: boolean }>({ show: false, title: '', desc: '', action: null, confirmText: 'Ya, Lanjutkan', isDanger: false });
 
   const [customerModalMode, setCustomerModalMode] = useState<'view'|'edit'>('view');
   const [orderModalMode, setOrderModalMode] = useState<'view'|'edit'>('view');
   const [invoiceModalMode, setInvoiceModalMode] = useState<'view'|'edit'>('view');
-
-  const showToast = (msg: string, type: 'success' | 'error' | 'info' = 'success') => {
-    setToast({ show: true, msg, type });
-    setTimeout(() => setToast({ show: false, msg: '', type: 'success' }), 4000);
-  };
 
   const showConfirm = (title: string, desc: string, action: any, confirmText = 'Ya, Lanjutkan', isDanger = false) => {
     setConfirmModal({ show: true, title, desc, action, confirmText, isDanger });
@@ -958,7 +1022,7 @@ function SellingPageContent() {
   
   const searchParams = useSearchParams();
   const tabParam = searchParams.get('tab');
-  const [activeTab, setActiveTab] = useState(tabParam || 'customers');
+  const [activeTab, setActiveTab] = useState(tabParam || 'orders');
 
   useEffect(() => { if (tabParam) setActiveTab(tabParam); }, [tabParam]);
 
@@ -1125,11 +1189,53 @@ function SellingPageContent() {
     return result;
   }, [invoices, searchQuery, invoiceSortField, invoiceSortOrder]);
 
+  const getAvatar = (name: string) => {
+    return name ? name.charAt(0).toUpperCase() : '?';
+  };
+
+  const getStatusColorConfig = (status: string) => {
+    const s = status?.toLowerCase() || '';
+    if (s.includes('draft')) return { bg: '#F3F4F6', color: '#4B5563', dot: '#9CA3AF' };
+    if (s.includes('deliver') || s.includes('unpaid')) return { bg: '#FEF3C7', color: '#D97706', dot: '#F59E0B' };
+    if (s.includes('completed') || s.includes('paid') || s.includes('active')) return { bg: '#D1FAE5', color: '#059669', dot: '#10B981' };
+    if (s.includes('cancel') || s.includes('disabled')) return { bg: '#FEE2E2', color: '#DC2626', dot: '#EF4444' };
+    return { bg: '#F3F4F6', color: '#4B5563', dot: '#9CA3AF' };
+  };
+
+  // LOGIKA DINAMIS HERO CARD
+  let heroTitle = '';
+  let heroSubtitle = '';
+  let heroBtnText = '';
+  let heroBtnAction = () => {};
+  let heroImageSrc = '';
+
+  if (activeTab === 'customers') {
+      heroTitle = 'Manajemen Pelanggan';
+      heroSubtitle = `Anda mengelola ${customers.filter((c:any) => !c.disabled).length} pelanggan aktif. Jaga hubungan baik untuk meningkatkan retensi penjualan.`;
+      heroBtnText = 'Tambah Pelanggan';
+      heroBtnAction = () => setShowCreateCustomerModal(true);
+      heroImageSrc = '/images/ill-customer.png';
+  } else if (activeTab === 'invoices') {
+      heroTitle = 'Manajemen Faktur & Tagihan';
+      heroSubtitle = `Terdapat ${invoices.filter(i=>i.docstatus===0).length} draft faktur tertunda. Segera sahkan tagihan untuk menjaga arus kas perusahaan.`;
+      heroBtnText = 'Buat Faktur Baru';
+      heroBtnAction = () => setShowCreateInvoiceModal(true);
+      heroImageSrc = '/images/ill-invoice.png';
+  } else {
+      // default: orders
+      heroTitle = 'Halo, Tim Sales!';
+      heroSubtitle = `Hari ini Anda memiliki ${activeSalesOrders.length} pesanan aktif yang siap diproses. Terus pantau target penjualan harian.`;
+      heroBtnText = 'Buat Pesanan Baru';
+      heroBtnAction = () => setShowCreateModal(true);
+      heroImageSrc = '/images/ill-sales-order.png'; 
+  }
+
   return (
-    <div style={{ fontFamily: "'Poppins', sans-serif", animation: 'fadeIn 0.4s ease-out', position: 'relative' }}>
+    <div className="tw-root" style={{ fontFamily: "'Inter', 'Poppins', sans-serif", animation: 'fadeIn 0.4s ease-out' }}>
       <Toast show={toast.show} message={toast.msg} type={toast.type} />
       <ConfirmModal show={confirmModal.show} title={confirmModal.title} desc={confirmModal.desc} confirmText={confirmModal.confirmText} onConfirm={confirmModal.action} onCancel={closeConfirm} isDanger={confirmModal.isDanger} />
 
+      {/* RENDER SEMUA MODALS... */}
       {showCreateModal && <OrderModal mode="create" onClose={() => setShowCreateModal(false)} customers={customers} items={allItems} warehouses={warehouses} bins={originalBins} onSuccess={() => refetch()} showToast={showToast} />}
       {showCreateCustomerModal && <CreateCustomerModal onClose={() => setShowCreateCustomerModal(false)} onSuccess={() => refetch()} showToast={showToast} />}
       {showCreateInvoiceModal && <InvoiceModal mode="create" onClose={() => setShowCreateInvoiceModal(false)} customers={customers} items={allItems} orders={activeSalesOrders} warehouses={warehouses} onSuccess={() => fetchInvoices()} showToast={showToast} />}
@@ -1141,230 +1247,519 @@ function SellingPageContent() {
       {selectedInvoice && invoiceModalMode === 'edit' && <InvoiceModal invoice={selectedInvoice} mode={invoiceModalMode} onClose={() => setSelectedInvoice(null)} customers={customers} items={allItems} orders={activeSalesOrders} warehouses={warehouses} onSuccess={() => fetchInvoices()} showToast={showToast} />}
       {selectedInvoice && invoiceModalMode === 'view' && <InvoiceDetailModal invoice={selectedInvoice} onClose={() => setSelectedInvoice(null)} onSubmitInvoice={handleInvoiceSubmit} />}
 
-      <div className="mobile-flex-col" style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
-        <div>
-          <h1 style={{ fontSize: '22px', fontWeight: 800, color: '#111827', marginBottom: '4px' }}>Modul Penjualan</h1>
-          <p style={{ fontSize: '12px', color: '#6B7280' }}>Kelola Transaksi & Database Pelanggan Anda</p>
+      {/* HERO SECTION & STATS DINAMIS */}
+      <div className="tw-hero-layout">
+        <div className="tw-hero-card">
+           <div className="tw-hero-content">
+             <h2 className="tw-hero-title">{heroTitle}</h2>
+             <p className="tw-hero-subtitle">{heroSubtitle}</p>
+             <button className="tw-btn-yellow" onClick={heroBtnAction}>{heroBtnText}</button>
+           </div>
+           
+           <div className="tw-hero-illustration">
+             <img src={heroImageSrc} alt="Sales Illustration" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+           </div>
         </div>
-        <div className="mobile-full-width" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-          {activeTab === 'customers' && <button className="btn btn-primary btn-sm mobile-full-width action-btn" onClick={() => setShowCreateCustomerModal(true)} style={{ background: COLOR_PRIMARY, borderColor: COLOR_PRIMARY }}><Plus size={14} /> Daftar Customer Baru</button>}
-          {activeTab === 'orders' && <button className="btn btn-primary btn-sm mobile-full-width action-btn" onClick={() => setShowCreateModal(true)} style={{ background: COLOR_PRIMARY, borderColor: COLOR_PRIMARY }}><Plus size={14} /> Buat Sales Order (Pesanan)</button>}
-          {activeTab === 'invoices' && <button className="btn btn-primary btn-sm mobile-full-width action-btn" onClick={() => setShowCreateInvoiceModal(true)} style={{ background: COLOR_PRIMARY, borderColor: COLOR_PRIMARY }}><Plus size={14} /> Buat Faktur Tagihan</button>}
+
+        <div className="tw-stats-col">
+           <div className="tw-stat-card">
+              <div>
+                 <p className="tw-stat-label">Total Pelanggan Aktif</p>
+                 <h3 className="tw-stat-value">{customers.filter((c:any) => !c.disabled).length}</h3>
+              </div>
+              <div className="tw-stat-icon-blue"><Users size={20} /></div>
+           </div>
+           <div className="tw-stat-card">
+              <div>
+                 <p className="tw-stat-label">Draft Faktur Tertunda</p>
+                 <h3 className="tw-stat-value">{invoices.filter(i=>i.docstatus===0).length}</h3>
+              </div>
+              <div className="tw-stat-icon-orange"><FileText size={20} /></div>
+           </div>
         </div>
       </div>
 
-      <div className="chart-container" style={{ padding: '0', overflow: 'hidden' }}>
-        <div style={{ padding: '16px 20px' }}>
-          <div className="mobile-flex-col" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px', alignItems: 'center', gap: '12px' }}>
-            <div className="mobile-full-width" style={{ position: 'relative', width: '100%', maxWidth: '300px' }}>
-              <Search size={14} color="#9CA3AF" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
-              <input type="text" placeholder={`Cari data berdasarkan nama/ID...`} value={searchQuery} onChange={e => setSearchQuery(e.target.value)} style={{ padding: '10px 12px 10px 36px', border: '1px solid #e5e7eb', borderRadius: '8px', fontSize: '13px', width: '100%', outline: 'none', transition: 'all 0.2s' }} onFocus={e => e.target.style.borderColor = COLOR_PRIMARY} onBlur={e => e.target.style.borderColor = '#e5e7eb'} />
+      {/* TABLE SECTION */}
+      <div className="tw-table-wrapper">
+         <div className="tw-table-header">
+            <h3 className="tw-table-title">
+               {activeTab === 'customers' ? 'Daftar Pelanggan' : activeTab === 'orders' ? 'Progress Pesanan' : 'Daftar Faktur'}
+            </h3>
+            <div className="tw-table-tabs">
+               <button className={activeTab === 'customers' ? 'active' : ''} onClick={() => setActiveTab('customers')}>Customers</button>
+               <button className={activeTab === 'orders' ? 'active' : ''} onClick={() => setActiveTab('orders')}>Sales Orders</button>
+               <button className={activeTab === 'invoices' ? 'active' : ''} onClick={() => setActiveTab('invoices')}>Invoices</button>
+            </div>
+         </div>
+         
+         <div className="tw-table-filters">
+            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', flex: 1, alignItems: 'center' }}>
+                <div style={{ position: 'relative', width: '100%', maxWidth: '250px' }}>
+                  <Search size={14} color="#9CA3AF" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
+                  <input type="text" placeholder="Pencarian data..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="tw-search-input" />
+                </div>
+
+                {activeTab === 'orders' && (
+                  <>
+                    <div style={{ display: 'flex', gap: '6px', overflowX: 'auto' }}>
+                        {STATUS_FILTERS.map((f) => (
+                        <button key={f} className={`filter-pill ${statusFilter === f ? 'active' : ''}`} onClick={() => setStatusFilter(f)}>
+                            {f === 'Semua' ? 'Semua' : getStatusLabel(f)}
+                        </button>
+                        ))}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Filter size={14} color="#9CA3AF" />
+                        <select className="tw-select-input" value={orderSortField} onChange={e => setOrderSortField(e.target.value)}>
+                            <option value="creation">Paling Baru</option>
+                            <option value="customer_name">Customer Name</option>
+                            <option value="grand_total">Grand Total</option>
+                            <option value="delivery_date">Delivery Date</option>
+                        </select>
+                        <select className="tw-select-input" value={orderSortOrder} onChange={e => setOrderSortOrder(e.target.value as any)}>
+                            <option value="desc">Desc</option><option value="asc">Asc</option>
+                        </select>
+                    </div>
+                  </>
+                )}
+                
+                {activeTab === 'customers' && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Filter size={14} color="#9CA3AF" />
+                    <select className="tw-select-input" value={customerSortField} onChange={e => setCustomerSortField(e.target.value)}>
+                        <option value="creation">Paling Baru</option>
+                        <option value="name">ID / Name</option>
+                        <option value="customer_name">Customer Name</option>
+                        <option value="customer_group">Customer Group</option>
+                        <option value="territory">Territory</option>
+                    </select>
+                    <select className="tw-select-input" value={customerSortOrder} onChange={e => setCustomerSortOrder(e.target.value as any)}>
+                        <option value="desc">Desc</option><option value="asc">Asc</option>
+                    </select>
+                  </div>
+                )}
+
+                {activeTab === 'invoices' && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Filter size={14} color="#9CA3AF" />
+                    <select className="tw-select-input" value={invoiceSortField} onChange={e => setInvoiceSortField(e.target.value)}>
+                        <option value="creation">Paling Baru</option>
+                        <option value="posting_date">Posting Date</option>
+                        <option value="due_date">Due Date</option>
+                        <option value="grand_total">Grand Total</option>
+                    </select>
+                    <select className="tw-select-input" value={invoiceSortOrder} onChange={e => setInvoiceSortOrder(e.target.value as any)}>
+                        <option value="desc">Desc</option><option value="asc">Asc</option>
+                    </select>
+                  </div>
+                )}
             </div>
 
-            {activeTab === 'orders' && (
-              <div className="mobile-full-width" style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center', overflowX: 'auto', paddingBottom: '4px' }}>
-                {STATUS_FILTERS.map((f) => (
-                  <button key={f} className={`filter-pill ${statusFilter === f ? 'active' : ''}`} onClick={() => setStatusFilter(f)} style={{ whiteSpace: 'nowrap' }}>
-                    {f === 'Semua' ? 'Semua' : getStatusLabel(f)}
-                  </button>
-                ))}
-                <div style={{ borderLeft: '1px solid #e5e7eb', height: '24px', margin: '0 8px' }} />
-                <Filter size={14} color="#9CA3AF" style={{ flexShrink: 0 }} />
-                <select value={orderSortField} onChange={e => setOrderSortField(e.target.value)} style={{ border: '1px solid #e5e7eb', borderRadius: '20px', padding: '4px 12px', fontSize: '12px', outline: 'none', color: '#4B5563', fontWeight: 600, background: '#f9fafb' }}>
-                  <option value="creation">Paling Baru</option>
-                  <option value="customer_name">Customer Name</option>
-                  <option value="grand_total">Grand Total</option>
-                  <option value="delivery_date">Delivery Date</option>
-                </select>
-                <select value={orderSortOrder} onChange={e => setOrderSortOrder(e.target.value as any)} style={{ border: '1px solid #e5e7eb', borderRadius: '20px', padding: '4px 12px', fontSize: '12px', outline: 'none', color: '#4B5563', fontWeight: 600, background: '#f9fafb' }}>
-                  <option value="desc">Descending</option>
-                  <option value="asc">Ascending</option>
-                </select>
-              </div>
-            )}
-            
-            {activeTab === 'customers' && (
-              <div className="mobile-full-width" style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center', overflowX: 'auto', paddingBottom: '4px' }}>
-                <Filter size={14} color="#9CA3AF" style={{ flexShrink: 0 }} />
-                <div style={{ display: 'flex', gap: '6px' }}>
-                  <select value={customerSortField} onChange={e => setCustomerSortField(e.target.value)} style={{ border: '1px solid #e5e7eb', borderRadius: '20px', padding: '4px 12px', fontSize: '12px', outline: 'none', color: '#4B5563', fontWeight: 600, background: '#f9fafb' }}>
-                    <option value="creation">Paling Baru</option>
-                    <option value="name">ID / Name</option>
-                    <option value="customer_name">Customer Name</option>
-                    <option value="customer_group">Customer Group</option>
-                    <option value="territory">Territory</option>
-                  </select>
-                  <select value={customerSortOrder} onChange={e => setCustomerSortOrder(e.target.value as any)} style={{ border: '1px solid #e5e7eb', borderRadius: '20px', padding: '4px 12px', fontSize: '12px', outline: 'none', color: '#4B5563', fontWeight: 600, background: '#f9fafb' }}>
-                    <option value="desc">Descending</option>
-                    <option value="asc">Ascending</option>
-                  </select>
-                </div>
-              </div>
-            )}
+            <div style={{ display: 'flex', gap: '8px' }}>
+              {activeTab === 'orders' && <button className="tw-btn-action" onClick={() => setShowCreateModal(true)}><Plus size={14} /> Baru</button>}
+              {activeTab === 'customers' && <button className="tw-btn-action" onClick={() => setShowCreateCustomerModal(true)}><Plus size={14} /> Baru</button>}
+              {activeTab === 'invoices' && <button className="tw-btn-action" onClick={() => setShowCreateInvoiceModal(true)}><Plus size={14} /> Baru</button>}
+            </div>
+         </div>
 
-            {activeTab === 'invoices' && (
-              <div className="mobile-full-width" style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center', overflowX: 'auto', paddingBottom: '4px' }}>
-                <Filter size={14} color="#9CA3AF" style={{ flexShrink: 0 }} />
-                <div style={{ display: 'flex', gap: '6px' }}>
-                  <select value={invoiceSortField} onChange={e => setInvoiceSortField(e.target.value)} style={{ border: '1px solid #e5e7eb', borderRadius: '20px', padding: '4px 12px', fontSize: '12px', outline: 'none', color: '#4B5563', fontWeight: 600, background: '#f9fafb' }}>
-                    <option value="creation">Paling Baru</option>
-                    <option value="posting_date">Date (Posting Date)</option>
-                    <option value="due_date">Payment Due Date</option>
-                    <option value="customer_name">Customer Name</option>
-                    <option value="grand_total">Grand Total</option>
-                    <option value="name">ID Faktur</option>
-                  </select>
-                  <select value={invoiceSortOrder} onChange={e => setInvoiceSortOrder(e.target.value as any)} style={{ border: '1px solid #e5e7eb', borderRadius: '20px', padding: '4px 12px', fontSize: '12px', outline: 'none', color: '#4B5563', fontWeight: 600, background: '#f9fafb' }}>
-                    <option value="desc">Descending</option>
-                    <option value="asc">Ascending</option>
-                  </select>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {activeTab === 'orders' && (
-            <div style={{ overflowX: 'auto' }}>
-              <table className="erp-table" style={{ minWidth: '900px' }}>
+         {isLoading ? <div style={{ textAlign: 'center', padding: '40px' }}><Loader2 className="animate-spin" size={24} color={COLOR_PRIMARY} style={{ margin: '0 auto' }}/></div> : (
+           <div style={{ overflowX: 'auto' }}>
+             <table className="twithr-table">
                 <thead>
-                  <tr>
-                    <th style={{ width: '40px', textAlign: 'center' }}>No.</th>
-                    <th>Customer Name</th>
-                    <th>Status</th>
-                    <th>Delivery Date</th>
-                    <th style={{ textAlign: 'right' }}>Grand Total</th>
-                    <th style={{ textAlign: 'center' }}>% Delivered</th>
-                    <th style={{ textAlign: 'center' }}>% Amount Billed</th>
-                    <th>ID</th>
-                    <th style={{ width: '150px', textAlign: 'center' }}>Tindakan</th>
-                  </tr>
+                  {activeTab === 'orders' && (
+                    <tr><th>Customer Name</th><th>Status Order</th><th>Timeline</th><th style={{textAlign: 'right'}}>Nominal</th><th style={{textAlign: 'center'}}>% Delivered</th><th style={{textAlign: 'center'}}>% Billed</th><th style={{textAlign: 'center'}}>Aksi</th></tr>
+                  )}
+                  {activeTab === 'customers' && (
+                    <tr><th>Customer Name</th><th>Tipe Akun</th><th>Status</th><th>Grup & Area</th><th>Kontak ID</th><th style={{textAlign: 'center'}}>Aksi</th></tr>
+                  )}
+                  {activeTab === 'invoices' && (
+                    <tr><th>Customer Name</th><th>Status Faktur</th><th>Jatuh Tempo</th><th style={{textAlign: 'right'}}>Tagihan</th><th style={{textAlign: 'center'}}>Aksi</th></tr>
+                  )}
                 </thead>
                 <tbody>
-                  {sortedAndFilteredOrders.map((order: any, index: number) => {
-                     const status = order.status;
-                     return (
-                    <tr key={order.name} style={{ cursor: 'pointer' }} onClick={() => { setSelectedOrder(order); setOrderModalMode('view'); }}>
-                      <td style={{ textAlign: 'center', fontWeight: 600 }}>{index + 1}</td>
-                      <td style={{ fontWeight: 700, fontSize: '13px', color: '#111827' }}>{order.customer_name}</td>
-                      <td>
-                        <span className={`badge ${getStatusBadgeClass(status)}`}>{status}</span>
-                      </td>
-                      <td style={{ fontSize: '12px', color: '#4B5563', fontWeight: 600 }}>{formatDate(order.delivery_date)}</td>
-                      <td style={{ textAlign: 'right', fontWeight: 800, color: COLOR_PRIMARY, fontSize: '14px' }}>{formatUang(order.grand_total)}</td>
-                      <td style={{ textAlign: 'center', fontSize: '12px', fontWeight: 600 }}>{Math.round(order.per_delivered || 0)}%</td>
-                      <td style={{ textAlign: 'center', fontSize: '12px', fontWeight: 600 }}>{Math.round(order.per_billed || 0)}%</td>
-                      <td>
-                        <div style={{ color: '#6B7280', fontSize: '12px' }}>{order.name}</div>
-                      </td>
-                      <td onClick={e => e.stopPropagation()}>
-                        <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
-                          {/* JIKA DRAFT */}
-                          {order.docstatus === 0 && <button onClick={() => handleSOSubmit(order)} className="badge badge-warning" style={{ cursor: 'pointer', border: 'none' }} title="Setujui Pesanan Ini"><Send size={12}/> Submit</button>}
-                          {order.docstatus === 0 && <button onClick={() => { setSelectedOrder(order); setOrderModalMode('edit'); }} style={{ background: '#e0f2fe', border: 'none', color: COLOR_PRIMARY, borderRadius: '6px', padding: '6px', cursor: 'pointer' }} title="Edit Draft"><Edit size={14} /></button>}
-                          {order.docstatus === 0 && <button onClick={() => handleSmartDelete('Sales Order', order.name, order.docstatus)} style={{ background: '#fee2e2', border: 'none', color: '#dc2626', borderRadius: '6px', padding: '6px', cursor: 'pointer' }} title="Hapus Permanen"><Trash2 size={14} /></button>}
-                          
-                          {/* JIKA SUBMITTED (To Deliver) */}
-                          {order.docstatus === 1 && order.status !== 'Completed' && <button onClick={() => { setSelectedOrder(order); setOrderModalMode('view'); }} style={{ background: '#f1f5f9', border: 'none', color: '#64748b', borderRadius: '6px', padding: '6px', cursor: 'pointer' }} title="Lihat Detail"><Eye size={14} /></button>}
-                          {order.docstatus === 1 && order.status !== 'Completed' && <button onClick={() => handleCancelOrder(order)} style={{ background: '#fee2e2', border: 'none', color: '#dc2626', borderRadius: '6px', padding: '6px', cursor: 'pointer' }} title="Batalkan Pesanan (Cancel)"><X size={14} /></button>}
-                          
-                          {/* JIKA COMPLETED */}
-                          {order.docstatus === 1 && order.status === 'Completed' && <button onClick={() => { setSelectedOrder(order); setOrderModalMode('view'); }} style={{ background: '#f1f5f9', border: 'none', color: '#64748b', borderRadius: '6px', padding: '6px', cursor: 'pointer' }} title="Lihat Detail"><Eye size={14} /></button>}
-                          
-                          {/* JIKA CANCELLED */}
-                          {order.docstatus === 2 && <button onClick={() => { setSelectedOrder(order); setOrderModalMode('view'); }} style={{ background: '#f1f5f9', border: 'none', color: '#64748b', borderRadius: '6px', padding: '6px', cursor: 'pointer' }} title="Lihat Detail"><Eye size={14} /></button>}
-                          {order.docstatus === 2 && <button onClick={() => handleSmartDelete('Sales Order', order.name, order.docstatus)} style={{ background: '#fee2e2', border: 'none', color: '#dc2626', borderRadius: '6px', padding: '6px', cursor: 'pointer' }} title="Hapus Permanen"><Trash2 size={14} /></button>}
-                        </div>
-                      </td>
-                    </tr>
-                  )})}
-                  {sortedAndFilteredOrders.length === 0 && <tr><td colSpan={9} style={{ textAlign: 'center', padding: '40px', color: '#6B7280', fontSize: '13px' }}>Tidak ada data Sales Order yang ditemukan.</td></tr>}
-                </tbody>
-              </table>
-            </div>
-          )}
+                    
+                   {/* ROW UNTUK ORDERS */}
+                   {activeTab === 'orders' && sortedAndFilteredOrders.map((order: any) => {
+                      const colors = getStatusColorConfig(order.status);
+                      return (
+                        <tr key={order.name}>
+                          <td>
+                            <div className="tw-avatar-name">
+                               <div className="tw-avatar">{getAvatar(order.customer_name)}</div>
+                               <div className="tw-name-col">
+                                  <span className="tw-name">{order.customer_name}</span>
+                                  <span className="tw-sub">{order.name}</span>
+                               </div>
+                            </div>
+                          </td>
+                          <td>
+                            <span className="tw-pill" style={{ background: colors.bg, color: colors.color }}>{order.status}</span>
+                          </td>
+                          <td>
+                            <div className="tw-dot-status">
+                               <div className="tw-dot" style={{ background: colors.dot }}></div>
+                               <span style={{ fontSize: '13px', color: '#4B5563', fontWeight: 500 }}>{formatDate(order.delivery_date)}</span>
+                            </div>
+                          </td>
+                          <td style={{ textAlign: 'right', fontWeight: 600, color: '#111827', fontSize: '13px' }}>
+                             {formatUang(order.grand_total)}
+                          </td>
+                          <td style={{ textAlign: 'center', fontSize: '12px', fontWeight: 600, color: '#4B5563' }}>
+                             {Math.round(order.per_delivered || 0)}%
+                          </td>
+                          <td style={{ textAlign: 'center', fontSize: '12px', fontWeight: 600, color: '#4B5563' }}>
+                             {Math.round(order.per_billed || 0)}%
+                          </td>
+                          <td>
+                            <div className="tw-actions">
+                              {order.docstatus === 0 && <button onClick={() => handleSOSubmit(order)} className="tw-icon-btn tw-icon-green" title="Submit (Kunci)"><CheckCircle size={16}/></button>}
+                              <button onClick={() => { setSelectedOrder(order); setOrderModalMode('view'); }} className="tw-icon-btn" title="View"><Eye size={16}/></button>
+                              {order.docstatus === 0 && <button onClick={() => { setSelectedOrder(order); setOrderModalMode('edit'); }} className="tw-icon-btn" title="Edit"><Edit size={16}/></button>}
+                              {order.docstatus === 0 && <button onClick={() => handleSmartDelete('Sales Order', order.name, order.docstatus)} className="tw-icon-btn tw-icon-red" title="Delete"><Trash2 size={16}/></button>}
+                              {order.docstatus === 1 && order.status !== 'Completed' && <button onClick={() => handleCancelOrder(order)} className="tw-icon-btn tw-icon-red" title="Cancel"><X size={16}/></button>}
+                              {order.docstatus === 2 && <button onClick={() => handleSmartDelete('Sales Order', order.name, order.docstatus)} className="tw-icon-btn tw-icon-red" title="Delete Permanen"><Trash2 size={16}/></button>}
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                   })}
 
-          {activeTab === 'customers' && (
-            <div style={{ overflowX: 'auto' }}>
-              <table className="erp-table" style={{ minWidth: '900px' }}>
-                <thead>
-                  <tr>
-                    <th style={{ width: '40px', textAlign: 'center' }}>No.</th>
-                    <th>Customer Name</th>
-                    <th>Status</th>
-                    <th>Customer Group</th>
-                    <th>Territory</th>
-                    <th>Billing Currency</th>
-                    <th>ID</th>
-                    <th style={{ width: '130px', textAlign: 'center' }}>Tindakan</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sortedAndFilteredCustomers.map((c: any, index) => {
-                    const parsedMeta = parseMeta(c.customer_details);
-                    return (
-                    <tr key={c.name} style={{ cursor: 'pointer' }} onClick={() => { setSelectedCustomer(c); setCustomerModalMode('view'); }}>
-                      <td style={{ textAlign: 'center', fontWeight: 600 }}>{index + 1}</td>
-                      <td>
-                        <div style={{ fontWeight: 800, color: COLOR_PRIMARY, fontSize: '13px' }}>{c.customer_name}</div>
-                      </td>
-                      <td><span className={`badge ${c.disabled ? 'badge-danger' : 'badge-success'}`}>{c.disabled ? 'Disabled' : 'Active'}</span></td>
-                      <td><div style={{ fontSize: '12px', color: '#4B5563', fontWeight: 500 }}>{c.customer_group || '-'}</div></td>
-                      <td><div style={{ fontSize: '12px', color: '#4B5563', fontWeight: 500 }}>{c.territory || '-'}</div></td>
-                      <td><div style={{ fontSize: '12px', color: '#4B5563', fontWeight: 500 }}>{c.default_currency || 'IDR'}</div></td>
-                      <td><div style={{ fontSize: '12px', color: '#6B7280' }}>{c.name}</div></td>
-                      <td onClick={e => e.stopPropagation()}>
-                        <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
-                          <button onClick={() => { setSelectedCustomer(c); setCustomerModalMode('view'); }} style={{ background: '#f1f5f9', border: 'none', color: '#64748b', borderRadius: '6px', padding: '6px', cursor: 'pointer' }} title="Lihat Detail"><Eye size={14} /></button>
-                          <button onClick={() => { setSelectedCustomer(c); setCustomerModalMode('edit'); }} style={{ background: '#e0f2fe', border: 'none', color: COLOR_PRIMARY, borderRadius: '6px', padding: '6px', cursor: 'pointer' }} title="Edit"><Edit size={14} /></button>
-                          <button onClick={() => handleSmartDelete('Customer', c.name, 0)} style={{ background: '#fee2e2', border: 'none', color: '#dc2626', borderRadius: '6px', padding: '6px', cursor: 'pointer' }} title="Hapus"><Trash2 size={14} /></button>
-                        </div>
-                      </td>
-                    </tr>
-                    );
-                  })}
-                  {sortedAndFilteredCustomers.length === 0 && <tr><td colSpan={8} style={{ textAlign: 'center', padding: '40px', color: '#6B7280', fontSize: '13px' }}>Belum ada data Customer yang terdaftar.</td></tr>}
-                </tbody>
-              </table>
-            </div>
-          )}
+                   {/* ROW UNTUK CUSTOMERS */}
+                   {activeTab === 'customers' && sortedAndFilteredCustomers.map((c: any) => {
+                      const statusStr = c.disabled ? 'Disabled' : 'Active';
+                      const colors = getStatusColorConfig(statusStr);
+                      return (
+                        <tr key={c.name}>
+                          <td>
+                            <div className="tw-avatar-name">
+                               <div className="tw-avatar">{getAvatar(c.customer_name)}</div>
+                               <div className="tw-name-col">
+                                  <span className="tw-name">{c.customer_name}</span>
+                                  <span className="tw-sub">{c.default_currency || 'IDR'}</span>
+                               </div>
+                            </div>
+                          </td>
+                          <td>
+                            <span className="tw-pill" style={{ background: '#F3F4F6', color: '#4B5563' }}>{c.customer_type || 'Company'}</span>
+                          </td>
+                          <td>
+                            <div className="tw-dot-status">
+                               <div className="tw-dot" style={{ background: colors.dot }}></div>
+                               <span style={{ fontSize: '13px', color: '#4B5563', fontWeight: 500 }}>{statusStr}</span>
+                            </div>
+                          </td>
+                          <td>
+                            <div className="tw-name-col">
+                                <span style={{ fontSize: '12px', fontWeight: 600 }}>{c.customer_group || '-'}</span>
+                                <span className="tw-sub">{c.territory || '-'}</span>
+                            </div>
+                          </td>
+                          <td>
+                             <span className="tw-sub" style={{ fontSize: '12px' }}>{c.name}</span>
+                          </td>
+                          <td>
+                            <div className="tw-actions">
+                              <button onClick={() => { setSelectedCustomer(c); setCustomerModalMode('view'); }} className="tw-icon-btn" title="View"><Eye size={16}/></button>
+                              <button onClick={() => { setSelectedCustomer(c); setCustomerModalMode('edit'); }} className="tw-icon-btn" title="Edit"><Edit size={16}/></button>
+                              <button onClick={() => handleSmartDelete('Customer', c.name, 0)} className="tw-icon-btn tw-icon-red" title="Delete"><Trash2 size={16}/></button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                   })}
 
-          {activeTab === 'invoices' && (
-            <div style={{ overflowX: 'auto' }}>
-              <table className="erp-table" style={{ minWidth: '800px' }}>
-                <thead><tr><th style={{ width: '40px', textAlign: 'center' }}>No.</th><th>Customer Name</th><th>Status</th><th>Date</th><th>Payment Due Date</th><th style={{ textAlign: 'right' }}>Grand Total</th><th>ID</th><th style={{ width: '150px', textAlign: 'center' }}>Tindakan</th></tr></thead>
-                <tbody>
-                  {sortedAndFilteredInvoices.map((inv: any, index) => {
-                     const status = inv.status || 'Draft';
-                     return (
-                    <tr key={inv.name} style={{ cursor: 'pointer' }} onClick={() => { setSelectedInvoice(inv); setInvoiceModalMode('view'); }}>
-                      <td style={{ textAlign: 'center', fontWeight: 600 }}>{index + 1}</td>
-                      <td><div style={{ fontSize: '13px', color: '#111827', fontWeight: 700 }}>{inv.customer_name}</div></td>
-                      <td><span className={`badge ${status === 'Paid' ? 'badge-success' : status === 'Unpaid' ? 'badge-warning' : status === 'Cancelled' ? 'badge-danger' : 'badge-gray'}`}>{status}</span></td>
-                      <td><div style={{ fontSize: '12px', color: '#4B5563', fontWeight: 600 }}>{formatDate(inv.posting_date)}</div></td>
-                      <td><div style={{ fontSize: '12px', color: '#991b1b', fontWeight: 600 }}>{formatDate(inv.due_date || inv.posting_date)}</div></td>
-                      <td style={{ textAlign: 'right', fontWeight: 800, color: COLOR_PRIMARY, fontSize: '14px' }}>{formatUang(inv.grand_total)}</td>
-                      <td><div style={{ color: '#6B7280', fontSize: '12px', fontWeight: 600 }}>{inv.name}</div></td>
-                      <td onClick={e => e.stopPropagation()}>
-                        <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
-                          {inv.docstatus === 0 && <button onClick={() => handleInvoiceSubmit(inv)} className="badge badge-purple" style={{ cursor: 'pointer', border: 'none' }} title="Terbitkan Faktur"><Send size={12}/> Submit</button>}
-                          <button onClick={() => { setSelectedInvoice(inv); setInvoiceModalMode('view'); }} style={{ background: '#f1f5f9', border: 'none', color: '#64748b', borderRadius: '6px', padding: '6px', cursor: 'pointer' }} title="Detail"><Eye size={14} /></button>
-                          {inv.docstatus === 0 && <button onClick={() => { setSelectedInvoice(inv); setInvoiceModalMode('edit'); }} style={{ background: '#e0f2fe', border: 'none', color: COLOR_PRIMARY, borderRadius: '6px', padding: '6px', cursor: 'pointer' }} title="Edit Draft"><Edit size={14} /></button>}
-                          {inv.docstatus === 0 && <button onClick={() => handleSmartDelete('Sales Invoice', inv.name, inv.docstatus)} style={{ background: '#fee2e2', border: 'none', color: '#dc2626', borderRadius: '6px', padding: '6px', cursor: 'pointer' }} title="Hapus"><Trash2 size={14} /></button>}
-                          {inv.docstatus === 1 && <button onClick={() => handleCancelInvoice(inv)} style={{ background: '#fee2e2', border: 'none', color: '#dc2626', borderRadius: '6px', padding: '6px', cursor: 'pointer' }} title="Batalkan Faktur (Cancel)"><X size={14} /></button>}
-                          {inv.docstatus === 2 && <button onClick={() => handleSmartDelete('Sales Invoice', inv.name, inv.docstatus)} style={{ background: '#fee2e2', border: 'none', color: '#dc2626', borderRadius: '6px', padding: '6px', cursor: 'pointer' }} title="Hapus Permanen"><Trash2 size={14} /></button>}
-                        </div>
-                      </td>
-                    </tr>
-                  )})}
-                  {sortedAndFilteredInvoices.length === 0 && <tr><td colSpan={8} style={{ textAlign: 'center', padding: '40px', color: '#6B7280', fontSize: '13px' }}>Belum ada data Faktur (Invoice).</td></tr>}
+                   {/* ROW UNTUK INVOICES */}
+                   {activeTab === 'invoices' && sortedAndFilteredInvoices.map((inv: any) => {
+                      const colors = getStatusColorConfig(inv.status);
+                      return (
+                        <tr key={inv.name}>
+                          <td>
+                            <div className="tw-avatar-name">
+                               <div className="tw-avatar">{getAvatar(inv.customer_name)}</div>
+                               <div className="tw-name-col">
+                                  <span className="tw-name">{inv.customer_name}</span>
+                                  <span className="tw-sub">{inv.name}</span>
+                               </div>
+                            </div>
+                          </td>
+                          <td>
+                            <span className="tw-pill" style={{ background: colors.bg, color: colors.color }}>{inv.status}</span>
+                          </td>
+                          <td>
+                            <div className="tw-dot-status">
+                               <div className="tw-dot" style={{ background: colors.dot }}></div>
+                               <div className="tw-name-col">
+                                 <span style={{ fontSize: '13px', color: '#4B5563', fontWeight: 500 }}>{formatDate(inv.due_date || inv.posting_date)}</span>
+                                 <span className="tw-sub" style={{fontSize:'10px'}}>Tgl: {formatDate(inv.posting_date)}</span>
+                               </div>
+                            </div>
+                          </td>
+                          <td style={{ textAlign: 'right', fontWeight: 600, color: '#111827', fontSize: '13px' }}>
+                             {formatUang(inv.grand_total)}
+                          </td>
+                          <td>
+                            <div className="tw-actions">
+                              {inv.docstatus === 0 && <button onClick={() => handleInvoiceSubmit(inv)} className="tw-icon-btn tw-icon-green" title="Sahkan Faktur"><CheckCircle size={16}/></button>}
+                              <button onClick={() => { setSelectedInvoice(inv); setInvoiceModalMode('view'); }} className="tw-icon-btn" title="View"><Eye size={16}/></button>
+                              {inv.docstatus === 0 && <button onClick={() => { setSelectedInvoice(inv); setInvoiceModalMode('edit'); }} className="tw-icon-btn" title="Edit"><Edit size={16}/></button>}
+                              {inv.docstatus === 0 && <button onClick={() => handleSmartDelete('Sales Invoice', inv.name, inv.docstatus)} className="tw-icon-btn tw-icon-red" title="Delete"><Trash2 size={16}/></button>}
+                              {inv.docstatus === 1 && <button onClick={() => handleCancelInvoice(inv)} className="tw-icon-btn tw-icon-red" title="Cancel"><X size={16}/></button>}
+                              {inv.docstatus === 2 && <button onClick={() => handleSmartDelete('Sales Invoice', inv.name, inv.docstatus)} className="tw-icon-btn tw-icon-red" title="Delete Permanen"><Trash2 size={16}/></button>}
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                   })}
+
                 </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+             </table>
+             
+             {/* EMPTY STATES */}
+             {activeTab === 'orders' && sortedAndFilteredOrders.length === 0 && !isLoading && <div style={{ padding: '40px', textAlign: 'center', color: '#9CA3AF', fontSize: '14px' }}>Tidak ada data pesanan.</div>}
+             {activeTab === 'customers' && sortedAndFilteredCustomers.length === 0 && !isLoading && <div style={{ padding: '40px', textAlign: 'center', color: '#9CA3AF', fontSize: '14px' }}>Tidak ada data pelanggan.</div>}
+             {activeTab === 'invoices' && sortedAndFilteredInvoices.length === 0 && !isLoading && <div style={{ padding: '40px', textAlign: 'center', color: '#9CA3AF', fontSize: '14px' }}>Tidak ada data faktur.</div>}
+           </div>
+         )}
       </div>
 
       <style>{`
+        /* GLOBAL RESET & ANIMATION */
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .tw-root {
+           background-color: #EEF2F6;
+           min-height: calc(100vh - 80px);
+           padding: 20px;
+           border-radius: 16px;
+           margin: -10px; 
+        }
+
+        /* HERO & STATS SECTION */
+        .tw-hero-layout {
+           display: flex;
+           gap: 20px;
+           margin-bottom: 24px;
+           flex-wrap: wrap;
+        }
+        
+        .tw-hero-card {
+           flex: 1 1 60%;
+           background: linear-gradient(135deg, ${COLOR_PRIMARY} 0%, #17C3CC 100%);
+           border-radius: 16px;
+           padding: 30px;
+           color: white;
+           position: relative;
+           overflow: hidden;
+           box-shadow: 0 10px 30px rgba(5, 76, 199, 0.2);
+           display: flex;
+           justify-content: space-between;
+           align-items: center;
+        }
+        
+        .tw-hero-content {
+           flex: 1;
+           z-index: 2;
+        }
+        
+        .tw-hero-illustration {
+           width: 180px;
+           height: 160px;
+           margin-left: 20px;
+           flex-shrink: 0;
+           display: flex;
+           align-items: center;
+           justify-content: center;
+           background: rgba(255,255,255,0.1); 
+           border-radius: 12px;
+           z-index: 2;
+        }
+
+        .tw-hero-title {
+           font-size: 26px;
+           font-weight: 800;
+           margin: 0 0 8px 0;
+           text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .tw-hero-subtitle {
+           font-size: 13px;
+           margin: 0 0 20px 0;
+           max-width: 90%;
+           opacity: 0.9;
+           line-height: 1.5;
+        }
+        .tw-btn-yellow {
+           background: ${COLOR_SECONDARY};
+           color: #fff;
+           border: none;
+           padding: 10px 20px;
+           border-radius: 8px;
+           font-weight: 700;
+           font-size: 13px;
+           cursor: pointer;
+           transition: opacity 0.2s, transform 0.2s;
+           box-shadow: 0 4px 10px rgba(255, 184, 0, 0.3);
+        }
+        .tw-btn-yellow:hover { opacity: 0.9; transform: translateY(-2px); }
+
+        .tw-stats-col {
+           flex: 1 1 30%;
+           display: flex;
+           flex-direction: column;
+           gap: 16px;
+        }
+        .tw-stat-card {
+           background: white;
+           border-radius: 16px;
+           padding: 20px;
+           display: flex;
+           align-items: center;
+           justify-content: space-between;
+           box-shadow: 0 4px 20px rgba(0,0,0,0.02);
+           flex: 1;
+        }
+        .tw-stat-label { margin: 0; font-size: 12px; color: #6B7280; font-weight: 500; }
+        .tw-stat-value { margin: 4px 0 0 0; font-size: 22px; font-weight: 800; color: #111827; }
+        .tw-stat-icon-blue { background: #e0f2fe; color: ${COLOR_PRIMARY}; padding: 12px; border-radius: 12px; }
+        .tw-stat-icon-orange { background: #FEF3C7; color: #D97706; padding: 12px; border-radius: 12px; }
+
+        /* MAIN TABLE WRAPPER */
+        .tw-table-wrapper {
+           background: white;
+           border-radius: 16px;
+           padding: 24px;
+           box-shadow: 0 4px 20px rgba(0,0,0,0.02);
+        }
+        .tw-table-header {
+           display: flex;
+           justify-content: space-between;
+           align-items: center;
+           margin-bottom: 20px;
+           flex-wrap: wrap;
+           gap: 16px;
+        }
+        .tw-table-title {
+           font-size: 18px;
+           font-weight: 800;
+           color: #111827;
+           margin: 0;
+        }
+        
+        .tw-table-tabs {
+           display: flex;
+           gap: 8px;
+           background: #F3F4F6;
+           padding: 4px;
+           border-radius: 20px;
+        }
+        .tw-table-tabs button {
+           background: transparent;
+           border: none;
+           padding: 6px 16px;
+           font-size: 12px;
+           font-weight: 600;
+           color: #6B7280;
+           border-radius: 16px;
+           cursor: pointer;
+           transition: all 0.2s;
+        }
+        .tw-table-tabs button.active {
+           background: ${COLOR_PRIMARY};
+           color: white;
+           box-shadow: 0 2px 8px rgba(5, 76, 199, 0.3);
+        }
+
+        .tw-table-filters {
+           display: flex;
+           justify-content: space-between;
+           align-items: center;
+           margin-bottom: 16px;
+           gap: 12px;
+           flex-wrap: wrap;
+        }
+        .tw-search-input {
+           padding: 8px 12px 8px 36px;
+           border: 1px solid #E5E7EB;
+           border-radius: 20px;
+           font-size: 12px;
+           width: 100%;
+           outline: none;
+           font-family: inherit;
+           transition: border-color 0.2s;
+           background: #F9FAFB;
+        }
+        .tw-search-input:focus { border-color: ${COLOR_PRIMARY}; background: white; }
+        .tw-select-input {
+           padding: 6px 12px;
+           border: 1px solid #E5E7EB;
+           border-radius: 20px;
+           font-size: 12px;
+           outline: none;
+           background: #F9FAFB;
+           color: #4B5563;
+           font-weight: 600;
+           cursor: pointer;
+        }
+        .filter-pill { background: #f1f5f9; border: 1px solid #e2e8f0; color: #64748b; padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
+        .filter-pill:hover { background: #e2e8f0; color: #334155; }
+        .filter-pill.active { background: #e0f2fe; border-color: ${COLOR_PRIMARY}; color: ${COLOR_PRIMARY}; }
+
+        .tw-btn-action {
+           background: #F3F4F6;
+           border: none;
+           padding: 8px 16px;
+           border-radius: 20px;
+           font-size: 12px;
+           font-weight: 600;
+           color: #374151;
+           cursor: pointer;
+           display: flex;
+           align-items: center;
+           gap: 6px;
+           transition: background 0.2s;
+        }
+        .tw-btn-action:hover { background: #E5E7EB; }
+
+        /* TABLE STYLING */
+        .twithr-table {
+           width: 100%;
+           border-collapse: collapse;
+           min-width: 700px;
+        }
+        .twithr-table th {
+           text-align: left;
+           font-size: 12px;
+           color: #9CA3AF;
+           font-weight: 500;
+           padding: 12px 16px;
+           border-bottom: 1px solid #F3F4F6;
+        }
+        .twithr-table td {
+           padding: 16px;
+           vertical-align: middle;
+           border-bottom: 1px solid #F9FAFB;
+        }
+        .twithr-table tr:hover td {
+           background: #F8FAFC;
+        }
+
+        /* TABLE CELLS CONTENT */
+        .tw-avatar-name { display: flex; alignItems: center; gap: 12px; }
+        .tw-avatar { width: 36px; height: 36px; border-radius: 50%; background: #e0f2fe; color: ${COLOR_PRIMARY}; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px; flex-shrink: 0; }
+        .tw-name-col { display: flex; flex-direction: column; }
+        .tw-name { font-size: 13px; font-weight: 700; color: #111827; }
+        .tw-sub { font-size: 11px; color: #9CA3AF; margin-top: 2px; }
+
+        .tw-pill { padding: 4px 12px; border-radius: 12px; font-size: 11px; font-weight: 600; display: inline-block; white-space: nowrap; }
+        .tw-dot-status { display: flex; align-items: center; gap: 8px; }
+        .tw-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+        .tw-actions { display: flex; gap: 8px; justify-content: center; }
+        .tw-icon-btn { background: transparent; border: none; color: #9CA3AF; padding: 6px; border-radius: 8px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; }
+        .tw-icon-btn:hover { background: #F3F4F6; color: #374151; }
+        .tw-icon-btn.tw-icon-red:hover { background: #FEE2E2; color: #DC2626; }
+        .tw-icon-btn.tw-icon-green:hover { background: #D1FAE5; color: #059669; }
+
+        /* LEGACY UI OVERRIDES FOR MODALS */
         .erp-label { font-size: 12px; font-weight: 700; color: #1e293b; display: block; margin-bottom: 6px; }
         .helper-text { font-size: 10px; color: #64748b; margin-top: 4px; line-height: 1.4; font-weight: 500; }
         .erp-input { width: 100%; padding: 10px 14px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; color: #1e293b; outline: none; font-family: 'Poppins', sans-serif; transition: all 0.2s; box-shadow: 0 1px 2px rgba(0,0,0,0.02); }
@@ -1376,41 +1771,42 @@ function SellingPageContent() {
         .responsive-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
         .responsive-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
         .modal-footer { display: flex; gap: 12px; margin-top: 24px; justify-content: flex-end; border-top: 1px solid #e2e8f0; padding-top: 20px; }
-        .table-row-hover:hover { background-color: #f8fafc !important; }
-        .action-btn { transition: transform 0.2s, box-shadow 0.2s; }
-        .action-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(5,76,199,0.2); }
-        
-        .filter-pill { background: #f1f5f9; border: 1px solid #e2e8f0; color: #64748b; padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
-        .filter-pill:hover { background: #e2e8f0; color: #334155; }
-        .filter-pill.active { background: #e0f2fe; border-color: ${COLOR_PRIMARY}; color: ${COLOR_PRIMARY}; }
-        
-        .custom-toast {
+
+        /* ── CSS KHUSUS TOAST MODERN ── */
+        .modern-toast {
           position: fixed;
-          top: 20px;
-          right: 20px;
-          color: white;
-          padding: 14px 20px;
-          border-radius: 10px;
+          top: 30px;
+          left: 50%;
+          transform: translate(-50%, -20px);
+          opacity: 0;
+          background: white;
+          padding: 16px 20px;
+          border-radius: 8px;
+          box-shadow: 0 10px 40px rgba(0,0,0,0.1);
           display: flex;
           align-items: flex-start;
           gap: 12px;
-          font-size: 13px;
-          font-weight: 600;
-          box-shadow: 0 10px 25px rgba(0,0,0,0.2);
           z-index: 99999;
-          animation: slideInRight 0.3s ease-out forwards;
-          max-width: 400px;
+          min-width: 320px;
+          max-width: 450px;
+          transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+          pointer-events: none;
         }
-
-        @keyframes slideInRight {
-          from { transform: translateX(100%); opacity: 0; }
-          to { transform: translateX(0); opacity: 1; }
+        .modern-toast.show {
+          transform: translate(-50%, 0);
+          opacity: 1;
         }
-
+        
+        @media (max-width: 768px) {
+          .tw-hero-layout { flex-direction: column; }
+          .tw-hero-card { flex-direction: column; align-items: flex-start; gap: 20px; }
+          .tw-hero-illustration { margin-left: 0; width: 100%; height: 120px; }
+          .tw-stats-col { flex-direction: row; }
+          .modern-toast { width: 90%; min-width: auto; top: 16px; }
+        }
         @media (max-width: 640px) {
+          .tw-stats-col { flex-direction: column; }
           .responsive-grid, .responsive-grid-3 { grid-template-columns: 1fr; }
-          .mobile-flex-col { flex-direction: column !important; align-items: stretch !important; gap: 12px !important; }
-          .mobile-full-width { width: 100% !important; max-width: none !important; justify-content: center !important; }
         }
       `}</style>
     </div>
@@ -1419,7 +1815,8 @@ function SellingPageContent() {
 
 export default function SellingPage() {
   const router = useRouter();
-  const { canAccess } = useAuth();
-  useEffect(() => { if (!canAccess('selling' as any)) router.push('/dashboard'); }, [canAccess, router]);
+  // Auth logic dari code 2
+  // const { canAccess } = useAuth();
+  // useEffect(() => { if (!canAccess('selling' as any)) router.push('/dashboard'); }, [canAccess, router]);
   return (<Suspense fallback={<div>Loading...</div>}><SellingPageContent /></Suspense>);
 }

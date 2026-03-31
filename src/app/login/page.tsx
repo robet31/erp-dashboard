@@ -214,11 +214,12 @@ export default function LoginPage() {
         .lp-loading-dots::after { content:''; animation:dots 1.5s steps(3,end) infinite; }
         @keyframes dots { 0%{content:'';} 33%{content:'.';} 66%{content:'..';} }
 
-        /* ── CARD ── */
+        /* ── CARD UTAMA (TIDAK BERUBAH UKURAN SAAT PINDAH TAB) ── */
         .lp-card {
           display: flex;
           width: 100%;
           max-width: 900px;
+          height: 700px; /* Diperbesar sedikit agar Form Register lega */
           max-height: calc(100vh - 40px);
           background: white;
           border-radius: 28px;
@@ -233,9 +234,9 @@ export default function LoginPage() {
           to   { opacity:1; transform:scale(1) translateY(0); }
         }
 
-        /* ── LEFT PANEL: #054CC7 → #17C3CC diagonal ── */
+        /* ── LEFT PANEL ── */
         .lp-left {
-          width: 42%;
+          width: 45%;
           background: linear-gradient(150deg, #054CC7 0%, #0a6ed1 40%, #17C3CC 100%);
           padding: 36px 32px;
           display: flex;
@@ -280,7 +281,7 @@ export default function LoginPage() {
         }
         .lp-logo {
           display: flex; align-items: center; gap: 12px;
-          position: relative; z-index: 2; margin-bottom: 28px;
+          position: relative; z-index: 2; margin-bottom: 24px;
         }
         .lp-slogan { position: relative; z-index: 2; }
         .lp-slogan h1 {
@@ -296,70 +297,54 @@ export default function LoginPage() {
           font-size: 13px; line-height: 1.7; opacity: 0.88;
           animation: slideUp 0.8s ease-out 0.1s both;
         }
+        
         .lp-illus-wrap {
           flex: 1;
           display: flex; align-items: center; justify-content: center;
           position: relative; z-index: 2;
           min-height: 0;
+          margin-top: 20px;
         }
         @keyframes floatIllus {
           0%,100% { transform: translateY(0px) rotate(-1deg); }
           50%      { transform: translateY(-12px) rotate(1deg); }
         }
-        .lp-features {
-          display: flex; gap: 10px;
-          position: relative; z-index: 2;
-          animation: slideUp 0.8s ease-out 0.2s both;
-          margin-top: 16px;
-        }
-        .lp-feature {
-          background: rgba(255,255,255,0.12);
-          border: 1px solid rgba(255,255,255,0.18);
-          border-radius: 12px;
-          padding: 12px 14px; flex: 1;
-          transition: all 0.3s ease; cursor: default;
-        }
-        .lp-feature:hover {
-          background: rgba(255,255,255,0.2);
-          transform: translateY(-4px);
-          box-shadow: 0 8px 20px rgba(0,0,0,0.15);
-        }
-        .lp-feature-num { font-size: 20px; font-weight: 800; margin-bottom: 3px; }
-        .lp-feature-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.07em; opacity: 0.82; }
 
-        /* ── RIGHT PANEL ── */
+        /* ── RIGHT PANEL (SOLUSI CROP FORM) ── */
         .lp-right {
           flex: 1;
-          padding: 40px 44px;
-          display: flex; flex-direction: column; justify-content: center;
+          padding: 30px 44px; /* Disesuaikan agar isi pas */
+          display: flex; flex-direction: column; 
           background: #ffffff;
           position: relative;
           overflow-y: auto; overflow-x: hidden;
         }
-        .lp-right::after {
-          content: '';
-          position: absolute;
-          width: 200px; height: 200px; border-radius: 50%;
-          background: radial-gradient(circle, rgba(23,195,204,0.07) 0%, transparent 70%);
-          top: -70px; right: -70px;
-          pointer-events: none;
+
+        .lp-right::-webkit-scrollbar { width: 6px; }
+        .lp-right::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+
+        .lp-right-content { 
+          position: relative; 
+          z-index: 2; 
+          margin: auto 0; /* Teknik Safe Centering: Menengah jika sisa ruang, merapat atas jika terlalu panjang */
+          width: 100%;
         }
-        .lp-right-content { position: relative; z-index: 2; }
+
         .lp-heading {
           font-size: 26px; font-weight: 800;
           color: #1e293b; margin-bottom: 6px; text-align: center;
         }
         .lp-subheading {
           font-size: 13px; color: #64748b;
-          text-align: center; margin-bottom: 28px;
+          text-align: center; margin-bottom: 24px;
         }
 
-        /* ── FORM FIELDS ── */
+        /* ── FORM FIELDS (LEBIH COMPACT) ── */
         .lp-field-group {
           background: #f8fafc;
           border: 1.5px solid #e2e8f0;
           border-radius: 12px;
-          padding: 12px 16px; margin-bottom: 14px;
+          padding: 10px 14px; margin-bottom: 12px;
           transition: all 0.2s ease;
         }
         .lp-field-group:focus-within {
@@ -387,6 +372,7 @@ export default function LoginPage() {
           color: #94a3b8; padding: 4px; transition: color 0.2s;
         }
         .lp-pw-eye:hover { color: #054CC7; }
+        
         .lp-role-wrap { position: relative; }
         .lp-role-btn {
           width: 100%; border: none; background: transparent;
@@ -432,7 +418,7 @@ export default function LoginPage() {
         }
         .lp-forgot:hover { color: #0a3a8a; text-decoration: underline; }
 
-        /* ── SUBMIT BUTTON with ripple ── */
+        /* ── SUBMIT BUTTON ── */
         .lp-submit {
           width: 100%; padding: 15px;
           background: linear-gradient(135deg, #054CC7 0%, #17C3CC 100%);
@@ -506,7 +492,8 @@ export default function LoginPage() {
             max-width: 420px;
             width: calc(100% - 32px);
             border-radius: 24px;
-            /* fit content, no forced height */
+            /* Auto height for tablet/mobile */
+            height: auto; 
             max-height: calc(100vh - 40px);
             overflow-y: auto;
           }
@@ -520,28 +507,27 @@ export default function LoginPage() {
           }
           .lp-left-decor, .lp-left-accent { display: none; }
           .lp-logo { margin-bottom: 0; flex-shrink: 0; }
-          .lp-slogan, .lp-illus-wrap, .lp-features { display: none; }
+          .lp-slogan, .lp-illus-wrap { display: none; }
           .lp-right {
             padding: 24px 26px 28px;
-            overflow-y: auto;
-            -webkit-overflow-scrolling: touch;
+            overflow-y: visible;
           }
           .lp-heading { font-size: 22px; margin-bottom: 4px; }
           .lp-subheading { margin-bottom: 20px; }
           .lp-field-group { margin-bottom: 12px; }
         }
 
-        /* Mobile (<480px) — compact card, no full-height stretch */
+        /* Mobile (<480px) */
         @media (max-width: 480px) {
           .lp-root {
-            align-items: center;   /* keep centered */
+            align-items: center; 
             padding: 16px;
           }
           .lp-card {
             max-width: 100%;
             width: 100%;
             border-radius: 20px;
-            /* CRITICAL: do NOT force min-height — let content dictate */
+            height: auto;
             max-height: calc(100vh - 32px);
             overflow-y: auto;
           }
@@ -629,26 +615,11 @@ export default function LoginPage() {
               <Image
                 src="/humans1.png"
                 alt="Artavista Illustration"
-                width={300}
-                height={300}
+                width={400}  
+                height={400}
                 style={{ objectFit: 'contain', animation: 'floatIllus 4s ease-in-out infinite', maxWidth: '100%', maxHeight: '100%' }}
                 priority
               />
-            </div>
-
-            <div className="lp-features">
-              <div className="lp-feature">
-                <div className="lp-feature-num">500+</div>
-                <div className="lp-feature-label">Transaksi/Hari</div>
-              </div>
-              <div className="lp-feature">
-                <div className="lp-feature-num">99%</div>
-                <div className="lp-feature-label">Akurasi Data</div>
-              </div>
-              <div className="lp-feature">
-                <div className="lp-feature-num">24/7</div>
-                <div className="lp-feature-label">Akses System</div>
-              </div>
             </div>
           </div>
 

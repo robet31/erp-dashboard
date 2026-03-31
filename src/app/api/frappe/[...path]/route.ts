@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 
 // ─── CONFIG KONEKSI FRAPPE ───────────────────────────────────────────────────
 // URL dan Kredensial hardcoded sesuai permintaan
-const FRAPPE_URL = 'https://erpnextgcpnew.browniesqu.my.id';
-const API_KEY    = 'e0473f1b24140b9';
-const API_SECRET = '8d3f1310796a1b0';
+const FRAPPE_URL = process.env.FRAPPE_URL || 'http://127.0.0.1:8080';
+const API_KEY    = process.env.FRAPPE_API_KEY || '';
+const API_SECRET = process.env.FRAPPE_API_SECRET || '';
 
 // Pastikan Mock mode mati agar selalu menarik data asli
 const USE_MOCK = false; 

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 
 // Ganti dengan URL Frappe kamu
-const FRAPPE_URL = 'https://erpnextgcpnew.browniesqu.my.id';
+const FRAPPE_URL = process.env.FRAPPE_URL || 'http://127.0.0.1:8080';
 
 export async function POST(request: NextRequest) {
   try {

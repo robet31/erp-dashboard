@@ -1,7 +1,6 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  mcpServer: true,
   reactStrictMode: true,
   async headers() {
     return [

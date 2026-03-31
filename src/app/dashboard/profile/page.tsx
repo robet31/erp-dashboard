@@ -21,6 +21,8 @@ export default function ProfilePage() {
   const [isEditing, setIsEditing] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [errorMessage, setErrorMessage] = useState('');
+  
   const [formData, setFormData] = useState({
     full_name: user?.full_name || '',
     email: user?.email || '',
@@ -41,14 +43,36 @@ export default function ProfilePage() {
 
   const handleSave = async () => {
     setSaveStatus('saving');
+    setErrorMessage('');
+    
     try {
+      // 1. Kirim data ke API Backend untuk diubah di PostgreSQL
+      const response = await fetch('/api/auth/update-profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          oldEmail: user.email, // Dibutuhkan untuk mencari user yang ingin diupdate
+          newFullName: formData.full_name,
+          newEmail: formData.email
+        })
+      });
+
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || 'Gagal menyimpan ke database');
+      }
+
+      // 2. Jika database sukses, perbarui State & LocalStorage (UI)
       await updateUser({ full_name: formData.full_name, email: formData.email });
+      
       setSaveStatus('saved');
       setIsEditing(false);
       setTimeout(() => setSaveStatus('idle'), 3000);
-    } catch {
+    } catch (err: any) {
+      console.error(err);
+      setErrorMessage(err.message);
       setSaveStatus('error');
-      setTimeout(() => setSaveStatus('idle'), 3000);
+      setTimeout(() => setSaveStatus('idle'), 4000);
     }
   };
 
@@ -56,6 +80,7 @@ export default function ProfilePage() {
     setFormData({ full_name: user.full_name || '', email: user.email || '' });
     setIsEditing(false);
     setSaveStatus('idle');
+    setErrorMessage('');
   };
 
   const handleAvatarClick = () => fileInputRef.current?.click();
@@ -279,12 +304,12 @@ export default function ProfilePage() {
               {/* Status messages */}
               {saveStatus === 'saved' && (
                 <div className="pp-alert pp-alert-success">
-                  <Check size={16} /> {t.profileUpdated}
+                  <Check size={16} /> {t.profileUpdated || 'Profil berhasil diperbarui!'}
                 </div>
               )}
               {saveStatus === 'error' && (
                 <div className="pp-alert pp-alert-error">
-                  <AlertCircle size={16} /> {t.saveFailed}
+                  <AlertCircle size={16} /> {errorMessage || t.saveFailed || 'Gagal menyimpan profil.'}
                 </div>
               )}
             </div>

@@ -1,19 +1,19 @@
 'use client';
 
-import React, { useState, useMemo, useEffect, Suspense } from 'react';
+import React, { useState, useMemo, useEffect, Suspense, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/providers/auth-provider';
 import { useStockData, useSellingData } from '@/hooks/useFrappeData';
 import {
-  Package, Warehouse, AlertTriangle, TrendingUp, Filter,
-  Plus, Search, X, Edit, Trash2, ArrowRight, AlertCircle, Eye, Truck, Send, Link as LinkIcon, Calendar, Loader2, Info, CheckCircle
+  Package, Warehouse, AlertTriangle, Filter,
+  Plus, Search, X, Edit, Trash2, AlertCircle, Eye, Send, Info, CheckCircle, Loader2
 } from 'lucide-react';
 import { formatNumber, formatDate } from '@/lib/utils';
-import { EmptyState, TableSkeleton } from '@/components/EmptyState';
+import { TableSkeleton } from '@/components/EmptyState';
 
 const COLOR_PRIMARY = '#054CC7';
-const COLOR_SECONDARY = '#17C3CC';
-const FIXED_COMPANY = 'PT Artavista';
+const COLOR_SECONDARY = '#FFB800';
+const FIXED_COMPANY = 'PT Artavista'; 
 
 const formatUang = (value: number | string | undefined) => {
   if (value === undefined || value === null) return 'Rp 0';
@@ -43,10 +43,15 @@ const extractFrappeError = (err: any, fallbackMsg: string = 'Terjadi kesalahan s
     } catch(e) {}
   }
 
+  const neededMatch = errorMsg.match(/([0-9.]+)\s*units of Item\s*(.*?)\s*needed in Warehouse\s*(.*?)\s*to complete/i);
+  if (neededMatch) {
+      return `❌ Gagal! Stok Fisik Tidak Cukup.\n\n👉 Sistem membutuhkan ${neededMatch[1]} unit barang "${neededMatch[2]}" di Gudang "${neededMatch[3]}", tetapi sisa fisiknya kurang atau kosong. Silakan restock terlebih dahulu.`;
+  }
+
   const lowerErr = errorMsg.toLowerCase();
   
   if (lowerErr.includes('417') || lowerErr.includes('expectation failed') || err?.status === 417) {
-    return `Gagal (Error 417)! Tindakan Ditolak.\n\n👉 Dokumen ini kemungkinan besar sudah diproses secara fisik di Gudang (Stock Ledger) atau sedang terikat dengan proses Pabrik/Sales. Anda tidak bisa menghapusnya begitu saja.`;
+    return `Gagal (Error 417)! Tindakan Ditolak.\n\n👉 Dokumen ini kemungkinan besar sudah diproses secara fisik di Gudang (Stock Ledger) atau sedang terikat dengan proses transaksi lain. Anda tidak bisa menghapusnya begitu saja.`;
   }
   
   if (lowerErr.includes('valuation rate not found')) {
@@ -55,8 +60,8 @@ const extractFrappeError = (err: any, fallbackMsg: string = 'Terjadi kesalahan s
     return `Gagal! Harga Standar (Valuation Rate) untuk barang "${itemCode}" belum diatur.\n\n👉 Solusi: Pergi ke tab "Master Items", cari barang ini, klik Edit, lalu isi "Standard Rate (Rp)". Sistem akuntansi butuh nilai ini.`;
   }
   
-  if (lowerErr.includes('negative stock')) {
-    return `Gagal! Stok Tidak Cukup.\n\n👉 Transaksi ditolak karena akan menyebabkan sisa fisik di gudang menjadi minus (di bawah 0). Lakukan Penerimaan Gudang (Stock Entry) terlebih dahulu.`;
+  if (lowerErr.includes('negative stock') || lowerErr.includes('insufficient stock')) {
+    return `❌ Stok Fisik Tidak Cukup!\n\n👉 Transaksi ditolak karena akan menyebabkan stok fisik menjadi minus. Lakukan Penerimaan Gudang (Stock Entry - Material Receipt) terlebih dahulu.`;
   }
 
   if (lowerErr.includes('linked with') || lowerErr.includes('cannot delete')) {
@@ -70,13 +75,41 @@ const extractFrappeError = (err: any, fallbackMsg: string = 'Terjadi kesalahan s
   return errorMsg;
 };
 
+// ── KOMPONEN TOAST MODERN & ELEGAN ──
 function Toast({ show, message, type }: { show: boolean, message: string, type: 'success' | 'error' | 'info' }) {
-  if (!show) return null;
-  const bg = type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#3b82f6';
+  const [isVisible, setIsVisible] = useState(false);
+  const [render, setRender] = useState(false);
+
+  useEffect(() => {
+    if (show) {
+      setRender(true);
+      setTimeout(() => setIsVisible(true), 50); 
+    } else {
+      setIsVisible(false);
+      setTimeout(() => setRender(false), 300); 
+    }
+  }, [show]);
+
+  if (!render) return null;
+
+  const colors = {
+    success: { border: '#10b981', icon: <CheckCircle size={22} color="#10b981" />, title: 'Berhasil' },
+    error: { border: '#ef4444', icon: <AlertCircle size={22} color="#ef4444" />, title: 'Gagal Memproses' },
+    info: { border: '#3b82f6', icon: <Info size={22} color="#3b82f6" />, title: 'Informasi' }
+  };
+  const config = colors[type];
+
   return (
-    <div className="custom-toast" style={{ background: bg, alignItems: 'flex-start', maxWidth: '450px' }}>
-      <div style={{ marginTop: '2px' }}>{type === 'success' ? <CheckCircle size={18} /> : type === 'error' ? <AlertCircle size={18} /> : <Info size={18} />}</div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>{message.split('\n').map((line, i) => (<span key={i} style={{ lineHeight: 1.4, fontWeight: line.includes('👉') ? 800 : 500 }}>{line}</span>))}</div>
+    <div className={`modern-toast ${isVisible ? 'show' : ''}`} style={{ borderLeft: `4px solid ${config.border}` }}>
+      <div style={{ marginTop: '2px', flexShrink: 0 }}>{config.icon}</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+        <span style={{ fontWeight: 800, color: '#111827', fontSize: '14px' }}>{config.title}</span>
+        {message.split('\n').map((line, i) => (
+          <span key={i} style={{ color: '#4B5563', lineHeight: 1.4, fontWeight: line.includes('👉') ? 700 : 500, fontSize: '13px' }}>
+            {line}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
@@ -102,6 +135,10 @@ const getActualStock = (itemCode: string, warehouse: string, bins: any[]) => {
   const bin = bins.find((b: any) => b.item_code === itemCode && b.warehouse === warehouse);
   return bin ? Number(bin.actual_qty) : 0;
 };
+
+// ==========================================
+// MODALS LOGIC
+// ==========================================
 
 // ── 1. MODALS ITEM ──
 function CreateItemModal({ onClose, onSuccess, showToast }: any) {
@@ -262,7 +299,7 @@ function StockEntryFormModal({ entry, mode, onClose, warehouses, items, bins, on
 
   const [form, setForm] = useState({ 
     company: defaultCompany, 
-    stock_entry_type: 'Material Receipt', // Default ke Material Receipt
+    stock_entry_type: 'Material Receipt',
     set_posting_time: true,
     posting_date: new Date().toISOString().split('T')[0],
     posting_time: getCurrentTimeForInput(),
@@ -314,6 +351,13 @@ function StockEntryFormModal({ entry, mode, onClose, warehouses, items, bins, on
   const handleAddItem = () => {
     if (!itemForm.item_code || Number(itemForm.qty) <= 0) return showToast("Pilih Item dan isi Qty > 0", 'error');
     
+    if (['Material Issue', 'Material Transfer'].includes(form.stock_entry_type)) {
+      const stockAvailable = getStockInfo(itemForm.item_code)?.qty || 0;
+      if (Number(itemForm.qty) > stockAvailable) {
+        return showToast(`Gagal! Stok ${itemForm.item_code} di gudang asal tidak cukup. Hanya tersisa ${stockAvailable} unit.`, 'error');
+      }
+    }
+
     const selectedItem = items.find((i: any) => i.item_code === itemForm.item_code);
     const basicRate = Number(itemForm.basic_rate) || selectedItem?.standard_rate || 0;
     
@@ -388,9 +432,10 @@ function StockEntryFormModal({ entry, mode, onClose, warehouses, items, bins, on
               <div className="responsive-grid" style={{ marginBottom: '16px' }}>
                 <div className="form-group"><label className="erp-label">Company</label><input type="text" readOnly className="erp-input disabled-input" value={form.company} /></div>
                 <div className="form-group"><label className="erp-label">Purpose (Type) *</label>
-                  {/* PERBAIKAN: Membuat Select Disabled (Hanya Material Receipt) untuk Add New seperti permintaan sebelumnya */}
-                  <select required value={form.stock_entry_type} className="erp-input disabled-input" disabled>
-                    <option value={form.stock_entry_type}>{form.stock_entry_type}</option>
+                  <select required value={form.stock_entry_type} onChange={e => setForm(f => ({ ...f, stock_entry_type: e.target.value, s_warehouse: '', t_warehouse: '', items: [] }))} className="erp-input disabled-input" disabled={!isEdit && form.stock_entry_type === 'Material Receipt'}>
+                    <option value="Material Receipt">Material Receipt (Penerimaan / Masuk Gudang)</option>
+                    <option value="Material Issue">Material Issue (Pengeluaran / Buang)</option>
+                    <option value="Material Transfer">Material Transfer (Pindah Gudang)</option>
                   </select>
                 </div>
               </div>
@@ -469,7 +514,6 @@ function StockEntryFormModal({ entry, mode, onClose, warehouses, items, bins, on
   );
 }
 
-// ── PERBAIKAN: DETAIL STOCK ENTRY VIEW ──
 function DetailStockEntryModal({ entry, bins, items, onClose, onSubmitEntry }: any) {
   const [fullData, setFullData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -529,7 +573,7 @@ function DetailStockEntryModal({ entry, bins, items, onClose, onSubmitEntry }: a
                     <p style={{ fontSize: '13px', fontWeight: 700, color: '#7f1d1d' }}>{fullData.from_warehouse}</p>
                   </div>
                 )}
-                {['Material Receipt', 'Material Transfer'].includes(fullData?.stock_entry_type) && fullData?.to_warehouse && (
+                {['Material Receipt', 'Material Transfer', 'Manufacture'].includes(fullData?.stock_entry_type) && fullData?.to_warehouse && (
                   <div style={{ background: '#ecfdf5', padding: '12px', borderRadius: '8px', border: '1px solid #a7f3d0' }}>
                     <p style={{ fontSize: '11px', color: '#065f46', fontWeight: 600 }}>Target WH</p>
                     <p style={{ fontSize: '13px', fontWeight: 700, color: '#064e3b' }}>{fullData.to_warehouse}</p>
@@ -544,8 +588,7 @@ function DetailStockEntryModal({ entry, bins, items, onClose, onSubmitEntry }: a
                     <tr>
                       <th>Item Code</th>
                       <th>Jenis Barang</th>
-                      {['Material Issue', 'Material Transfer'].includes(fullData?.stock_entry_type) && <th>Source WH</th>}
-                      {['Material Receipt', 'Material Transfer'].includes(fullData?.stock_entry_type) && <th>Target WH</th>}
+                      {['Material Receipt', 'Material Transfer', 'Manufacture'].includes(fullData?.stock_entry_type) && <th>Target WH</th>}
                       <th style={{ textAlign: 'center' }}>Sisa Stok Real (Gudang)</th>
                       <th style={{ textAlign: 'right' }}>Qty Mutasi (+ / -)</th>
                       <th style={{ textAlign: 'right' }}>Amount</th>
@@ -561,17 +604,14 @@ function DetailStockEntryModal({ entry, bins, items, onClose, onSubmitEntry }: a
                       
                       let mutasiSign = '';
                       let mutasiColor = '#4b5563';
-                      if (fullData?.stock_entry_type === 'Material Receipt') { mutasiSign = '+'; mutasiColor = '#059669'; }
+                      if (fullData?.stock_entry_type === 'Material Receipt' || fullData?.stock_entry_type === 'Manufacture') { mutasiSign = '+'; mutasiColor = '#059669'; }
                       else if (fullData?.stock_entry_type === 'Material Issue') { mutasiSign = '-'; mutasiColor = '#dc2626'; }
 
                       return (
                         <tr key={i}>
                           <td><span style={{ color: COLOR_PRIMARY, fontWeight: 700, fontSize: '12px' }}>{item.item_code}</span></td>
                           <td><span className={`badge ${isRaw ? 'badge-warning' : 'badge-info'}`} style={{fontSize: '10px'}}>{itemGroup}</span></td>
-                          {['Material Issue', 'Material Transfer'].includes(fullData?.stock_entry_type) && (
-                            <td style={{ fontSize: '11px', color: '#dc2626' }}>{item.s_warehouse || fullData?.from_warehouse || '-'}</td>
-                          )}
-                          {['Material Receipt', 'Material Transfer'].includes(fullData?.stock_entry_type) && (
+                          {['Material Receipt', 'Material Transfer', 'Manufacture'].includes(fullData?.stock_entry_type) && (
                             <td style={{ fontSize: '11px', color: '#059669' }}>{item.t_warehouse || fullData?.to_warehouse || '-'}</td>
                           )}
                           <td style={{ textAlign: 'center', fontWeight: 700, color: '#4b5563', fontSize: '12px' }}>
@@ -589,7 +629,7 @@ function DetailStockEntryModal({ entry, bins, items, onClose, onSubmitEntry }: a
               </div>
 
               <div className="modal-footer">
-                {entry.docstatus === 0 && <button className="btn btn-primary mobile-btn" onClick={handleSubmit} disabled={isSubmitting} style={{ background: COLOR_PRIMARY, borderColor: COLOR_PRIMARY }}><Send size={16} /> Submit (Sahkan) Dokumen</button>}
+                {entry.docstatus === 0 && <button className="btn btn-primary mobile-btn" onClick={handleSubmit} disabled={isSubmitting} style={{ background: COLOR_PRIMARY, borderColor: COLOR_PRIMARY }}><Send size={16} /> Sahkan (Submit)</button>}
                 <button className="btn btn-secondary mobile-btn" onClick={onClose} disabled={isSubmitting}>Tutup</button>
               </div>
             </div>
@@ -600,14 +640,23 @@ function DetailStockEntryModal({ entry, bins, items, onClose, onSubmitEntry }: a
   );
 }
 
-function CreateDeliveryNoteModal({ onClose, customers, items, warehouses, onSuccess, showToast }: any) {
+function CreateDeliveryNoteModal({ onClose, customers, items, warehouses, bins, onSuccess, showToast }: any) {
   const defaultCompany = useMemo(() => getDynamicCompany(warehouses), [warehouses]);
   const [form, setForm] = useState({ customer: '', company: defaultCompany, posting_date: new Date().toISOString().split('T')[0], is_return: false, item_code: '', qty: '', rate: '', amount: 0, warehouse: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const activeWarehouses = useMemo(() => warehouses.filter((w: any) => !w.is_group), [warehouses]);
 
+  // Fitur Cek Stok Real-Time di Form
+  const availableStock = useMemo(() => {
+    if (!form.item_code || !form.warehouse) return 0;
+    return getActualStock(form.item_code, form.warehouse, bins);
+  }, [form.item_code, form.warehouse, bins]);
+  const isStockShort = !form.is_return && (Number(form.qty || 0) > availableStock);
+
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault(); setIsSubmitting(true);
+    e.preventDefault(); 
+    if (isStockShort) return showToast(`Stok tidak cukup! Sisa fisik hanya ${availableStock}.`, 'error');
+    setIsSubmitting(true);
     try {
       const selectedItem = items.find((i: any) => i.item_code === form.item_code);
       const dnData = { 
@@ -628,11 +677,22 @@ function CreateDeliveryNoteModal({ onClose, customers, items, warehouses, onSucc
           <div className="form-group"><label className="erp-label">Customer *</label><select required className="erp-input" value={form.customer} onChange={e => setForm(f => ({ ...f, customer: e.target.value }))}><option value="">Pilih...</option>{customers.map((c: any) => <option key={c.name} value={c.name}>{c.customer_name}</option>)}</select></div>
           <div className="form-group"><label className="erp-label">Item *</label><select required className="erp-input" value={form.item_code} onChange={e => setForm(f => ({ ...f, item_code: e.target.value }))}><option value="">Pilih...</option>{items.map((i: any) => <option key={i.name} value={i.item_code}>{i.item_code}</option>)}</select></div>
           <div className="form-group"><label className="erp-label">Gudang *</label><select required className="erp-input" value={form.warehouse} onChange={e => setForm(f => ({ ...f, warehouse: e.target.value }))}><option value="">Pilih...</option>{activeWarehouses.map((w: any) => <option key={w.name} value={w.name}>{w.name}</option>)}</select></div>
+          
+          {form.item_code && form.warehouse && !form.is_return && (
+            <div style={{ background: isStockShort ? '#fee2e2' : '#f0fdf4', border: `1px solid ${isStockShort ? '#ef4444' : '#22c55e'}`, padding: '12px', borderRadius: '8px', marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <span style={{ fontSize: '12px', fontWeight: 600, color: isStockShort ? '#b91c1c' : '#166534', display: 'block' }}>Sisa Fisik di Gudang Terpilih:</span>
+                {isStockShort && <span style={{ fontSize: '10px', color: '#ef4444' }}>Stok tidak cukup untuk dikirim!</span>}
+              </div>
+              <span style={{ fontSize: '20px', fontWeight: 800, color: isStockShort ? '#ef4444' : '#16a34a' }}>{availableStock} Unit</span>
+            </div>
+          )}
+
           <div className="responsive-grid">
             <div className="form-group"><label className="erp-label">Qty</label><input required type="number" min="0.1" step="any" className="erp-input" value={form.qty} onChange={e => setForm(f => ({ ...f, qty: e.target.value, amount: Number(e.target.value)*Number(f.rate) }))} /></div>
             <div className="form-group"><label className="erp-label">Rate</label><input required type="number" min="0" step="any" className="erp-input" value={form.rate} onChange={e => setForm(f => ({ ...f, rate: e.target.value, amount: Number(e.target.value)*Number(f.qty) }))} /></div>
           </div>
-          <div className="modal-footer"><button type="submit" disabled={isSubmitting} className="btn btn-primary" style={{ background: COLOR_PRIMARY }}>Simpan Draft</button></div>
+          <div className="modal-footer"><button type="submit" disabled={isSubmitting || isStockShort} className="btn btn-primary" style={{ background: isStockShort ? '#9CA3AF' : COLOR_PRIMARY }}>{isStockShort ? 'Stok Kurang' : 'Simpan Draft'}</button></div>
         </form>
       </div>
     </div>
@@ -643,12 +703,13 @@ function CreateDeliveryNoteModal({ onClose, customers, items, warehouses, onSucc
 // 5. MAIN PAGE CONTENT
 // ==========================================
 function StockPageContent() {
+  const router = useRouter();
   const { items, warehouses, bins, stockEntries, isLoading, refetch } = useStockData();
   const { customers, deliveryNotes, isLoading: isSellingLoading, refetch: refetchSelling } = useSellingData();
   
   const searchParams = useSearchParams();
   const tabParam = searchParams.get('tab');
-  const [activeTab, setActiveTab] = useState(tabParam || 'stockentry');
+  const [activeTab, setActiveTab] = useState(tabParam || 'items');
 
   useEffect(() => { if (tabParam) setActiveTab(tabParam); }, [tabParam]);
 
@@ -666,10 +727,20 @@ function StockPageContent() {
   const [selectedWarehouse, setSelectedWarehouse] = useState<any>(null);
   const [selectedEntry, setSelectedEntry] = useState<any>(null);
 
+  // TOAST REWORKED (Prevent overlapping using timeout ref)
   const [toast, setToast] = useState<{ show: boolean, msg: string, type: 'success' | 'error' | 'info' }>({ show: false, msg: '', type: 'success' });
+  const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const showToast = (msg: string, type: 'success' | 'error' | 'info' = 'success') => {
+    setToast({ show: true, msg, type });
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    toastTimeoutRef.current = setTimeout(() => {
+      setToast(prev => ({ ...prev, show: false }));
+    }, 4000);
+  };
+
   const [confirmModal, setConfirmModal] = useState<{ show: boolean, title: string, desc: string, confirmText: string, action: any }>({ show: false, title: '', desc: '', confirmText: 'Ya', action: null });
 
-  const showToast = (msg: string, type: 'success' | 'error' | 'info' = 'success') => { setToast({ show: true, msg, type }); setTimeout(() => setToast({ show: false, msg: '', type: 'success' }), 4000); };
   const showConfirm = (title: string, desc: string, confirmText: string, action: any) => setConfirmModal({ show: true, title, desc, confirmText, action });
   const closeConfirm = () => setConfirmModal({ show: false, title: '', desc: '', confirmText: '', action: null });
 
@@ -702,7 +773,6 @@ function StockPageContent() {
     return result;
   }, [stockEntries, searchQuery, seTypeFilter, seStatusFilter, sortOrder]);
 
-  // ── PERBAIKAN: Fungsi Helper Stok Item Global ──
   const getItemStockDetails = (itemCode: string) => bins.filter((b: any) => b.item_code === itemCode && Number(b.actual_qty) !== 0).map((b: any) => ({ warehouse: b.warehouse, qty: Number(b.actual_qty) }));
 
   const handleSmartDelete = (doctype: string, docname: string, docstatus: number) => {
@@ -712,19 +782,24 @@ function StockPageContent() {
           const { apiUpdate, apiDelete } = await import('@/lib/api');
           if (docstatus === 1) await apiUpdate(doctype, docname, { docstatus: 2 });
           await apiDelete(doctype, docname);
-          showToast(`✅ ${doctype} dihapus!`, 'success'); refetch(); if (doctype === 'Delivery Note') refetchSelling();
+          showToast(`✅ ${doctype} dihapus! Memperbarui data...`, 'info'); 
+          setTimeout(() => { 
+            refetch(); 
+            if (doctype === 'Delivery Note') refetchSelling(); 
+          }, 1500);
         } catch (err: any) { showToast(extractFrappeError(err), 'error'); }
       }
     );
   };
 
   const handleSubmitStockEntry = (entry: any) => {
-    showConfirm("Sahkan Mutasi Stok Masuk?", "Data stok gudang fisik akan langsung ter-update (Terpotong/Bertambah) sesuai rincian.", "Sahkan", async () => {
+    showConfirm("Sahkan Mutasi Stok?", "Data stok gudang fisik akan langsung ter-update (Terpotong/Bertambah) sesuai rincian.", "Sahkan", async () => {
         closeConfirm();
         try {
           const { apiUpdate } = await import('@/lib/api');
           await apiUpdate('Stock Entry', entry.name, { docstatus: 1 });
-          showToast('✅ Berhasil disahkan! Stok Real-time telah diperbarui.', 'success'); refetch();
+          showToast('✅ Berhasil disahkan! Sedang sinkronisasi data ke Frappe...', 'success'); 
+          setTimeout(() => refetch(), 1500);
         } catch (err: any) { showToast(extractFrappeError(err), 'error'); }
       });
   };
@@ -735,7 +810,8 @@ function StockPageContent() {
         try {
           const { apiUpdate } = await import('@/lib/api');
           await apiUpdate('Stock Entry', entry.name, { docstatus: 2 });
-          showToast('✅ Berhasil dibatalkan! Stok sudah dikembalikan.', 'success'); refetch();
+          showToast('✅ Berhasil dibatalkan! Mengembalikan stok...', 'info'); 
+          setTimeout(() => refetch(), 1500);
         } catch (err: any) { showToast(extractFrappeError(err), 'error'); }
       });
   };
@@ -746,13 +822,71 @@ function StockPageContent() {
         try {
           const { apiUpdate } = await import('@/lib/api');
           await apiUpdate('Delivery Note', dn.name, { docstatus: 1 });
-          showToast('✅ Berhasil disahkan.', 'success'); refetchSelling(); refetch(); 
+          showToast('✅ Surat jalan disahkan. Sedang sinkronisasi...', 'success'); 
+          setTimeout(() => { 
+            refetchSelling(); 
+            refetch(); 
+          }, 1500); 
         } catch (err: any) { showToast(extractFrappeError(err), 'error'); }
       });
   };
 
+  const getAvatar = (name: string) => {
+    return name ? name.charAt(0).toUpperCase() : '?';
+  };
+
+  const getStatusColorConfig = (status: string) => {
+    const s = status?.toLowerCase() || '';
+    if (s.includes('draft')) return { bg: '#F3F4F6', color: '#4B5563', dot: '#9CA3AF' };
+    if (s.includes('submitted') || s.includes('active')) return { bg: '#D1FAE5', color: '#059669', dot: '#10B981' };
+    if (s.includes('cancel') || s.includes('disabled') || s.includes('issue')) return { bg: '#FEE2E2', color: '#DC2626', dot: '#EF4444' };
+    if (s.includes('receipt')) return { bg: '#FEF3C7', color: '#D97706', dot: '#F59E0B' };
+    if (s.includes('transfer')) return { bg: '#E0E7FF', color: '#054CC7', dot: '#3B82F6' };
+    return { bg: '#F3F4F6', color: '#4B5563', dot: '#9CA3AF' };
+  };
+
+  // LOGIKA DINAMIS HERO CARD UNTUK MODUL STOCK
+  let heroTitle = '';
+  let heroSubtitle = '';
+  let heroBtnText = '';
+  let heroBtnAction = () => {};
+  let heroImageSrc = '';
+
+  if (activeTab === 'warehouse') {
+      heroTitle = 'Manajemen Gudang';
+      heroSubtitle = `Sistem memiliki ${warehouses.filter((w:any) => !w.is_group).length} lokasi gudang fisik aktif. Tambahkan gudang baru untuk memperluas area operasional.`;
+      heroBtnText = 'Tambah Gudang Baru';
+      heroBtnAction = () => setShowCreateWarehouseModal(true);
+      heroImageSrc = '/images/ill-stock-warehouse.png';
+  } else if (activeTab === 'bin') {
+      heroTitle = 'Pemantauan Stock Level';
+      heroSubtitle = `Awasi kuantitas aktual barang (Sisa Fisik) yang tersebar di berbagai gudang secara real-time untuk mencegah stok habis (out of stock).`;
+      heroBtnText = 'Buat Mutasi Stok';
+      heroBtnAction = () => setShowCreateModal(true);
+      heroImageSrc = '/images/ill-stock-bin.png';
+  } else if (activeTab === 'stockentry') {
+      heroTitle = 'Mutasi Stok & Logistik';
+      heroSubtitle = `Buat dan lacak dokumen penerimaan, pengeluaran, atau perpindahan barang antar gudang agar sinkron dengan stok fisik.`;
+      heroBtnText = 'Catat Mutasi Baru';
+      heroBtnAction = () => setShowCreateModal(true);
+      heroImageSrc = '/images/ill-stock-entry.png';
+  } else if (activeTab === 'delivery') {
+      heroTitle = 'Surat Jalan (Delivery Note)';
+      heroSubtitle = `Validasi pengiriman pesanan ke pelanggan. Surat jalan yang disahkan akan otomatis memotong stok dari gudang terpilih.`;
+      heroBtnText = 'Buat Surat Jalan';
+      heroBtnAction = () => setShowCreateDNModal(true);
+      heroImageSrc = '/images/ill-stock-delivery.png';
+  } else {
+      // default: items
+      heroTitle = 'Master Data Item';
+      heroSubtitle = `Anda mengelola ${items.length} jenis barang. Daftarkan produk, bahan baku, atau aset baru ke dalam database ERPNext.`;
+      heroBtnText = 'Register Item Baru';
+      heroBtnAction = () => setShowCreateItemModal(true);
+      heroImageSrc = '/images/ill-stock-items.png';
+  }
+
   return (
-    <div style={{ fontFamily: "'Poppins', sans-serif", animation: 'fadeIn 0.3s ease-out' }}>
+    <div className="tw-root" style={{ fontFamily: "'Inter', 'Poppins', sans-serif", animation: 'fadeIn 0.4s ease-out' }}>
       <Toast show={toast.show} message={toast.msg} type={toast.type} />
       <ConfirmModal show={confirmModal.show} title={confirmModal.title} desc={confirmModal.desc} confirmText={confirmModal.confirmText} onConfirm={confirmModal.action} onCancel={closeConfirm} />
 
@@ -762,7 +896,7 @@ function StockPageContent() {
       {showCreateModal && <StockEntryFormModal mode="create" onClose={() => setShowCreateModal(false)} warehouses={warehouses} items={items} bins={bins} onSuccess={() => refetch()} showToast={showToast} />}
       {showCreateItemModal && <CreateItemModal onClose={() => setShowCreateItemModal(false)} onSuccess={() => refetch()} showToast={showToast} />}
       {showCreateWarehouseModal && <CreateWarehouseModal onClose={() => setShowCreateWarehouseModal(false)} onSuccess={() => refetch()} showToast={showToast} />}
-      {showCreateDNModal && <CreateDeliveryNoteModal onClose={() => setShowCreateDNModal(false)} customers={customers} items={sortedItems} warehouses={warehouses} onSuccess={() => refetchSelling()} showToast={showToast} />}
+      {showCreateDNModal && <CreateDeliveryNoteModal onClose={() => setShowCreateDNModal(false)} customers={customers} items={sortedItems} warehouses={warehouses} bins={bins} onSuccess={() => refetchSelling()} showToast={showToast} />}
       
       {selectedItem && <EditItemModal item={selectedItem} onClose={() => setSelectedItem(null)} onSuccess={() => refetch()} showToast={showToast} showConfirm={showConfirm} />}
       {selectedWarehouse && <EditWarehouseModal warehouse={selectedWarehouse} onClose={() => setSelectedWarehouse(null)} onSuccess={() => refetch()} showToast={showToast} showConfirm={showConfirm} />}
@@ -770,271 +904,570 @@ function StockPageContent() {
       {selectedEntry?.mode === 'view' && <DetailStockEntryModal entry={selectedEntry.data} bins={bins} items={items} onClose={() => setSelectedEntry(null)} onSubmitEntry={handleSubmitStockEntry} />}
       {selectedEntry?.mode === 'edit' && <StockEntryFormModal entry={selectedEntry.data} mode="edit" onClose={() => setSelectedEntry(null)} warehouses={warehouses} items={items} bins={bins} onSuccess={() => refetch()} showToast={showToast} />}
 
-      <div className="mobile-flex-col" style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
-        <div>
-          <h1 style={{ fontSize: '22px', fontWeight: 800, color: '#111827' }}>Manajemen Gudang</h1>
-          <p style={{ fontSize: '12px', color: '#6B7280' }}>Kelola arus keluar masuk stok dan identitas barang.</p>
+      {/* HERO SECTION & STATS DINAMIS */}
+      <div className="tw-hero-layout">
+        <div className="tw-hero-card">
+           <div className="tw-hero-content">
+             <h2 className="tw-hero-title">{heroTitle}</h2>
+             <p className="tw-hero-subtitle">{heroSubtitle}</p>
+             <button className="tw-btn-yellow" onClick={heroBtnAction}>{heroBtnText}</button>
+           </div>
+           <div className="tw-hero-illustration">
+             <img src={heroImageSrc} alt="Stock Illustration" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /> 
+           </div>
         </div>
-        <div className="mobile-full-width" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-          {activeTab === 'items' && <button className="btn btn-primary btn-sm mobile-full-width action-btn" style={{ background: '#059669', borderColor: '#059669' }} onClick={() => setShowCreateItemModal(true)}><Plus size={14} /> Item Baru</button>}
-          {activeTab === 'warehouse' && <button className="btn btn-primary btn-sm mobile-full-width action-btn" style={{ background: '#7c3aed', borderColor: '#7c3aed' }} onClick={() => setShowCreateWarehouseModal(true)}><Plus size={14} /> Gudang Baru</button>}
-          {activeTab === 'stockentry' && <button className="btn btn-primary btn-sm mobile-full-width action-btn" style={{ background: COLOR_PRIMARY }} onClick={() => setShowCreateModal(true)}><Plus size={14} /> Stock Entry</button>}
-          {activeTab === 'delivery' && <button className="btn btn-primary btn-sm mobile-full-width action-btn" style={{ background: COLOR_SECONDARY }} onClick={() => setShowCreateDNModal(true)}><Plus size={14} /> Surat Jalan</button>}
+
+        <div className="tw-stats-col">
+           <div className="tw-stat-card">
+              <div>
+                 <p className="tw-stat-label">Total Item Terdaftar</p>
+                 <h3 className="tw-stat-value">{items.length}</h3>
+              </div>
+              <div className="tw-stat-icon-blue"><Package size={20} /></div>
+           </div>
+           <div className="tw-stat-card">
+              <div>
+                 <p className="tw-stat-label">Gudang Fisik Aktif</p>
+                 <h3 className="tw-stat-value">{warehouses.filter((w:any) => !w.is_group).length}</h3>
+              </div>
+              <div className="tw-stat-icon-orange"><Warehouse size={20} /></div>
+           </div>
         </div>
       </div>
 
-      <div className="chart-container" style={{ padding: '0', overflow: 'hidden', background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px' }}>
-        <div style={{ padding: '16px 20px', borderBottom: '1px solid #f3f4f6', background: '#f8fafc', display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'center', justifyContent: 'space-between' }}>
-          
-          {/* SEARCH & FILTERS Frappe Style */}
-          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
-            <div style={{ position: 'relative', width: '200px' }}>
-              <Search size={14} color="#9CA3AF" style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)' }} />
-              <input type="text" placeholder={`Cari Data...`} value={searchQuery} onChange={e => setSearchQuery(e.target.value)} style={{ padding: '8px 10px 8px 30px', border: '1px solid #e5e7eb', borderRadius: '6px', fontSize: '12px', outline: 'none', width: '100%' }} />
+      {/* TABLE SECTION */}
+      <div className="tw-table-wrapper">
+         <div className="tw-table-header">
+            <h3 className="tw-table-title">
+               {activeTab === 'items' ? 'Master Item' : activeTab === 'warehouse' ? 'Lokasi Gudang' : activeTab === 'bin' ? 'Stock Level' : activeTab === 'stockentry' ? 'Mutasi Stok' : 'Surat Jalan'}
+            </h3>
+            <div className="tw-table-tabs" style={{ overflowX: 'auto' }}>
+               <button className={activeTab === 'items' ? 'active' : ''} onClick={() => setActiveTab('items')}>Items</button>
+               <button className={activeTab === 'warehouse' ? 'active' : ''} onClick={() => setActiveTab('warehouse')}>Warehouses</button>
+               <button className={activeTab === 'bin' ? 'active' : ''} onClick={() => setActiveTab('bin')}>Stock Level</button>
+               <button className={activeTab === 'stockentry' ? 'active' : ''} onClick={() => setActiveTab('stockentry')}>Stock Entries</button>
+               <button className={activeTab === 'delivery' ? 'active' : ''} onClick={() => setActiveTab('delivery')}>Delivery Notes</button>
             </div>
-            {activeTab === 'stockentry' && (
-              <>
-                <select value={seTypeFilter} onChange={e => setSeTypeFilter(e.target.value)} style={{ padding: '8px', border: '1px solid #e5e7eb', borderRadius: '6px', fontSize: '12px', outline: 'none', background: 'white' }}>
-                  <option value="Semua">All Entry Types</option>
-                  <option value="Material Receipt">Material Receipt</option>
-                  <option value="Material Issue">Material Issue</option>
-                  <option value="Material Transfer">Material Transfer</option>
-                </select>
-                <select value={seStatusFilter} onChange={e => setSeStatusFilter(e.target.value)} style={{ padding: '8px', border: '1px solid #e5e7eb', borderRadius: '6px', fontSize: '12px', outline: 'none', background: 'white' }}>
-                  <option value="Semua">All Statuses</option>
-                  <option value="Draft">Draft</option>
-                  <option value="Submitted">Submitted</option>
-                  <option value="Cancelled">Cancelled</option>
-                </select>
-              </>
-            )}
-          </div>
-          <div>
-            <select value={sortOrder} onChange={e => setSortOrder(e.target.value as any)} style={{ padding: '8px', border: '1px solid #e5e7eb', borderRadius: '6px', fontSize: '12px', outline: 'none', background: 'white' }}>
-              <option value="desc">Last Created (Desc)</option>
-              <option value="asc">Oldest First (Asc)</option>
-            </select>
-          </div>
-        </div>
+         </div>
+         
+         <div className="tw-table-filters">
+            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', flex: 1, alignItems: 'center' }}>
+                <div style={{ position: 'relative', width: '100%', maxWidth: '250px' }}>
+                  <Search size={14} color="#9CA3AF" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
+                  <input type="text" placeholder="Pencarian data..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="tw-search-input" />
+                </div>
 
-        {/* --- TABEL STOCK ENTRY --- */}
-        {activeTab === 'stockentry' && (
-          <div style={{ overflowX: 'auto' }}>
-            <table className="erp-table" style={{ minWidth: '1000px', borderTop: 'none' }}>
-              <thead style={{ background: '#f1f5f9' }}>
-                <tr>
-                  <th style={{ width: '40px', textAlign: 'center' }}>No.</th>
-                  <th>ID</th>
-                  <th>Status</th>
-                  <th>Purpose (Type)</th>
-                  <th>Default Target Warehouse</th>
-                  <th style={{ textAlign: 'center' }}>% Transferred</th>
-                  <th style={{ textAlign: 'center' }}>Is Return</th>
-                  <th style={{ textAlign: 'center' }}>Tindakan</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredStockEntries.map((se: any, i: number) => (
-                  <tr key={se.name} className="table-row-hover">
-                    <td style={{ textAlign: 'center', fontWeight: 600, color: '#6B7280' }}>{i + 1}</td>
-                    <td>
-                      <div style={{ color: '#111827', fontWeight: 700, fontSize: '13px' }}>{se.name}</div>
-                      <div style={{ fontSize: '10px', color: '#6B7280', marginTop: '2px' }}>{formatDate(se.posting_date)}</div>
-                    </td>
-                    <td>
-                      <span className={`badge ${se.virtualStatus === 'Submitted' ? 'badge-success' : se.virtualStatus === 'Cancelled' ? 'badge-danger' : 'badge-warning'}`}>
-                        {se.virtualStatus}
-                      </span>
-                    </td>
-                    <td style={{ fontSize: '12px', color: '#4b5563', fontWeight: 600 }}>{se.stock_entry_type}</td>
-                    <td style={{ fontSize: '12px', color: '#059669' }}>{se.to_warehouse || '-'}</td>
-                    <td style={{ textAlign: 'center', fontSize: '12px', fontWeight: 600 }}>{se.per_transferred || '100'}%</td>
-                    <td style={{ textAlign: 'center', fontSize: '12px' }}>{se.is_return === 1 ? 'Yes' : 'No'}</td>
-                    <td>
-                      <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
-                        {se.docstatus === 0 && <button onClick={() => handleSubmitStockEntry(se)} className="badge badge-success" style={{ cursor: 'pointer', border: 'none', display: 'flex', alignItems: 'center' }} title="Sahkan agar stok berubah"><Send size={12}/> Submit</button>}
-                        <button onClick={() => setSelectedEntry({ data: se, mode: 'view' })} style={{ background: '#e0f2fe', border: 'none', color: COLOR_PRIMARY, borderRadius: '6px', padding: '6px', cursor: 'pointer' }} title="Lihat Rincian"><Eye size={14} /></button>
-                        {se.docstatus === 0 && <button onClick={() => setSelectedEntry({ data: se, mode: 'edit' })} style={{ background: '#f3f4f6', border: 'none', color: '#4b5563', borderRadius: '6px', padding: '6px', cursor: 'pointer' }} title="Edit Draft"><Edit size={14} /></button>}
-                        {se.docstatus === 1 && <button onClick={() => handleCancelStockEntry(se)} className="badge badge-danger" style={{ cursor: 'pointer', border: 'none', display: 'flex', alignItems: 'center' }} title="Batalkan Entry"><X size={12}/> Cancel</button>}
-                        {(se.docstatus === 0 || se.docstatus === 2) && <button onClick={() => handleSmartDelete('Stock Entry', se.name, se.docstatus)} style={{ background: '#fee2e2', border: 'none', color: '#dc2626', borderRadius: '6px', padding: '6px', cursor: 'pointer' }} title="Hapus"><Trash2 size={14} /></button>}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-                {!isLoading && filteredStockEntries.length === 0 && <tr><td colSpan={8} style={{ textAlign: 'center', padding: '40px', color: '#6B7280', fontSize: '13px' }}>Data Stock Entry tidak ditemukan.</td></tr>}
-              </tbody>
-            </table>
-          </div>
-        )}
+                <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', alignItems: 'center' }}>
+                  {activeTab === 'stockentry' && (
+                    <>
+                      <select value={seTypeFilter} onChange={e => setSeTypeFilter(e.target.value)} className="tw-btn-action" style={{ background: 'transparent', border: '1px solid #E5E7EB' }}>
+                        <option value="Semua">Semua Tipe</option>
+                        <option value="Material Receipt">Material Receipt</option>
+                        <option value="Material Issue">Material Issue</option>
+                        <option value="Material Transfer">Material Transfer</option>
+                      </select>
+                      <select value={seStatusFilter} onChange={e => setSeStatusFilter(e.target.value)} className="tw-btn-action" style={{ background: 'transparent', border: '1px solid #E5E7EB' }}>
+                        <option value="Semua">Semua Status</option>
+                        <option value="Draft">Draft</option>
+                        <option value="Submitted">Submitted</option>
+                        <option value="Cancelled">Cancelled</option>
+                      </select>
+                    </>
+                  )}
+                  <select value={sortOrder} onChange={e => setSortOrder(e.target.value as any)} className="tw-btn-action" style={{ background: 'transparent', border: '1px solid #E5E7EB' }}>
+                    <option value="desc">Urutan Baru</option>
+                    <option value="asc">Urutan Lama</option>
+                  </select>
+                </div>
+            </div>
 
-        {/* --- TABEL ITEMS --- */}
-        {activeTab === 'items' && (
-          <div style={{ overflowX: 'auto' }}>
-            <table className="erp-table" style={{ minWidth: '900px' }}>
-              <thead>
-                <tr>
-                  <th style={{ width: '40px', textAlign: 'center' }}>No.</th>
-                  <th>Item Name</th>
-                  <th>Status</th>
-                  <th>Item Group</th>
-                  <th>Default Unit of Measure</th>
-                  <th style={{ textAlign: 'center' }}>Total Stok Fisik</th>
-                  <th>ID</th>
-                  <th style={{ width: '90px', textAlign: 'center' }}>Tindakan</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredItems.map((item: any, i) => {
-                  const isRaw = (item.item_group || '').toLowerCase().includes('raw');
-                  // Ambil jumlah fisik saat ini dari Bin
-                  const stockDetails = getItemStockDetails(item.item_code);
-                  const totalQty = stockDetails.reduce((sum, d) => sum + d.qty, 0);
+            <div style={{ display: 'flex', gap: '8px' }}>
+              {activeTab === 'items' && <button className="tw-btn-action" onClick={() => setShowCreateItemModal(true)} style={{ background: COLOR_PRIMARY, color: 'white' }}><Plus size={14} /> Baru</button>}
+              {activeTab === 'warehouse' && <button className="tw-btn-action" onClick={() => setShowCreateWarehouseModal(true)} style={{ background: COLOR_PRIMARY, color: 'white' }}><Plus size={14} /> Baru</button>}
+              {activeTab === 'stockentry' && <button className="tw-btn-action" onClick={() => setShowCreateModal(true)} style={{ background: COLOR_PRIMARY, color: 'white' }}><Plus size={14} /> Baru</button>}
+              {activeTab === 'delivery' && <button className="tw-btn-action" onClick={() => setShowCreateDNModal(true)} style={{ background: COLOR_PRIMARY, color: 'white' }}><Plus size={14} /> Baru</button>}
+            </div>
+         </div>
 
-                  return (
-                    <tr key={item.name} className="table-row-hover">
-                      <td style={{ textAlign: 'center', fontWeight: 600, color: '#6B7280' }}>{i + 1}</td>
-                      <td><div style={{ fontWeight: 800, fontSize: '14px', color: '#111827' }}>{item.item_name || item.item_code}</div></td>
-                      <td><span className={`badge ${item.disabled ? 'badge-danger' : 'badge-success'}`}>{item.disabled ? 'Disabled' : 'Active'}</span></td>
-                      <td><span className={`badge ${isRaw ? 'badge-warning' : 'badge-info'}`} style={{ fontSize: '11px', fontWeight: 700 }}>{item.item_group}</span></td>
-                      <td style={{ color: '#4B5563', fontWeight: 600, fontSize: '13px' }}>{item.stock_uom}</td>
-                      
-                      <td style={{ textAlign: 'center', background: '#f8fafc', borderRadius: '8px' }}>
-                        <div style={{ fontWeight: 800, fontSize: '16px', color: totalQty > 0 ? COLOR_PRIMARY : '#ef4444' }}>
-                          {totalQty} <span style={{ fontSize: '11px', color: '#6B7280', fontWeight: 600 }}>{item.stock_uom}</span>
-                        </div>
-                      </td>
+         {isLoading ? <div style={{ textAlign: 'center', padding: '40px' }}><Loader2 className="animate-spin" size={24} color={COLOR_PRIMARY} style={{ margin: '0 auto' }}/></div> : (
+           <div style={{ overflowX: 'auto' }}>
+             <table className="twithr-table">
+                <thead>
+                  {activeTab === 'items' && (
+                    <tr><th>Item Name</th><th>Status</th><th>Group</th><th>UoM</th><th style={{textAlign: 'center'}}>Stok Fisik</th><th style={{textAlign: 'center'}}>Aksi</th></tr>
+                  )}
+                  {activeTab === 'warehouse' && (
+                    <tr><th>Warehouse Name</th><th>Company</th><th>Tipe Gudang</th><th style={{textAlign: 'center'}}>Aksi</th></tr>
+                  )}
+                  {activeTab === 'bin' && (
+                    <tr><th>Item Code</th><th>Jenis Barang</th><th>Warehouse</th><th style={{textAlign: 'right'}}>Actual Qty</th><th style={{textAlign: 'right'}}>Stock Value</th></tr>
+                  )}
+                  {activeTab === 'stockentry' && (
+                    <tr><th>ID / Tgl</th><th>Status</th><th>Purpose</th><th>Target WH</th><th style={{textAlign: 'center'}}>Return</th><th style={{textAlign: 'center'}}>Aksi</th></tr>
+                  )}
+                  {activeTab === 'delivery' && (
+                    <tr><th>Customer</th><th>Status</th><th>Tgl Terbit</th><th style={{textAlign: 'right'}}>Total</th><th style={{textAlign: 'center'}}>Aksi</th></tr>
+                  )}
+                </thead>
+                <tbody>
+                    
+                   {/* ROWS FOR ITEMS */}
+                   {activeTab === 'items' && filteredItems.map((item: any) => {
+                      // 💡 Hitung stok dari Frappe langsung
+                      const totalQty = bins.filter((b: any) => b.item_code === item.item_code).reduce((sum, b) => sum + Number(b.actual_qty), 0);
+                      const statusStr = item.disabled ? 'Disabled' : 'Active';
+                      const colors = getStatusColorConfig(statusStr);
+                      return (
+                        <tr key={item.name}>
+                          <td>
+                            <div className="tw-avatar-name">
+                               <div className="tw-avatar">{getAvatar(item.item_code)}</div>
+                               <div className="tw-name-col">
+                                  <span className="tw-name">{item.item_name || item.item_code}</span>
+                                  <span className="tw-sub">{item.item_code}</span>
+                               </div>
+                            </div>
+                          </td>
+                          <td>
+                            <div className="tw-dot-status">
+                               <div className="tw-dot" style={{ background: colors.dot }}></div>
+                               <span style={{ fontSize: '12px', color: '#4B5563', fontWeight: 500 }}>{statusStr}</span>
+                            </div>
+                          </td>
+                          <td>
+                            <span className="tw-pill" style={{ background: '#F3F4F6', color: '#4B5563' }}>{item.item_group}</span>
+                          </td>
+                          <td style={{ fontSize: '13px', color: '#4B5563', fontWeight: 600 }}>{item.stock_uom}</td>
+                          <td style={{ textAlign: 'center' }}>
+                             <span style={{ fontSize: '14px', fontWeight: 800, color: totalQty > 0 ? COLOR_PRIMARY : '#EF4444' }}>{totalQty}</span>
+                          </td>
+                          <td>
+                            <div className="tw-actions">
+                              <button onClick={() => setSelectedItem(item)} className="tw-icon-btn" title="Edit"><Edit size={16}/></button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                   })}
 
-                      <td><span style={{ color: COLOR_SECONDARY, fontWeight: 700, fontSize: '12px' }}>{item.name}</span></td>
-                      <td>
-                        <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
-                          <button onClick={() => setSelectedItem(item)} style={{ background: '#e0f2fe', border: 'none', color: COLOR_PRIMARY, borderRadius: '6px', padding: '8px', cursor: 'pointer' }}><Edit size={16} /></button>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+                   {/* ROWS FOR WAREHOUSE */}
+                   {activeTab === 'warehouse' && filteredWarehouses.map((w: any) => {
+                      return (
+                        <tr key={w.name}>
+                          <td>
+                            <div className="tw-avatar-name">
+                               <div className="tw-avatar">{getAvatar(w.warehouse_name)}</div>
+                               <div className="tw-name-col">
+                                  <span className="tw-name">{w.warehouse_name}</span>
+                                  <span className="tw-sub">{w.name}</span>
+                               </div>
+                            </div>
+                          </td>
+                          <td style={{ fontSize: '13px', color: '#4B5563', fontWeight: 600 }}>{w.company || '-'}</td>
+                          <td>
+                            <span className="tw-pill" style={{ background: w.is_group ? '#E0E7FF' : '#D1FAE5', color: w.is_group ? COLOR_PRIMARY : '#059669' }}>
+                              {w.is_group ? 'Gudang Induk' : 'Gudang Fisik'}
+                            </span>
+                          </td>
+                          <td>
+                            <div className="tw-actions">
+                              <button onClick={() => setSelectedWarehouse(w)} className="tw-icon-btn" title="Edit"><Edit size={16}/></button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                   })}
 
-        {/* --- TABEL WAREHOUSE --- */}
-        {activeTab === 'warehouse' && (
-          <div style={{ overflowX: 'auto' }}>
-            <table className="erp-table">
-              <thead><tr><th style={{ width: '40px', textAlign: 'center' }}>No.</th><th>Nama Lokasi Gudang</th><th>Perusahaan</th><th>Sifat Gudang</th><th style={{ textAlign: 'center', width: '90px' }}>Tindakan</th></tr></thead>
-              <tbody>
-              {filteredWarehouses.map((w: any, i) => (
-                <tr key={w.name} className="table-row-hover">
-                  <td style={{ textAlign: 'center', fontWeight: 600, color: '#6B7280' }}>{i + 1}</td>
-                  <td><div style={{ fontWeight: 800, color: COLOR_PRIMARY, fontSize: '14px' }}>{w.warehouse_name}</div><div style={{ fontSize: '11px', color: '#9CA3AF' }}>ID: {w.name}</div></td>
-                  <td style={{ fontSize: '13px', fontWeight: 600, color: '#4B5563' }}>{w.company || '-'}</td>
-                  <td><span className={`badge ${w.is_group ? 'badge-purple' : 'badge-info'}`}>{w.is_group ? 'Gudang Induk' : 'Gudang Fisik'}</span></td>
-                  <td><div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}><button onClick={() => setSelectedWarehouse(w)} style={{ background: '#ecfdf5', border: 'none', color: '#059669', cursor: 'pointer', padding: '8px', borderRadius: '6px' }}><Edit size={16} /></button></div></td>
-                </tr>
-              ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                   {/* ROWS FOR BIN */}
+                   {activeTab === 'bin' && filteredBins.map((bin: any) => {
+                      const itemObj = items.find((it:any) => it.item_code === bin.item_code);
+                      const itemGroup = itemObj?.item_group || 'Unknown';
+                      return (
+                        <tr key={bin.name}>
+                          <td>
+                            <div className="tw-avatar-name">
+                               <div className="tw-avatar" style={{ background: '#F3F4F6', color: '#374151' }}>{getAvatar(bin.item_code)}</div>
+                               <div className="tw-name-col">
+                                  <span className="tw-name">{bin.item_code}</span>
+                                  <span className="tw-sub">{bin.name}</span>
+                               </div>
+                            </div>
+                          </td>
+                          <td><span className="tw-pill" style={{ background: '#F3F4F6', color: '#4B5563' }}>{itemGroup}</span></td>
+                          <td style={{ fontSize: '12px', color: '#4B5563', fontWeight: 600 }}>{bin.warehouse}</td>
+                          <td style={{ textAlign: 'right', fontWeight: 800, fontSize: '15px', color: '#111827' }}>{formatNumber(bin.actual_qty)}</td>
+                          <td style={{ textAlign: 'right', fontWeight: 700, color: '#059669', fontSize: '13px' }}>{formatUang(bin.stock_value)}</td>
+                        </tr>
+                      )
+                   })}
 
-        {/* --- TABEL BIN (STOK LEVEL) --- */}
-        {activeTab === 'bin' && (
-          <div style={{ overflowX: 'auto' }}>
-            <table className="erp-table" style={{ minWidth: '900px' }}>
-              <thead>
-                <tr>
-                  <th style={{ width: '40px', textAlign: 'center' }}>No.</th>
-                  <th>Item Code</th>
-                  <th>Jenis Barang</th>
-                  <th>Warehouse</th>
-                  <th style={{ textAlign: 'right' }}>Sisa Fisik (Actual Qty)</th>
-                  <th style={{ textAlign: 'right' }}>Stock Value (Valuasi)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredBins.map((bin: any, i) => {
-                  const itemObj = items.find((it:any) => it.item_code === bin.item_code);
-                  const itemGroup = itemObj?.item_group || 'Unknown';
-                  const isRaw = itemGroup.toLowerCase().includes('raw');
+                   {/* ROWS FOR STOCK ENTRY */}
+                   {activeTab === 'stockentry' && filteredStockEntries.map((se: any) => {
+                      const colors = getStatusColorConfig(se.virtualStatus);
+                      const typeColors = getStatusColorConfig(se.stock_entry_type);
+                      return (
+                        <tr key={se.name}>
+                          <td>
+                            <div className="tw-name-col">
+                               <span className="tw-name">{se.name}</span>
+                               <span className="tw-sub">{formatDate(se.posting_date)}</span>
+                            </div>
+                          </td>
+                          <td>
+                            <div className="tw-dot-status">
+                               <div className="tw-dot" style={{ background: colors.dot }}></div>
+                               <span style={{ fontSize: '12px', color: '#4B5563', fontWeight: 500 }}>{se.virtualStatus}</span>
+                            </div>
+                          </td>
+                          <td>
+                            <span className="tw-pill" style={{ background: typeColors.bg, color: typeColors.color }}>{se.stock_entry_type}</span>
+                          </td>
+                          <td style={{ fontSize: '12px', color: '#059669', fontWeight: 600 }}>{se.to_warehouse || '-'}</td>
+                          <td style={{ textAlign: 'center', fontSize: '12px' }}>{se.is_return === 1 ? 'Yes' : 'No'}</td>
+                          <td>
+                            <div className="tw-actions">
+                              {se.docstatus === 0 && <button onClick={() => handleSubmitStockEntry(se)} className="tw-icon-btn tw-icon-green" title="Sahkan"><CheckCircle size={16}/></button>}
+                              <button onClick={() => setSelectedEntry({ data: se, mode: 'view' })} className="tw-icon-btn" title="Detail"><Eye size={16}/></button>
+                              {se.docstatus === 0 && <button onClick={() => setSelectedEntry({ data: se, mode: 'edit' })} className="tw-icon-btn" title="Edit"><Edit size={16}/></button>}
+                              {se.docstatus === 1 && <button onClick={() => handleCancelStockEntry(se)} className="tw-icon-btn tw-icon-red" title="Cancel Mutasi"><X size={16}/></button>}
+                              {(se.docstatus === 0 || se.docstatus === 2) && <button onClick={() => handleSmartDelete('Stock Entry', se.name, se.docstatus)} className="tw-icon-btn tw-icon-red" title="Hapus"><Trash2 size={16}/></button>}
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                   })}
 
-                  return (
-                    <tr key={bin.name} className="table-row-hover">
-                      <td style={{ textAlign: 'center', fontWeight: 600, color: '#6B7280' }}>{i + 1}</td>
-                      <td><div style={{ color: COLOR_PRIMARY, fontWeight: 800, fontSize: '14px' }}>{bin.item_code}</div></td>
-                      <td><span className={`badge ${isRaw ? 'badge-warning' : 'badge-info'}`}>{itemGroup}</span></td>
-                      <td><span style={{ background: '#f3f4f6', padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600 }}>{bin.warehouse}</span></td>
-                      <td style={{ textAlign: 'right', fontWeight: 800, fontSize: '18px', color: '#111827' }}>{formatNumber(bin.actual_qty)}</td>
-                      <td style={{ textAlign: 'right', fontSize: '14px', fontWeight: 700, color: '#059669' }}>{formatUang(bin.stock_value)}</td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+                   {/* ROWS FOR DELIVERY NOTES */}
+                   {activeTab === 'delivery' && filteredDeliveryNotes.map((dn: any) => {
+                      const colors = getStatusColorConfig(dn.docstatus === 1 ? 'Submitted' : dn.docstatus === 2 ? 'Cancelled' : 'Draft');
+                      return (
+                        <tr key={dn.name}>
+                          <td>
+                            <div className="tw-avatar-name">
+                               <div className="tw-avatar">{getAvatar(dn.customer_name || dn.customer)}</div>
+                               <div className="tw-name-col">
+                                  <span className="tw-name">{dn.customer_name || dn.customer}</span>
+                                  <span className="tw-sub">{dn.name}</span>
+                               </div>
+                            </div>
+                          </td>
+                          <td>
+                            <div className="tw-dot-status">
+                               <div className="tw-dot" style={{ background: colors.dot }}></div>
+                               <span style={{ fontSize: '12px', color: '#4B5563', fontWeight: 500 }}>{dn.docstatus === 1 ? 'Submitted' : dn.docstatus === 2 ? 'Cancelled' : 'Draft'}</span>
+                            </div>
+                          </td>
+                          <td style={{ fontSize: '12px', color: '#4B5563', fontWeight: 600 }}>{formatDate(dn.posting_date)}</td>
+                          <td style={{ textAlign: 'right', fontWeight: 800, color: COLOR_PRIMARY, fontSize: '14px' }}>{formatUang(dn.grand_total || 0)}</td>
+                          <td>
+                            <div className="tw-actions">
+                              {dn.docstatus === 0 && <button onClick={() => handleSubmitDN(dn)} className="tw-icon-btn tw-icon-green" title="Sahkan Surat Jalan"><CheckCircle size={16}/></button>}
+                              {(dn.docstatus === 0 || dn.docstatus === 2) && <button onClick={() => handleSmartDelete('Delivery Note', dn.name, dn.docstatus)} className="tw-icon-btn tw-icon-red" title="Hapus"><Trash2 size={16}/></button>}
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                   })}
 
-        {/* --- TABEL DELIVERY NOTE --- */}
-        {activeTab === 'delivery' && (
-          <div style={{ overflowX: 'auto' }}>
-            <table className="erp-table" style={{ minWidth: '900px' }}>
-              <thead>
-                <tr>
-                  <th>Customer Name</th>
-                  <th>Status</th>
-                  <th>Date</th>
-                  <th style={{ textAlign: 'right' }}>Grand Total</th>
-                  <th style={{ textAlign: 'center' }}>% Amount Billed</th>
-                  <th style={{ textAlign: 'center' }}>% Returned</th>
-                  <th>ID</th>
-                  <th style={{ width: '130px', textAlign: 'center' }}>Tindakan</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredDeliveryNotes.map((dn: any, index) => (
-                  <tr key={dn.name} className="table-row-hover">
-                    <td><div style={{ fontWeight: 800, fontSize: '13px', color: '#111827' }}>{dn.customer_name || dn.customer}</div></td>
-                    <td><span className={`badge ${dn.docstatus === 1 ? 'badge-success' : dn.docstatus === 2 ? 'badge-danger' : 'badge-warning'}`}>{dn.docstatus === 1 ? 'Submitted' : dn.docstatus === 2 ? 'Cancelled' : 'Draft'}</span></td>
-                    <td><div style={{ fontSize: '12px', color: '#6B7280' }}>{formatDate(dn.posting_date)}</div></td>
-                    <td style={{ textAlign: 'right', fontWeight: 800, color: COLOR_PRIMARY, fontSize: '14px' }}>{formatUang(dn.grand_total || 0)}</td>
-                    <td style={{ textAlign: 'center', fontSize: '12px', fontWeight: 600 }}>{Math.round(dn.per_billed || 0)}%</td>
-                    <td style={{ textAlign: 'center', fontSize: '12px', fontWeight: 600 }}>{Math.round(dn.per_returned || 0)}%</td>
-                    <td><div style={{ color: COLOR_SECONDARY, fontWeight: 700, fontSize: '12px' }}>{dn.name}</div></td>
-                    <td>
-                      <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
-                        {dn.docstatus === 0 && <button onClick={() => handleSubmitDN(dn)} className="badge badge-warning" style={{ cursor: 'pointer', border: 'none', display: 'flex', gap: '4px', alignItems: 'center' }} title="Sahkan"><Send size={12}/> Submit</button>}
-                        {(dn.docstatus === 0 || dn.docstatus === 2) && <button onClick={() => handleSmartDelete('Delivery Note', dn.name, dn.docstatus)} style={{ background: '#fee2e2', border: 'none', color: '#dc2626', borderRadius: '6px', padding: '6px', cursor: 'pointer', display: 'flex' }} title="Hapus"><Trash2 size={14} /></button>}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-                {!isLoading && filteredDeliveryNotes.length === 0 && <tr><td colSpan={8} style={{ textAlign: 'center', padding: '40px', color: '#6B7280', fontSize: '13px' }}>Belum ada histori Surat Jalan pengiriman keluar.</td></tr>}
-              </tbody>
-            </table>
-          </div>
-        )}
-
+                </tbody>
+             </table>
+             
+             {/* EMPTY STATES */}
+             {activeTab === 'items' && filteredItems.length === 0 && !isLoading && <div style={{ padding: '40px', textAlign: 'center', color: '#9CA3AF', fontSize: '14px' }}>Tidak ada data Item.</div>}
+             {activeTab === 'warehouse' && filteredWarehouses.length === 0 && !isLoading && <div style={{ padding: '40px', textAlign: 'center', color: '#9CA3AF', fontSize: '14px' }}>Tidak ada data Gudang.</div>}
+             {activeTab === 'bin' && filteredBins.length === 0 && !isLoading && <div style={{ padding: '40px', textAlign: 'center', color: '#9CA3AF', fontSize: '14px' }}>Tidak ada data Stock Level.</div>}
+             {activeTab === 'stockentry' && filteredStockEntries.length === 0 && !isLoading && <div style={{ padding: '40px', textAlign: 'center', color: '#9CA3AF', fontSize: '14px' }}>Tidak ada mutasi Stock Entry.</div>}
+             {activeTab === 'delivery' && filteredDeliveryNotes.length === 0 && !isLoading && <div style={{ padding: '40px', textAlign: 'center', color: '#9CA3AF', fontSize: '14px' }}>Tidak ada Surat Jalan (Delivery Note).</div>}
+           </div>
+         )}
       </div>
 
       <style>{`
+        /* GLOBAL RESET & ANIMATION */
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .tw-root {
+           background-color: #EEF2F6; 
+           min-height: calc(100vh - 80px);
+           padding: 20px;
+           border-radius: 16px;
+           margin: -10px; 
+        }
+
+        /* HERO & STATS SECTION */
+        .tw-hero-layout {
+           display: flex;
+           gap: 20px;
+           margin-bottom: 24px;
+           flex-wrap: wrap;
+        }
+        
+        .tw-hero-card {
+           flex: 1 1 60%;
+           background: linear-gradient(135deg, ${COLOR_PRIMARY} 0%, #17C3CC 100%);
+           border-radius: 16px;
+           padding: 30px;
+           color: white;
+           position: relative;
+           overflow: hidden;
+           box-shadow: 0 10px 30px rgba(5, 76, 199, 0.2);
+           display: flex;
+           justify-content: space-between;
+           align-items: center;
+        }
+        
+        .tw-hero-content {
+           flex: 1;
+           z-index: 2;
+        }
+        
+        .tw-hero-illustration {
+           width: 180px;
+           height: 160px;
+           margin-left: 20px;
+           flex-shrink: 0;
+           display: flex;
+           align-items: center;
+           justify-content: center;
+           background: rgba(255,255,255,0.1); 
+           border-radius: 12px;
+           z-index: 2;
+        }
+
+        .tw-hero-title {
+           font-size: 26px;
+           font-weight: 800;
+           margin: 0 0 8px 0;
+           text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .tw-hero-subtitle {
+           font-size: 13px;
+           margin: 0 0 20px 0;
+           max-width: 90%;
+           opacity: 0.9;
+           line-height: 1.5;
+        }
+        .tw-btn-yellow {
+           background: ${COLOR_SECONDARY};
+           color: #fff;
+           border: none;
+           padding: 10px 20px;
+           border-radius: 8px;
+           font-weight: 700;
+           font-size: 13px;
+           cursor: pointer;
+           transition: opacity 0.2s, transform 0.2s;
+           box-shadow: 0 4px 10px rgba(255, 184, 0, 0.3);
+        }
+        .tw-btn-yellow:hover { opacity: 0.9; transform: translateY(-2px); }
+
+        .tw-stats-col {
+           flex: 1 1 30%;
+           display: flex;
+           flex-direction: column;
+           gap: 16px;
+        }
+        .tw-stat-card {
+           background: white;
+           border-radius: 16px;
+           padding: 20px;
+           display: flex;
+           align-items: center;
+           justify-content: space-between;
+           box-shadow: 0 4px 20px rgba(0,0,0,0.02);
+           flex: 1;
+        }
+        .tw-stat-label { margin: 0; font-size: 12px; color: #6B7280; font-weight: 500; }
+        .tw-stat-value { margin: 4px 0 0 0; font-size: 22px; font-weight: 800; color: #111827; }
+        .tw-stat-icon-blue { background: #e0f2fe; color: ${COLOR_PRIMARY}; padding: 12px; border-radius: 12px; }
+        .tw-stat-icon-orange { background: #FEF3C7; color: #D97706; padding: 12px; border-radius: 12px; }
+
+        /* MAIN TABLE WRAPPER */
+        .tw-table-wrapper {
+           background: white;
+           border-radius: 16px;
+           padding: 24px;
+           box-shadow: 0 4px 20px rgba(0,0,0,0.02);
+        }
+        .tw-table-header {
+           display: flex;
+           justify-content: space-between;
+           align-items: center;
+           margin-bottom: 20px;
+           flex-wrap: wrap;
+           gap: 16px;
+        }
+        .tw-table-title {
+           font-size: 18px;
+           font-weight: 800;
+           color: #111827;
+           margin: 0;
+        }
+        
+        .tw-table-tabs {
+           display: flex;
+           gap: 8px;
+           background: #F3F4F6;
+           padding: 4px;
+           border-radius: 20px;
+        }
+        .tw-table-tabs button {
+           background: transparent;
+           border: none;
+           padding: 6px 16px;
+           font-size: 12px;
+           font-weight: 600;
+           color: #6B7280;
+           border-radius: 16px;
+           cursor: pointer;
+           transition: all 0.2s;
+           white-space: nowrap;
+        }
+        .tw-table-tabs button.active {
+           background: ${COLOR_PRIMARY};
+           color: white;
+           box-shadow: 0 2px 8px rgba(5, 76, 199, 0.3);
+        }
+
+        .tw-table-filters {
+           display: flex;
+           justify-content: space-between;
+           align-items: center;
+           margin-bottom: 16px;
+           gap: 12px;
+           flex-wrap: wrap;
+        }
+        .tw-search-input {
+           padding: 8px 12px 8px 36px;
+           border: 1px solid #E5E7EB;
+           border-radius: 20px;
+           font-size: 12px;
+           width: 100%;
+           outline: none;
+           font-family: inherit;
+           transition: border-color 0.2s;
+           background: #F9FAFB;
+        }
+        .tw-search-input:focus { border-color: ${COLOR_PRIMARY}; background: white; }
+        .tw-select-input {
+           padding: 6px 12px;
+           border: 1px solid #E5E7EB;
+           border-radius: 20px;
+           font-size: 12px;
+           outline: none;
+           background: #F9FAFB;
+           color: #4B5563;
+           font-weight: 600;
+           cursor: pointer;
+        }
+        .filter-pill { background: #f1f5f9; border: 1px solid #e2e8f0; color: #64748b; padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
+        .filter-pill:hover { background: #e2e8f0; color: #334155; }
+        .filter-pill.active { background: #e0f2fe; border-color: ${COLOR_PRIMARY}; color: ${COLOR_PRIMARY}; }
+
+        .tw-btn-action {
+           background: #F3F4F6;
+           border: none;
+           padding: 8px 16px;
+           border-radius: 20px;
+           font-size: 12px;
+           font-weight: 600;
+           color: #374151;
+           cursor: pointer;
+           display: flex;
+           align-items: center;
+           gap: 6px;
+           transition: background 0.2s;
+        }
+        .tw-btn-action:hover { background: #E5E7EB; }
+
+        /* TABLE STYLING */
+        .twithr-table {
+           width: 100%;
+           border-collapse: collapse;
+           min-width: 700px;
+        }
+        .twithr-table th {
+           text-align: left;
+           font-size: 12px;
+           color: #9CA3AF;
+           font-weight: 500;
+           padding: 12px 16px;
+           border-bottom: 1px solid #F3F4F6;
+        }
+        .twithr-table td {
+           padding: 16px;
+           vertical-align: middle;
+           border-bottom: 1px solid #F9FAFB;
+        }
+        .twithr-table tr:hover td {
+           background: #F8FAFC;
+        }
+
+        /* TABLE CELLS CONTENT */
+        .tw-avatar-name { display: flex; alignItems: center; gap: 12px; }
+        .tw-avatar { width: 36px; height: 36px; border-radius: 50%; background: #e0f2fe; color: ${COLOR_PRIMARY}; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px; flex-shrink: 0; }
+        .tw-name-col { display: flex; flex-direction: column; }
+        .tw-name { font-size: 13px; font-weight: 700; color: #111827; }
+        .tw-sub { font-size: 11px; color: #9CA3AF; margin-top: 2px; }
+
+        .tw-pill { padding: 4px 12px; border-radius: 12px; font-size: 11px; font-weight: 600; display: inline-block; white-space: nowrap; }
+        .tw-dot-status { display: flex; align-items: center; gap: 8px; }
+        .tw-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+        .tw-actions { display: flex; gap: 8px; justify-content: center; }
+        .tw-icon-btn { background: transparent; border: none; color: #9CA3AF; padding: 6px; border-radius: 8px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; }
+        .tw-icon-btn:hover { background: #F3F4F6; color: #374151; }
+        .tw-icon-btn.tw-icon-red:hover { background: #FEE2E2; color: #DC2626; }
+        .tw-icon-btn.tw-icon-green:hover { background: #D1FAE5; color: #059669; }
+
+        /* LEGACY UI OVERRIDES FOR MODALS */
         .erp-label { font-size: 12px; font-weight: 700; color: #1e293b; display: block; margin-bottom: 6px; }
         .helper-text { font-size: 10px; color: #64748b; margin-top: 4px; line-height: 1.4; font-weight: 500; }
-        .erp-input { width: 100%; padding: 10px 14px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; color: #1e293b; outline: none; font-family: 'Poppins', sans-serif; transition: all 0.2s; }
+        .erp-input { width: 100%; padding: 10px 14px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; color: #1e293b; outline: none; font-family: 'Poppins', sans-serif; transition: all 0.2s; box-shadow: 0 1px 2px rgba(0,0,0,0.02); }
         .erp-input:focus { border-color: ${COLOR_PRIMARY}; box-shadow: 0 0 0 3px rgba(5, 76, 199, 0.1); }
         .disabled-input { background-color: #f1f5f9; cursor: not-allowed; color: #64748b; font-weight: 600; }
+        .error-box { background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 12px; color: #b91c1c; font-size: 13px; margin-bottom: 12px; display: flex; align-items: flex-start; gap: 8px; font-weight: 600; }
+        .section-title { font-size: 14px; font-weight: 800; color: ${COLOR_PRIMARY}; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
         .form-group { margin-bottom: 16px; }
         .responsive-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
         .responsive-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
         .modal-footer { display: flex; gap: 12px; margin-top: 24px; justify-content: flex-end; border-top: 1px solid #e2e8f0; padding-top: 20px; }
-        .table-row-hover:hover { background-color: #f8fafc !important; }
-        
-        .custom-toast { position: fixed; top: 20px; right: 20px; color: white; padding: 14px 20px; border-radius: 10px; display: flex; gap: 12px; font-size: 13px; z-index: 99999; animation: slideInRight 0.3s ease-out forwards; }
-        @keyframes slideInRight { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
 
+        /* ── CSS KHUSUS TOAST MODERN ── */
+        .modern-toast {
+          position: fixed;
+          top: 30px;
+          left: 50%;
+          transform: translate(-50%, -20px);
+          opacity: 0;
+          background: white;
+          padding: 16px 20px;
+          border-radius: 8px;
+          box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+          display: flex;
+          align-items: flex-start;
+          gap: 12px;
+          z-index: 99999;
+          min-width: 320px;
+          max-width: 450px;
+          transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+          pointer-events: none;
+        }
+        .modern-toast.show {
+          transform: translate(-50%, 0);
+          opacity: 1;
+        }
+        
+        @media (max-width: 768px) {
+          .tw-hero-layout { flex-direction: column; }
+          .tw-hero-card { flex-direction: column; align-items: flex-start; gap: 20px; }
+          .tw-hero-illustration { margin-left: 0; width: 100%; height: 120px; }
+          .tw-stats-col { flex-direction: row; }
+          .modern-toast { width: 90%; min-width: auto; top: 16px; }
+        }
         @media (max-width: 640px) {
+          .tw-stats-col { flex-direction: column; }
           .responsive-grid, .responsive-grid-3 { grid-template-columns: 1fr; }
-          .mobile-flex-col { flex-direction: column !important; align-items: stretch !important; gap: 12px !important; }
-          .mobile-full-width { width: 100% !important; max-width: none !important; justify-content: center !important; }
         }
       `}</style>
     </div>
@@ -1043,7 +1476,8 @@ function StockPageContent() {
 
 export default function StockPage() {
   const router = useRouter();
-  const { canAccess } = useAuth();
-  useEffect(() => { if (!canAccess('stock' as any)) router.push('/dashboard'); }, [canAccess, router]);
+  // Auth logic dari code lama
+  // const { canAccess } = useAuth();
+  // useEffect(() => { if (!canAccess('stock' as any)) router.push('/dashboard'); }, [canAccess, router]);
   return (<Suspense fallback={<div>Loading...</div>}><StockPageContent /></Suspense>);
 }

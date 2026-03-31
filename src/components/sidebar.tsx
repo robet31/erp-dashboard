@@ -8,7 +8,7 @@ import { getRoleConfig } from '@/config/rbac';
 import {
   Home, PieChart, Users, ShoppingCart, Receipt, Package, Warehouse,
   ArrowRightLeft, Truck, Layers, Cog, Wrench, X, LayoutDashboard,
-  LogOut, ChevronLeft, ChevronRight, Clock, Wifi, WifiOff, Zap
+  LogOut, ChevronLeft, ChevronRight, Clock, Wifi, WifiOff
 } from 'lucide-react';
 import { getInitials, shortenName } from '@/lib/utils';
 import { Suspense, useEffect, useState } from 'react';
@@ -98,27 +98,46 @@ function SidebarContent() {
   const dayName = dayNames[now.getDay()];
   const dateStr = `${now.getDate()} ${monthNames[now.getMonth()]} ${now.getFullYear()}`;
   const timeStr = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-
-  // Animate seconds progress
   const secondsPct = (now.getSeconds() / 59) * 100;
+
+  // --- KONTEN DINAMIS BERDASARKAN ROLE ---
+  let cardTitle = "Artavista ERP";
+  let cardDesc = "Sistem tersinkronisasi secara penuh.";
+  let illSrc = "/images/ill-default.png"; 
+
+  const userRole = user.role.toLowerCase();
+  
+  if (userRole === 'administrator' || userRole === 'admin') {
+      cardTitle = "Administrator";
+      cardDesc = "Kendali penuh atas seluruh modul operasional.";
+      illSrc = "/humans1.png"; 
+  } else if (userRole.includes('sales')) {
+      cardTitle = "Kinerja Sales";
+      cardDesc = "Pantau target & tagihan.";
+      illSrc = "/images/ill-sales.png";
+  } else if (userRole.includes('stock') || userRole.includes('gudang')) {
+      cardTitle = "Kelola Stok";
+      cardDesc = "Mutasi barang terpantau aman.";
+      illSrc = "/images/ill-stock.png";
+  } else if (userRole.includes('manufacturing') || userRole.includes('produksi')) {
+      cardTitle = "Produksi";
+      cardDesc = "Kejar target Work Order harian.";
+      illSrc = "/images/ill-mfg.png";
+  }
 
   return (
     <>
       <aside className={`main-sidebar ${isOpen ? 'is-open' : ''} ${isMinimized ? 'is-minimized' : ''}`}>
-        {/* Header - Logo */}
+        
+        {/* Header Lurus & Presisi (Sejajar dengan Topbar 70px) */}
         <div className="sidebar-header">
           <div className="sidebar-logo-wrap">
-            <img src="/logoartawhite.png" alt="Artavista" className="logo-img" />
-            {!isMinimized && (
-              <div className="sidebar-brand-pulse">
-                <Zap size={10} />
-              </div>
-            )}
+            <img src="/logo.png" alt="Artavista ERP" className="sidebar-main-logo" />
           </div>
           <button onClick={closeSidebar} className="close-sidebar-btn"><X size={18} /></button>
         </div>
 
-        {/* Minimize Toggle Button */}
+        {/* Minimize Toggle Button - Presisi di tengah Header */}
         <button className="minimize-btn" onClick={toggleMinimize} title={isMinimized ? 'Perluas sidebar' : 'Minimize sidebar'}>
           {isMinimized ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
         </button>
@@ -186,6 +205,19 @@ function SidebarContent() {
           })}
         </nav>
 
+        {/* BOTTOM ERP SYSTEM INFO CARD */}
+        {!isMinimized && (
+          <div className="sidebar-promo-card">
+            <div className="promo-illustration">
+              <img src={illSrc} alt={cardTitle} />
+            </div>
+            <div className="promo-content-right">
+              <h4>{cardTitle}</h4>
+              <p>{cardDesc}</p>
+            </div>
+          </div>
+        )}
+
         {/* Footer - User Profile */}
         <div className="sidebar-footer">
           <Link href="/dashboard/profile" className="user-profile-mini" title={isMinimized ? `${user.full_name} - ${roleConfig.label}` : undefined} style={{ textDecoration: 'none' }}>
@@ -224,7 +256,7 @@ function SidebarContent() {
           transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
           z-index: 90;
           position: relative;
-          border-right: 1px solid #e5e7eb;
+          border-right: 1px solid #f1f5f9;
         }
 
         .main-sidebar.is-minimized {
@@ -232,62 +264,46 @@ function SidebarContent() {
           min-width: 72px;
         }
 
-        /* ── HEADER ── */
+        /* ── HEADER & BRANDING LURUS PRESISI ── */
         .sidebar-header {
-          padding: 16px 16px 14px;
-          border-bottom: 1px solid #f3f4f6;
+          padding: 0 20px; /* Kiri Kanan presisi dengan topbar dan konten */
+          height: 70px;    /* Fix sama dengan tinggi Topbar */
           display: flex;
-          align-items: center;
+          align-items: center; /* Rata tengah vertikal */
           justify-content: space-between;
-          gap: 8px;
+          border-bottom: 1px solid transparent; 
         }
 
         .sidebar-logo-wrap {
-          position: relative;
           display: flex;
           align-items: center;
+          width: 100%;
         }
 
-        .logo-img {
-          width: 230px;
-          height: 54px;
-          object-fit: contain;
-          border-radius: 10px;
-          background: linear-gradient(135deg, #054CC7 0%, #17C3CC 100%);
-          padding: 6px 10px;
-          transition: width 0.3s, height 0.3s;
+        .sidebar-main-logo {
+          height: auto; 
+          max-height: 36px; /* Tinggi logo proporsional */
+          width: auto; 
+          max-width: 100%; 
+          object-fit: contain; 
+          object-position: left center; 
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
-        .main-sidebar.is-minimized .logo-img {
-          width: 44px;
-          height: 44px;
-          padding: 8px;
+        /* Trik saat di-minimize agar hanya icon kiri terlihat rapi */
+        .main-sidebar.is-minimized .sidebar-main-logo {
+          width: 32px;
+          height: 32px;
+          object-fit: cover; 
+          object-position: left center; 
         }
 
-        .sidebar-brand-pulse {
-          position: absolute;
-          top: -4px;
-          right: -6px;
-          width: 16px;
-          height: 16px;
-          background: linear-gradient(135deg, #17C3CC, #054CC7);
-          border-radius: 50%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: white;
-          animation: pulseBrand 2s ease-in-out infinite;
-        }
-
-        @keyframes pulseBrand {
-          0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(23,195,204,0.4); }
-          50% { transform: scale(1.15); box-shadow: 0 0 0 6px rgba(23,195,204,0); }
-        }
-
+        /* Posisi Minimize Berada di TENGAH garis potong Header */
         .minimize-btn {
           position: absolute;
           right: -12px;
-          top: 72px;
+          top: 35px; /* Setengah dari height Header 70px */
+          transform: translateY(-50%);
           width: 24px;
           height: 24px;
           border-radius: 50%;
@@ -299,23 +315,23 @@ function SidebarContent() {
           cursor: pointer;
           z-index: 10;
           color: #6b7280;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+          box-shadow: 0 2px 8px rgba(0,0,0,0.05);
           transition: all 0.2s;
         }
 
         .minimize-btn:hover {
           background: #eff6ff;
           color: #054CC7;
-          transform: scale(1.1);
+          transform: translateY(-50%) scale(1.1);
         }
 
-        /* ── CLOCK WIDGET ── */
+        /* ── CLOCK WIDGET (Top) ── */
         .sidebar-clock {
-          margin: 12px 12px 8px;
+          margin: 4px 16px 12px;
           padding: 12px 14px;
           background: linear-gradient(135deg, #eff6ff 0%, #e0f7ff 100%);
           border: 1px solid #bfdbfe;
-          border-radius: 14px;
+          border-radius: 12px;
         }
 
         .clock-top {
@@ -383,72 +399,62 @@ function SidebarContent() {
         /* ── NAVIGATION ── */
         .sidebar-nav {
           flex: 1;
-          padding: 10px 10px;
+          padding: 8px 12px;
           overflow-y: auto;
           overflow-x: hidden;
-          scrollbar-width: thin;
-          scrollbar-color: #e5e7eb transparent;
+          scrollbar-width: none;
         }
+        .sidebar-nav::-webkit-scrollbar { display: none; }
 
-        .sidebar-nav::-webkit-scrollbar { width: 4px; }
-        .sidebar-nav::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 2px; }
-
-        .nav-group {
-          margin-bottom: 4px;
-        }
+        .nav-group { margin-bottom: 8px; }
 
         .nav-group-title {
-          font-size: 9.5px;
+          font-size: 10px;
           color: #9ca3af;
           font-weight: 700;
-          padding: 10px 10px 6px;
+          padding: 12px 10px 8px;
           text-transform: uppercase;
-          letter-spacing: 0.12em;
+          letter-spacing: 0.1em;
           display: flex;
           align-items: center;
           gap: 6px;
         }
 
-        .nav-group-emoji {
-          font-size: 12px;
-        }
+        .nav-group-emoji { font-size: 13px; }
 
         .nav-group-divider {
           height: 2px;
           border-radius: 1px;
-          margin: 10px 8px 8px;
-          opacity: 0.4;
+          margin: 12px 8px 8px;
+          opacity: 0.3;
         }
 
         .nav-items {
           display: flex;
           flex-direction: column;
-          gap: 2px;
+          gap: 4px;
         }
 
         .nav-item {
           display: flex;
           align-items: center;
-          color: #4b5563;
+          color: #64748b;
           background: transparent;
           font-weight: 500;
           position: relative;
           text-decoration: none;
-          padding: 9px 10px;
+          padding: 10px 12px;
           border-radius: 10px;
           transition: all 0.2s ease;
           white-space: nowrap;
-          overflow: visible;
         }
 
         .nav-item:hover {
-          background: #f3f4f6 !important;
-          color: #054CC7 !important;
+          background: #f8fafc;
+          color: #054CC7;
         }
 
-        .nav-item:hover .nav-icon {
-          color: var(--item-color, #054CC7) !important;
-        }
+        .nav-item:hover .nav-icon { color: var(--item-color, #054CC7); }
 
         .nav-item.active {
           background: #eff6ff;
@@ -456,13 +462,11 @@ function SidebarContent() {
           font-weight: 700;
         }
 
-        .nav-item.active .nav-icon {
-          color: var(--item-color, #17C3CC);
-        }
+        .nav-item.active .nav-icon { color: var(--item-color, #17C3CC); }
 
         .nav-icon {
-          color: #9ca3af;
-          margin-right: 10px;
+          color: #94a3b8;
+          margin-right: 12px;
           flex-shrink: 0;
           display: flex;
           align-items: center;
@@ -470,15 +474,11 @@ function SidebarContent() {
           transition: color 0.2s;
         }
 
-        .main-sidebar.is-minimized .nav-icon {
-          margin-right: 0;
-        }
+        .main-sidebar.is-minimized .nav-icon { margin-right: 0; }
 
         .nav-label {
           flex: 1;
-          font-size: 12.5px;
-          overflow: hidden;
-          text-overflow: ellipsis;
+          font-size: 13px;
         }
 
         .active-indicator {
@@ -486,7 +486,7 @@ function SidebarContent() {
           right: 0;
           top: 50%;
           transform: translateY(-50%);
-          width: 3px;
+          width: 4px;
           height: 20px;
           border-radius: 4px 0 0 4px;
         }
@@ -506,26 +506,83 @@ function SidebarContent() {
           white-space: nowrap;
           pointer-events: none;
           z-index: 200;
-          box-shadow: 0 4px 20px rgba(0,0,0,0.4);
-          border: 1px solid rgba(255,255,255,0.1);
+          box-shadow: 0 4px 20px rgba(0,0,0,0.2);
         }
 
         .tooltip-label::before {
           content: '';
           position: absolute;
-          left: -6px;
+          left: -4px;
           top: 50%;
           transform: translateY(-50%);
-          border: 6px solid transparent;
+          border: 4px solid transparent;
           border-right-color: #1e293b;
-          border-left: none;
+        }
+
+        /* ── NEW BOTTOM CARD ── */
+        .sidebar-promo-card {
+          margin: 0 16px 16px 16px;
+          background: linear-gradient(135deg, #054CC7 0%, #17C3CC 100%);
+          border-radius: 16px;
+          padding: 16px;
+          color: white;
+          position: relative;
+          overflow: hidden;
+          box-shadow: 0 8px 20px rgba(5,76,199,0.2);
+          display: flex; 
+          justify-content: flex-end; 
+          min-height: 120px; 
+        }
+
+        .promo-illustration {
+          position: absolute;
+          left: -20px; 
+          bottom: -15px; 
+          width: 140px;
+          height: 140px;
+          z-index: 1;
+        }
+
+        .promo-illustration img {
+          width: 100%;
+          height: 100%;
+          object-fit: contain;
+          object-position: bottom left;
+          opacity: 0.95;
+        }
+        
+        .promo-content-right {
+          position: relative;
+          z-index: 2;
+          display: flex;
+          flex-direction: column;
+          align-items: flex-end; 
+          text-align: right;
+          width: 65%; 
+        }
+
+        .sidebar-promo-card h4 {
+          margin: 0 0 6px 0;
+          font-size: 15px;
+          font-weight: 800;
+          color: white;
+          line-height: 1.2;
+          text-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+
+        .sidebar-promo-card p {
+          margin: 0 0 12px 0;
+          font-size: 11px;
+          opacity: 0.9;
+          line-height: 1.4;
+          color: white;
         }
 
         /* ── FOOTER ── */
         .sidebar-footer {
-          padding: 12px 12px;
-          border-top: 1px solid #f3f4f6;
-          background: #fafafa;
+          padding: 16px 16px;
+          border-top: 1px solid #f1f5f9;
+          background: #ffffff;
           display: flex;
           align-items: center;
           gap: 10px;
@@ -535,41 +592,34 @@ function SidebarContent() {
           flex: 1;
           display: flex;
           align-items: center;
-          gap: 10px;
+          gap: 12px;
           min-width: 0;
           overflow: hidden;
         }
 
         .user-avatar {
-          width: 36px;
-          height: 36px;
-          border-radius: 10px;
+          width: 40px;
+          height: 40px;
+          border-radius: 12px;
           display: flex;
           align-items: center;
           justify-content: center;
           color: white;
-          font-size: 12px;
+          font-size: 13px;
           font-weight: 800;
           flex-shrink: 0;
           position: relative;
-          box-shadow: 0 0 0 2px rgba(255,255,255,0.6);
         }
 
         .avatar-status {
           position: absolute;
           bottom: -2px;
           right: -2px;
-          width: 10px;
-          height: 10px;
+          width: 12px;
+          height: 12px;
           background: #10b981;
           border-radius: 50%;
           border: 2px solid white;
-          animation: statusPulse 2s ease-in-out infinite;
-        }
-
-        @keyframes statusPulse {
-          0%, 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0.4); }
-          50% { box-shadow: 0 0 0 4px rgba(16,185,129,0); }
         }
 
         .user-details {
@@ -579,41 +629,41 @@ function SidebarContent() {
         }
 
         .user-name {
-          font-size: 12px;
+          font-size: 13px;
           font-weight: 700;
-          color: #111827;
+          color: #1e293b;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
         }
 
         .user-role {
-          font-size: 10px;
+          font-size: 11px;
           font-weight: 600;
-          margin-top: 1px;
+          margin-top: 2px;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
         }
 
         .logout-btn {
-          width: 34px;
-          height: 34px;
+          width: 36px;
+          height: 36px;
           border-radius: 10px;
-          background: #fee2e2;
-          border: 1px solid #fecaca;
+          background: #fef2f2;
           display: flex;
           align-items: center;
           justify-content: center;
           cursor: pointer;
-          color: #dc2626;
+          color: #ef4444;
           transition: all 0.2s;
           flex-shrink: 0;
+          border: none;
         }
 
         .logout-btn:hover {
           background: #fecaca;
-          transform: scale(1.05);
+          color: #b91c1c;
         }
 
         .close-sidebar-btn {
@@ -623,11 +673,11 @@ function SidebarContent() {
           align-items: center;
           justify-content: center;
           flex-shrink: 0;
-          background: #f3f4f6;
+          background: #f1f5f9;
           border-radius: 8px;
           border: none;
           cursor: pointer;
-          color: #374151;
+          color: #475569;
         }
 
         /* ── MOBILE ── */
@@ -635,22 +685,19 @@ function SidebarContent() {
           .main-sidebar {
             position: fixed;
             left: 0; top: 0;
-            width: 274px !important;
-            min-width: 274px !important;
+            width: 280px !important;
+            min-width: 280px !important;
             height: 100vh;
             transform: translateX(-100%);
             z-index: 90;
-            box-shadow: 4px 0 40px rgba(0,0,0,0.4);
+            box-shadow: 4px 0 40px rgba(0,0,0,0.2);
           }
           .main-sidebar.is-open { transform: translateX(0); }
-          .main-sidebar.is-minimized { width: 274px !important; min-width: 274px !important; }
-          .sidebar-header { padding: 12px 16px; justify-content: space-between; }
-          .logo-img { width: 120px; height: 34px; }
-          .close-sidebar-btn { display: flex; width: 40px; height: 40px; min-width: 40px; }
+          .main-sidebar.is-minimized { width: 280px !important; min-width: 280px !important; }
+          .sidebar-header { padding: 0 16px; height: 70px; justify-content: space-between; }
+          .close-sidebar-btn { display: flex; }
           .minimize-btn { display: none; }
-          .nav-item { padding: 12px 14px; min-height: 46px; }
-          .nav-label { font-size: 13px; }
-          .sidebar-clock { display: none; }
+          .nav-item { padding: 12px 14px; }
         }
       `}</style>
     </>
@@ -659,7 +706,7 @@ function SidebarContent() {
 
 export function Sidebar() {
   return (
-    <Suspense fallback={<div style={{ width: '260px', minWidth: '260px', background: '#ffffff', borderRight: '1px solid #e5e7eb', height: '100vh' }} />}>
+    <Suspense fallback={<div style={{ width: '260px', minWidth: '260px', background: '#ffffff', borderRight: '1px solid #f1f5f9', height: '100vh' }} />}>
       <SidebarContent />
     </Suspense>
   );
