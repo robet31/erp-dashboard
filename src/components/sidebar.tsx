@@ -46,7 +46,6 @@ const NAV_GROUPS: NavGroup[] = [
       { href: '/dashboard/manufacturing/analytics', label: 'Dashboard', icon: <PieChart size={17} />, module: 'manufacturing' },
       { href: '/dashboard/manufacturing', tabId: 'bom', label: 'BOM', icon: <Layers size={17} />, module: 'manufacturing' },
       { href: '/dashboard/manufacturing', tabId: 'workorders', label: 'Work Order', icon: <Cog size={17} />, module: 'manufacturing' },
-      { href: '/dashboard/manufacturing', tabId: 'jobcards', label: 'Job Card', icon: <Wrench size={17} />, module: 'manufacturing' },
     ]
   }
 ];

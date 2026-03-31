@@ -937,55 +937,52 @@ function StockPageContent() {
 
       {/* TABLE SECTION */}
       <div className="tw-table-wrapper">
-         <div className="tw-table-header">
+         <div className="tw-table-header" style={{ marginBottom: '16px' }}>
             <h3 className="tw-table-title">
                {activeTab === 'items' ? 'Master Item' : activeTab === 'warehouse' ? 'Lokasi Gudang' : activeTab === 'bin' ? 'Stock Level' : activeTab === 'stockentry' ? 'Mutasi Stok' : 'Surat Jalan'}
             </h3>
-            <div className="tw-table-tabs" style={{ overflowX: 'auto' }}>
-               <button className={activeTab === 'items' ? 'active' : ''} onClick={() => setActiveTab('items')}>Items</button>
-               <button className={activeTab === 'warehouse' ? 'active' : ''} onClick={() => setActiveTab('warehouse')}>Warehouses</button>
-               <button className={activeTab === 'bin' ? 'active' : ''} onClick={() => setActiveTab('bin')}>Stock Level</button>
-               <button className={activeTab === 'stockentry' ? 'active' : ''} onClick={() => setActiveTab('stockentry')}>Stock Entries</button>
-               <button className={activeTab === 'delivery' ? 'active' : ''} onClick={() => setActiveTab('delivery')}>Delivery Notes</button>
-            </div>
+            {/* TABS MENU DIHAPUS SESUAI PERMINTAAN KARENA SUDAH ADA DI SIDEBAR */}
          </div>
          
-         <div className="tw-table-filters">
-            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', flex: 1, alignItems: 'center' }}>
-                <div style={{ position: 'relative', width: '100%', maxWidth: '250px' }}>
+         <div className="tw-table-filters" style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '20px' }}>
+            {/* BARIS 1: Search Bar & Tombol Action (+ Baru) */}
+            <div style={{ display: 'flex', gap: '12px', width: '100%', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                <div style={{ position: 'relative', flex: '1 1 auto', minWidth: '200px', maxWidth: '400px' }} className="mobile-search-full">
                   <Search size={14} color="#9CA3AF" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
                   <input type="text" placeholder="Pencarian data..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="tw-search-input" />
                 </div>
 
-                <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', alignItems: 'center' }}>
-                  {activeTab === 'stockentry' && (
-                    <>
-                      <select value={seTypeFilter} onChange={e => setSeTypeFilter(e.target.value)} className="tw-btn-action" style={{ background: 'transparent', border: '1px solid #E5E7EB' }}>
-                        <option value="Semua">Semua Tipe</option>
-                        <option value="Material Receipt">Material Receipt</option>
-                        <option value="Material Issue">Material Issue</option>
-                        <option value="Material Transfer">Material Transfer</option>
-                      </select>
-                      <select value={seStatusFilter} onChange={e => setSeStatusFilter(e.target.value)} className="tw-btn-action" style={{ background: 'transparent', border: '1px solid #E5E7EB' }}>
-                        <option value="Semua">Semua Status</option>
-                        <option value="Draft">Draft</option>
-                        <option value="Submitted">Submitted</option>
-                        <option value="Cancelled">Cancelled</option>
-                      </select>
-                    </>
-                  )}
-                  <select value={sortOrder} onChange={e => setSortOrder(e.target.value as any)} className="tw-btn-action" style={{ background: 'transparent', border: '1px solid #E5E7EB' }}>
-                    <option value="desc">Urutan Baru</option>
-                    <option value="asc">Urutan Lama</option>
-                  </select>
+                <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+                  {activeTab === 'items' && <button className="tw-btn-action" onClick={() => setShowCreateItemModal(true)} style={{ background: COLOR_PRIMARY, color: 'white' }}><Plus size={14} /> Baru</button>}
+                  {activeTab === 'warehouse' && <button className="tw-btn-action" onClick={() => setShowCreateWarehouseModal(true)} style={{ background: COLOR_PRIMARY, color: 'white' }}><Plus size={14} /> Baru</button>}
+                  {activeTab === 'stockentry' && <button className="tw-btn-action" onClick={() => setShowCreateModal(true)} style={{ background: COLOR_PRIMARY, color: 'white' }}><Plus size={14} /> Baru</button>}
+                  {activeTab === 'delivery' && <button className="tw-btn-action" onClick={() => setShowCreateDNModal(true)} style={{ background: COLOR_PRIMARY, color: 'white' }}><Plus size={14} /> Baru</button>}
                 </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '8px' }}>
-              {activeTab === 'items' && <button className="tw-btn-action" onClick={() => setShowCreateItemModal(true)} style={{ background: COLOR_PRIMARY, color: 'white' }}><Plus size={14} /> Baru</button>}
-              {activeTab === 'warehouse' && <button className="tw-btn-action" onClick={() => setShowCreateWarehouseModal(true)} style={{ background: COLOR_PRIMARY, color: 'white' }}><Plus size={14} /> Baru</button>}
-              {activeTab === 'stockentry' && <button className="tw-btn-action" onClick={() => setShowCreateModal(true)} style={{ background: COLOR_PRIMARY, color: 'white' }}><Plus size={14} /> Baru</button>}
-              {activeTab === 'delivery' && <button className="tw-btn-action" onClick={() => setShowCreateDNModal(true)} style={{ background: COLOR_PRIMARY, color: 'white' }}><Plus size={14} /> Baru</button>}
+            {/* BARIS 2: Filter & Sortir (Auto Wrap ke bawah jika layar sempit) */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center', width: '100%' }}>
+                <Filter size={14} color="#9CA3AF" />
+                {activeTab === 'stockentry' && (
+                  <>
+                    <select value={seTypeFilter} onChange={e => setSeTypeFilter(e.target.value)} className="tw-btn-action" style={{ background: 'transparent', border: '1px solid #E5E7EB' }}>
+                      <option value="Semua">Semua Tipe</option>
+                      <option value="Material Receipt">Material Receipt</option>
+                      <option value="Material Issue">Material Issue</option>
+                      <option value="Material Transfer">Material Transfer</option>
+                    </select>
+                    <select value={seStatusFilter} onChange={e => setSeStatusFilter(e.target.value)} className="tw-btn-action" style={{ background: 'transparent', border: '1px solid #E5E7EB' }}>
+                      <option value="Semua">Semua Status</option>
+                      <option value="Draft">Draft</option>
+                      <option value="Submitted">Submitted</option>
+                      <option value="Cancelled">Cancelled</option>
+                    </select>
+                  </>
+                )}
+                <select value={sortOrder} onChange={e => setSortOrder(e.target.value as any)} className="tw-btn-action" style={{ background: 'transparent', border: '1px solid #E5E7EB' }}>
+                  <option value="desc">Urutan Baru</option>
+                  <option value="asc">Urutan Lama</option>
+                </select>
             </div>
          </div>
 
@@ -1304,39 +1301,6 @@ function StockPageContent() {
            margin: 0;
         }
         
-        .tw-table-tabs {
-           display: flex;
-           gap: 8px;
-           background: #F3F4F6;
-           padding: 4px;
-           border-radius: 20px;
-        }
-        .tw-table-tabs button {
-           background: transparent;
-           border: none;
-           padding: 6px 16px;
-           font-size: 12px;
-           font-weight: 600;
-           color: #6B7280;
-           border-radius: 16px;
-           cursor: pointer;
-           transition: all 0.2s;
-           white-space: nowrap;
-        }
-        .tw-table-tabs button.active {
-           background: ${COLOR_PRIMARY};
-           color: white;
-           box-shadow: 0 2px 8px rgba(5, 76, 199, 0.3);
-        }
-
-        .tw-table-filters {
-           display: flex;
-           justify-content: space-between;
-           align-items: center;
-           margin-bottom: 16px;
-           gap: 12px;
-           flex-wrap: wrap;
-        }
         .tw-search-input {
            padding: 8px 12px 8px 36px;
            border: 1px solid #E5E7EB;
@@ -1360,10 +1324,7 @@ function StockPageContent() {
            font-weight: 600;
            cursor: pointer;
         }
-        .filter-pill { background: #f1f5f9; border: 1px solid #e2e8f0; color: #64748b; padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
-        .filter-pill:hover { background: #e2e8f0; color: #334155; }
-        .filter-pill.active { background: #e0f2fe; border-color: ${COLOR_PRIMARY}; color: ${COLOR_PRIMARY}; }
-
+        
         .tw-btn-action {
            background: #F3F4F6;
            border: none;
@@ -1457,7 +1418,11 @@ function StockPageContent() {
           transform: translate(-50%, 0);
           opacity: 1;
         }
-        
+
+        /* Menyembunyikan scrollbar untuk filter pill yang bisa digeser horizontal */
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
         @media (max-width: 768px) {
           .tw-hero-layout { flex-direction: column; }
           .tw-hero-card { flex-direction: column; align-items: flex-start; gap: 20px; }
@@ -1468,6 +1433,9 @@ function StockPageContent() {
         @media (max-width: 640px) {
           .tw-stats-col { flex-direction: column; }
           .responsive-grid, .responsive-grid-3 { grid-template-columns: 1fr; }
+          
+          /* Di HP, kotak search akan memakan sisa lebar yang ada */
+          .mobile-search-full { max-width: 100% !important; flex: 1 1 100% !important; }
         }
       `}</style>
     </div>

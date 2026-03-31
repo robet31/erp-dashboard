@@ -9,21 +9,21 @@ import {
 import { formatDate } from '@/lib/utils';
 import { TableSkeleton } from '@/components/EmptyState';
 
-const FIXED_COMPANY = 'Artavista'; 
+const FIXED_COMPANY = 'Artavista';
 const COLOR_PRIMARY = '#054CC7';
-const COLOR_SECONDARY = '#17C3CC';
+const COLOR_SECONDARY = '#FFB800'; // Disamakan dengan Selling (Kuning)
 
 // ==========================================
 // TRANSLATOR ERROR FRAPPE
 // ==========================================
 const extractFrappeError = (err: any, fallbackMsg: string = 'Terjadi kesalahan sistem') => {
   let errorMsg = typeof err === 'string' ? err : (err?.message || err?.error?.message || fallbackMsg);
-  
+
   if (err?._server_messages) {
-    try { 
+    try {
       const parsed = JSON.parse(err._server_messages);
-      errorMsg = JSON.parse(parsed[0]).message.replace(/<[^>]*>?/gm, ''); 
-    } catch(e) {}
+      errorMsg = JSON.parse(parsed[0]).message.replace(/<[^>]*>?/gm, '');
+    } catch (e) { }
   }
 
   const lowerErr = errorMsg.toLowerCase();
@@ -33,17 +33,17 @@ const extractFrappeError = (err: any, fallbackMsg: string = 'Terjadi kesalahan s
     const companyName = companyMatch ? companyMatch[1].replace(/['"]/g, '').trim() : FIXED_COMPANY;
     return `Gagal Menyimpan! Perusahaan "${companyName}" belum terdaftar.`;
   }
-  
+
   if (lowerErr.includes('valuation rate not found')) {
     const match = errorMsg.match(/Item (.*?) /i) || errorMsg.match(/Item (.*?)$/i);
     const itemCode = match ? match[1].replace(/['"]/g, '').trim() : 'tersebut';
     return `Gagal! Harga Standar (Valuation Rate) untuk komponen "${itemCode}" belum diatur. Buka menu Gudang > Master Items, isi "Standard Rate (Rp)".`;
   }
-  
+
   if (lowerErr.includes('linked with') || lowerErr.includes('cannot delete')) {
     return `Gagal Dihapus! Dokumen ini sudah digunakan di transaksi lain yang sudah berjalan. Batalkan dulu transaksi yang terkait.`;
   }
-  
+
   if (lowerErr.includes('negative stock') || lowerErr.includes('insufficient')) {
     return `❌ Gagal! Stok Bahan Baku Tidak Cukup!\n\n👉 Sistem menolak karena stok fisiknya di Gudang Sumber kurang atau kosong. Silakan restock terlebih dahulu.`;
   }
@@ -129,10 +129,10 @@ function SelectQuantityModal({ title, label, maxQty, onClose, onSubmit, isSubmit
         <div style={{ padding: '24px 20px' }}>
           <div className="form-group" style={{ marginBottom: '24px' }}>
             <label className="erp-label" style={{ fontWeight: 500, fontSize: '13px', color: '#374151', marginBottom: '8px' }}>{label}</label>
-            <input 
-              type="number" min="1" max={maxQty} step="any" className="erp-input" 
-              value={qty} onChange={e => setQty(e.target.value)} 
-              style={{ fontSize: '14px', padding: '10px 14px' }} 
+            <input
+              type="number" min="1" max={maxQty} step="any" className="erp-input"
+              value={qty} onChange={e => setQty(e.target.value)}
+              style={{ fontSize: '14px', padding: '10px 14px' }}
             />
             <p style={{ fontSize: '12px', color: '#6B7280', marginTop: '6px' }}>Max: {maxQty}</p>
           </div>
@@ -172,32 +172,32 @@ function CreateBOMModal({ onClose, items, warehouses, onSuccess, showToast }: an
     if (!form.item) return setError("Pilih Produk Akhir.");
     if (bomItems.some(bi => !bi.item_code)) return setError("Pilih semua bahan baku.");
     if (Number(form.quantity) <= 0) return setError("Target produksi BOM harus lebih dari 0.");
-    
+
     setIsSubmitting(true); setError('');
     try {
       const selectedMainItem = (items || []).find((i: any) => i.item_code === form.item);
       const bomData = {
-        item: form.item, 
-        quantity: parseFloat(form.quantity), 
+        item: form.item,
+        quantity: parseFloat(form.quantity),
         uom: selectedMainItem?.stock_uom || 'Nos',
-        company: defaultCompany, 
-        is_active: 1, 
+        company: defaultCompany,
+        is_active: 1,
         items: bomItems.map((bi: any) => {
           const itemDetail = (items || []).find((it: any) => it.item_code === bi.item_code);
           return { item_code: bi.item_code, qty: parseFloat(String(bi.qty)), uom: itemDetail?.stock_uom || 'Nos', rate: itemDetail?.standard_rate || 0 };
         })
       };
-      
+
       const { apiCreate, apiUpdate } = await import('@/lib/api');
       const res: any = await apiCreate('BOM', bomData);
-      
+
       const docName = res.data?.name || res.name;
-      if(docName) await apiUpdate('BOM', docName, { docstatus: 1 });
-      
-      showToast('Resep BOM Berhasil dibuat dan langsung Aktif!', 'success'); 
+      if (docName) await apiUpdate('BOM', docName, { docstatus: 1 });
+
+      showToast('Resep BOM Berhasil dibuat dan langsung Aktif!', 'success');
       onClose(); if (onSuccess) onSuccess();
-    } catch (err: any) { 
-      setError(extractFrappeError(err, "Gagal membuat BOM.")); 
+    } catch (err: any) {
+      setError(extractFrappeError(err, "Gagal membuat BOM."));
     } finally { setIsSubmitting(false); }
   };
 
@@ -209,9 +209,9 @@ function CreateBOMModal({ onClose, items, warehouses, onSuccess, showToast }: an
             <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#111827', margin: 0 }}>Buat Resep Baru (BOM)</h2>
             <p style={{ fontSize: '12px', color: '#6B7280', marginTop: '2px' }}>Bill of Materials untuk panduan pabrik</p>
           </div>
-          <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', color: '#6B7280' }}><X size={20} /></button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6B7280' }}><X size={20} /></button>
         </div>
-        
+
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           <div className="responsive-grid">
             <div className="form-group">
@@ -226,12 +226,12 @@ function CreateBOMModal({ onClose, items, warehouses, onSuccess, showToast }: an
               <input type="number" required min="1" className="erp-input" value={form.quantity} onChange={e => setForm(f => ({ ...f, quantity: e.target.value }))} />
             </div>
           </div>
-          
+
           <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '16px', marginTop: '4px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
               <p className="section-title" style={{ margin: 0, padding: 0, border: 'none' }}>Daftar Bahan Baku (Komponen)</p>
             </div>
-            
+
             {bomItems.map((bi, i) => (
               <div key={i} style={{ display: 'flex', gap: '8px', marginBottom: '10px', alignItems: 'center' }} className="mobile-flex-col">
                 <div style={{ flex: 3 }}>
@@ -242,22 +242,22 @@ function CreateBOMModal({ onClose, items, warehouses, onSuccess, showToast }: an
                 </div>
                 <div style={{ display: 'flex', gap: '8px', flex: 1, alignItems: 'center' }}>
                   <input style={{ flex: 1, textAlign: 'center' }} type="number" min="0.1" step="any" placeholder="Qty" className="erp-input" value={bi.qty} onChange={e => { const n = [...bomItems]; n[i].qty = Number(e.target.value); setBomItems(n); }} />
-                  {bomItems.length > 1 && <button type="button" onClick={() => setBomItems(bomItems.filter((_, idx) => idx !== i))} style={{ color: '#ef4444', border:'none', background:'#fee2e2', padding: '6px', borderRadius: '6px', cursor: 'pointer', display: 'flex' }}><Trash2 size={14} /></button>}
+                  {bomItems.length > 1 && <button type="button" onClick={() => setBomItems(bomItems.filter((_, idx) => idx !== i))} style={{ color: '#ef4444', border: 'none', background: '#fee2e2', padding: '6px', borderRadius: '6px', cursor: 'pointer', display: 'flex' }}><Trash2 size={14} /></button>}
                 </div>
               </div>
             ))}
             <button type="button" className="btn btn-secondary btn-sm mobile-full-width" onClick={() => setBomItems([...bomItems, { item_code: '', qty: 1 }])} style={{ color: COLOR_PRIMARY, borderColor: COLOR_PRIMARY, background: '#eff6ff', marginTop: '4px' }} disabled={bomItems[bomItems.length - 1].item_code === ''}>+ Tambah Bahan Lain</button>
           </div>
-          
+
           {error && (
             <div className="error-box" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '8px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><AlertCircle size={16}/> <span>Ada Kendala:</span></div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><AlertCircle size={16} /> <span>Ada Kendala:</span></div>
               {error.split('\n').map((line, idx) => (
                 <span key={idx} style={{ fontWeight: line.includes('👉') ? 800 : 500, fontSize: '12px' }}>{line}</span>
               ))}
             </div>
           )}
-          
+
           <div className="modal-footer">
             <button type="button" onClick={onClose} className="btn btn-secondary mobile-btn" disabled={isSubmitting}>Batal</button>
             <button type="submit" className="btn btn-primary mobile-btn" style={{ background: COLOR_PRIMARY, borderColor: COLOR_PRIMARY }} disabled={isSubmitting}>{isSubmitting ? 'Memproses...' : 'Simpan & Aktifkan BOM'}</button>
@@ -299,9 +299,9 @@ function DetailBOMModal({ bom, workOrders, onClose }: any) {
                   <span className={`badge ${isUsed ? 'badge-info' : 'badge-warning'}`}>{isUsed ? 'Dipakai di WO' : 'Belum Dipakai'}</span>
                 </div>
               </div>
-              <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={20} color="#6B7280"/></button>
+              <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={20} color="#6B7280" /></button>
             </div>
-            
+
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px', marginBottom: '16px' }}>
               <div style={{ background: '#f8f9fb', padding: '12px', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
                 <p style={{ fontSize: '11px', color: '#6B7280', fontWeight: 600 }}>Produk Jadi Target</p>
@@ -321,7 +321,7 @@ function DetailBOMModal({ bom, workOrders, onClose }: any) {
                 </div>
               </div>
             )}
-            
+
             <p className="section-title">Bahan Baku (Komponen yang Diperlukan)</p>
             <div style={{ overflowX: 'auto', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '1px' }}>
               <table className="erp-table" style={{ width: '100%', minWidth: '400px' }}>
@@ -330,7 +330,7 @@ function DetailBOMModal({ bom, workOrders, onClose }: any) {
                   {(fullData?.items || []).map((item: any, i: number) => (
                     <tr key={i}>
                       <td><span style={{ color: COLOR_SECONDARY, fontWeight: 700 }}>{item.item_code}</span></td>
-                      <td style={{ textAlign: 'right', fontWeight: 800, color: '#111827' }}>{Number(item.qty)} <span style={{fontSize: '10px', color: '#6B7280', fontWeight: 600}}>{item.uom}</span></td>
+                      <td style={{ textAlign: 'right', fontWeight: 800, color: '#111827' }}>{Number(item.qty)} <span style={{ fontSize: '10px', color: '#6B7280', fontWeight: 600 }}>{item.uom}</span></td>
                     </tr>
                   ))}
                 </tbody>
@@ -354,16 +354,16 @@ function CreateWorkOrderModal({ onClose, boms, warehouses, onSuccess, showToast 
   const defaultCompany = useMemo(() => getDynamicCompany(warehouses), [warehouses]);
   const activeWarehouses = useMemo(() => (warehouses || []).filter((w: any) => w.type === 'Stores' || !w.is_group), [warehouses]);
 
-  const [form, setForm] = useState({ 
-    production_item: '', 
-    bom_no: '', 
-    qty: '1', 
-    source_warehouse: '', 
-    wip_warehouse: '', 
+  const [form, setForm] = useState({
+    production_item: '',
+    bom_no: '',
+    qty: '1',
+    source_warehouse: '',
+    wip_warehouse: '',
     fg_warehouse: '',
     scrap_warehouse: ''
   });
-  
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -380,33 +380,33 @@ function CreateWorkOrderModal({ onClose, boms, warehouses, onSuccess, showToast 
     if (!form.source_warehouse) return setError("Source Warehouse wajib diisi.");
     if (!form.wip_warehouse) return setError("Work-in-Progress Warehouse wajib diisi.");
     if (!form.fg_warehouse) return setError("Target Warehouse wajib diisi.");
-    
+
     setIsSubmitting(true); setError('');
     try {
-      const woData = { 
-        production_item: form.production_item, 
-        bom_no: form.bom_no, 
-        qty: parseFloat(form.qty), 
+      const woData = {
+        production_item: form.production_item,
+        bom_no: form.bom_no,
+        qty: parseFloat(form.qty),
         company: defaultCompany,
         source_warehouse: form.source_warehouse,
-        wip_warehouse: form.wip_warehouse, 
-        fg_warehouse: form.fg_warehouse, 
+        wip_warehouse: form.wip_warehouse,
+        fg_warehouse: form.fg_warehouse,
         scrap_warehouse: form.scrap_warehouse,
-        use_multi_level_bom: 0 
+        use_multi_level_bom: 0
       };
-      
+
       const { apiCreate, apiUpdate } = await import('@/lib/api');
-      
+
       // 1. Buat WO
       const res: any = await apiCreate('Work Order', woData);
       const woName = res.data?.name || res.name;
-      
+
       // 2. MAGIC: Langsung Sahkan (Submit) WO tersebut
       if (woName) {
         await apiUpdate('Work Order', woName, { docstatus: 1 });
       }
-      
-      showToast('Work Order berhasil dibuat dan Otomatis Disahkan!', 'success'); 
+
+      showToast('Work Order berhasil dibuat dan Otomatis Disahkan!', 'success');
       onClose(); if (onSuccess) onSuccess();
     } catch (err: any) { setError(extractFrappeError(err, "Gagal membuat Work Order.")); } finally { setIsSubmitting(false); }
   };
@@ -418,9 +418,9 @@ function CreateWorkOrderModal({ onClose, boms, warehouses, onSuccess, showToast 
           <div>
             <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#111827', margin: 0 }}>New Work Order</h2>
           </div>
-          <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', color: '#6B7280' }}><X size={20} /></button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6B7280' }}><X size={20} /></button>
         </div>
-        
+
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           <div className="responsive-grid">
             <div className="form-group">
@@ -443,7 +443,7 @@ function CreateWorkOrderModal({ onClose, boms, warehouses, onSuccess, showToast 
           <div className="responsive-grid">
             <div className="form-group">
               <label className="erp-label">Qty To Manufacture *</label>
-              <input type="number" required min="1" step="any" className="erp-input" value={form.qty} onChange={e => { if(!e.target.value.includes('-')) setForm(f => ({ ...f, qty: e.target.value }))}} />
+              <input type="number" required min="1" step="any" className="erp-input" value={form.qty} onChange={e => { if (!e.target.value.includes('-')) setForm(f => ({ ...f, qty: e.target.value })) }} />
             </div>
             <div className="form-group">
               <label className="erp-label">Source Warehouse *</label>
@@ -456,7 +456,7 @@ function CreateWorkOrderModal({ onClose, boms, warehouses, onSuccess, showToast 
           </div>
 
           <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '16px', marginTop: '8px' }}>
-            <h3 className="section-title" style={{ fontSize: '13px', marginBottom: '12px' }}><Layers size={14}/> Target Warehouse Details</h3>
+            <h3 className="section-title" style={{ fontSize: '13px', marginBottom: '12px' }}><Layers size={14} /> Target Warehouse Details</h3>
             <div className="responsive-grid">
               <div className="form-group">
                 <label className="erp-label">Work-in-Progress Warehouse *</label>
@@ -486,13 +486,13 @@ function CreateWorkOrderModal({ onClose, boms, warehouses, onSuccess, showToast 
 
           {error && (
             <div className="error-box" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '8px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><AlertCircle size={16}/> <span>Error:</span></div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><AlertCircle size={16} /> <span>Error:</span></div>
               {error.split('\n').map((line, idx) => (
                 <span key={idx} style={{ fontWeight: line.includes('👉') ? 800 : 500, fontSize: '12px' }}>{line}</span>
               ))}
             </div>
           )}
-          
+
           <div className="modal-footer">
             <button type="button" onClick={onClose} className="btn btn-secondary mobile-btn">Cancel</button>
             <button type="submit" className="btn btn-primary mobile-btn" style={{ background: COLOR_PRIMARY, borderColor: COLOR_PRIMARY }} disabled={isSubmitting}>
@@ -533,27 +533,27 @@ function DetailWorkOrderModal({ wo, onClose }: any) {
                   <span style={{ fontSize: '12px', color: '#6B7280' }}>Dibuat: {formatDate(fullData?.creation)}</span>
                 </div>
               </div>
-              <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={20} color="#6B7280"/></button>
+              <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={20} color="#6B7280" /></button>
             </div>
-            
+
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px', marginBottom: '16px' }}>
               <div style={{ background: '#f8f9fb', padding: '12px', borderRadius: '8px', border: '1px solid #e5e7eb' }}><p style={{ fontSize: '11px', color: '#6B7280', fontWeight: 600 }}>Barang yang Diproduksi</p><p style={{ fontSize: '14px', fontWeight: 800, color: COLOR_PRIMARY }}>{fullData?.production_item}</p></div>
               <div style={{ background: '#f8f9fb', padding: '12px', borderRadius: '8px', border: '1px solid #e5e7eb' }}><p style={{ fontSize: '11px', color: '#6B7280', fontWeight: 600 }}>BOM No</p><p style={{ fontSize: '14px', fontWeight: 800, color: '#111827' }}>{fullData?.bom_no}</p></div>
               <div style={{ background: '#ecfdf5', padding: '12px', borderRadius: '8px', border: '1px solid #a7f3d0' }}><p style={{ fontSize: '11px', color: '#047857', fontWeight: 600 }}>Qty To Manufacture</p><p style={{ fontSize: '16px', fontWeight: 800, color: '#059669' }}>{fullData?.qty}</p></div>
             </div>
-            
+
             <div style={{ background: '#ffffff', border: '1px solid #e5e7eb', padding: '16px', borderRadius: '8px' }}>
-               <h3 className="section-title" style={{ fontSize: '13px', marginTop: 0, border: 'none' }}><MapPin size={14}/> Pengaturan Alur Gudang</h3>
-               <div className="responsive-grid" style={{ gap: '10px' }}>
-                 <div>
-                   <p style={{ fontSize: '11px', color: '#6B7280', fontWeight: 600 }}>Sumber Bahan Baku (Source)</p>
-                   <p style={{ fontSize: '12px', fontWeight: 600, color: '#374151' }}>{fullData?.source_warehouse || '-'}</p>
-                 </div>
-                 <div>
-                   <p style={{ fontSize: '11px', color: '#6B7280', fontWeight: 600 }}>Penyimpanan Hasil Jadi (FG)</p>
-                   <p style={{ fontSize: '12px', fontWeight: 600, color: '#059669' }}>{fullData?.fg_warehouse || '-'}</p>
-                 </div>
-               </div>
+              <h3 className="section-title" style={{ fontSize: '13px', marginTop: 0, border: 'none' }}><MapPin size={14} /> Pengaturan Alur Gudang</h3>
+              <div className="responsive-grid" style={{ gap: '10px' }}>
+                <div>
+                  <p style={{ fontSize: '11px', color: '#6B7280', fontWeight: 600 }}>Sumber Bahan Baku (Source)</p>
+                  <p style={{ fontSize: '12px', fontWeight: 600, color: '#374151' }}>{fullData?.source_warehouse || '-'}</p>
+                </div>
+                <div>
+                  <p style={{ fontSize: '11px', color: '#6B7280', fontWeight: 600 }}>Penyimpanan Hasil Jadi (FG)</p>
+                  <p style={{ fontSize: '12px', fontWeight: 600, color: '#059669' }}>{fullData?.fg_warehouse || '-'}</p>
+                </div>
+              </div>
             </div>
 
             <div className="modal-footer">
@@ -570,7 +570,7 @@ function DetailWorkOrderModal({ wo, onClose }: any) {
 // 4. MAIN PAGE CONTENT
 // ==========================================
 function ManufacturingPageContent() {
-  const router = useRouter(); 
+  const router = useRouter();
   const searchParams = useSearchParams();
   const tabParam = searchParams.get('tab') || 'workorders';
   const [activeTab, setActiveTab] = useState(tabParam);
@@ -582,7 +582,7 @@ function ManufacturingPageContent() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreateBOM, setShowCreateBOM] = useState(false);
   const [showCreateWO, setShowCreateWO] = useState(false);
-  
+
   const [selectedBOM, setSelectedBOM] = useState<any>(null);
   const [selectedWO, setSelectedWO] = useState<any>(null);
 
@@ -623,25 +623,25 @@ function ManufacturingPageContent() {
   const handleSmartDelete = (doctype: string, docname: string, docstatus: number) => {
     if (!docname) return;
     showConfirm(`Hapus Dokumen ${doctype}?`, `Apakah Anda yakin ingin menghapus data ${docname} secara permanen? Jika data ini sudah terkait pembukuan ERPNext, ERPNext akan menolak penghapusan.`, () => {
-        closeConfirm();
-        setTimeout(() => {
-          import('@/lib/api').then(({ apiUpdate, apiDelete }) => {
-            if (docstatus === 1) apiUpdate(doctype, docname, { docstatus: 2 }).then(() => apiDelete(doctype, docname)).catch((err)=> showToast(extractFrappeError(err), 'error'));
-            else apiDelete(doctype, docname).catch((err)=> showToast(extractFrappeError(err), 'error'));
-          }).catch(()=>{});
-        }, 50);
-        showToast(`Proses hapus ${doctype} sedang dijalankan...`, 'info');
-        setTimeout(() => { refetch(); }, 800);
-      }, "Ya, Hapus Saja"
+      closeConfirm();
+      setTimeout(() => {
+        import('@/lib/api').then(({ apiUpdate, apiDelete }) => {
+          if (docstatus === 1) apiUpdate(doctype, docname, { docstatus: 2 }).then(() => apiDelete(doctype, docname)).catch((err) => showToast(extractFrappeError(err), 'error'));
+          else apiDelete(doctype, docname).catch((err) => showToast(extractFrappeError(err), 'error'));
+        }).catch(() => { });
+      }, 50);
+      showToast(`Proses hapus ${doctype} sedang dijalankan...`, 'info');
+      setTimeout(() => { refetch(); }, 800);
+    }, "Ya, Hapus Saja"
     );
   };
 
-// 💡 FUNGSI SIHIR 1: START (Material Transfer for Manufacture)
+  // 💡 FUNGSI SIHIR 1: START (Material Transfer for Manufacture)
   const handleStartConfirm = async (transferQty: number) => {
     setIsSubmittingAction(true);
     try {
       const { apiCreate, apiUpdate } = await import('@/lib/api');
-      
+
       const woRes = await fetch(`/api/frappe/resource/Work Order/${encodeURIComponent(startWO.name)}`, { cache: 'no-store' });
       const fullWo = (await woRes.json()).data;
       const bomRes = await fetch(`/api/frappe/resource/BOM/${encodeURIComponent(fullWo.bom_no)}`, { cache: 'no-store' });
@@ -649,24 +649,24 @@ function ManufacturingPageContent() {
 
       // 1. Map komponen untuk dipindah ke WIP
       const seItems = bomData.items.map((rm: any) => ({
-          item_code: rm.item_code,
-          s_warehouse: fullWo.source_warehouse, // Dari Gudang Asal
-          t_warehouse: fullWo.wip_warehouse,    // Ke Gudang Mesin/WIP
-          qty: Number(rm.qty) * transferQty,
-          uom: rm.uom
+        item_code: rm.item_code,
+        s_warehouse: fullWo.source_warehouse, // Dari Gudang Asal
+        t_warehouse: fullWo.wip_warehouse,    // Ke Gudang Mesin/WIP
+        qty: Number(rm.qty) * transferQty,
+        uom: rm.uom
       }));
 
       const transferData = {
-          stock_entry_type: "Material Transfer for Manufacture",
-          work_order: fullWo.name,
-          company: fullWo.company,
-          from_bom: 1,
-          bom_no: fullWo.bom_no,
-          use_multi_level_bom: fullWo.use_multi_level_bom || 0,
-          fg_completed_qty: transferQty,
-          items: seItems
+        stock_entry_type: "Material Transfer for Manufacture",
+        work_order: fullWo.name,
+        company: fullWo.company,
+        from_bom: 1,
+        bom_no: fullWo.bom_no,
+        use_multi_level_bom: fullWo.use_multi_level_bom || 0,
+        fg_completed_qty: transferQty,
+        items: seItems
       };
-      
+
       // 2. Eksekusi Create & Submit Stock Entry
       const seRes: any = await apiCreate('Stock Entry', transferData);
       const seName = seRes.data?.name || seRes.name;
@@ -675,7 +675,7 @@ function ManufacturingPageContent() {
       // 3. 🔍 PROSES VALIDASI KONFIRMASI (Mengecek ke DB ERPNext)
       showToast("Memverifikasi perpindahan stok di sistem...", "info");
       await new Promise(resolve => setTimeout(resolve, 1500)); // Beri waktu Frappe memproses background job
-      
+
       const verifyWoRes = await fetch(`/api/frappe/resource/Work Order/${encodeURIComponent(fullWo.name)}`, { cache: 'no-store' });
       const verifiedWo = (await verifyWoRes.json()).data;
 
@@ -684,7 +684,7 @@ function ManufacturingPageContent() {
       } else {
         showToast("⚠️ Stock Entry terbuat, tapi ada delay update status dari server Frappe. Silakan refresh.", "info");
       }
-      
+
       setStartWO(null);
       refetch();
     } catch (err: any) {
@@ -699,32 +699,32 @@ function ManufacturingPageContent() {
     setIsSubmittingAction(true);
     try {
       const { apiCreate, apiUpdate } = await import('@/lib/api');
-      
+
       const woRes = await fetch(`/api/frappe/resource/Work Order/${encodeURIComponent(finishWO.name)}`, { cache: 'no-store' });
       const fullWo = (await woRes.json()).data;
       const bomRes = await fetch(`/api/frappe/resource/BOM/${encodeURIComponent(fullWo.bom_no)}`, { cache: 'no-store' });
       const bomData = (await bomRes.json()).data;
 
       const seItems: any[] = [];
-      
+
       // 1. Bahan Baku DIKONSUMSI (BERKURANG) dari Gudang WIP
       bomData.items.forEach((rm: any) => {
         seItems.push({
           item_code: rm.item_code,
-          s_warehouse: fullWo.wip_warehouse, 
+          s_warehouse: fullWo.wip_warehouse,
           t_warehouse: "", // 👈 KOSONG (Wajib! Penanda bahan baku hangus dipakai)
           qty: Number(rm.qty) * manufactureQty,
           uom: rm.uom
         });
       });
-      
+
       // 2. Barang Jadi DIBUAT (BERTAMBAH) di Gudang Target
       seItems.push({
         item_code: fullWo.production_item,
         s_warehouse: "", // 👈 KOSONG (Wajib! Penanda barang ini baru diciptakan)
         t_warehouse: fullWo.fg_warehouse,
         qty: manufactureQty,
-        is_finished_item: 1, 
+        is_finished_item: 1,
         uom: bomData.uom || bomData.stock_uom || 'Nos'
       });
 
@@ -736,9 +736,9 @@ function ManufacturingPageContent() {
         bom_no: fullWo.bom_no,
         use_multi_level_bom: fullWo.use_multi_level_bom || 0,
         fg_completed_qty: manufactureQty,
-        items: seItems 
+        items: seItems
       };
-      
+
       // 3. Eksekusi Create & Submit Stock Entry Manufacture
       const seRes: any = await apiCreate('Stock Entry', seData);
       const seName = seRes.data?.name || seRes.name;
@@ -747,7 +747,7 @@ function ManufacturingPageContent() {
       // 4. 🔍 PROSES VALIDASI KONFIRMASI (Mengecek ke DB ERPNext)
       showToast("Menyimpan hasil rakitan ke Gudang Finish Good...", "info");
       await new Promise(resolve => setTimeout(resolve, 1500)); // Beri waktu Frappe memproses mutasi
-      
+
       const verifyWoRes = await fetch(`/api/frappe/resource/Work Order/${encodeURIComponent(fullWo.name)}`, { cache: 'no-store' });
       const verifiedWo = (await verifyWoRes.json()).data;
 
@@ -758,7 +758,7 @@ function ManufacturingPageContent() {
       }
 
       setFinishWO(null);
-      refetch(); 
+      refetch();
     } catch (err: any) {
       showToast(extractFrappeError(err, "Gagal menyelesaikan proses produksi."), 'error');
     } finally {
@@ -770,210 +770,246 @@ function ManufacturingPageContent() {
     return name ? name.charAt(0).toUpperCase() : '?';
   };
 
+  // ── LOGIKA DINAMIS HERO CARD ──
+  let heroTitle = '';
+  let heroSubtitle = '';
+  let heroBtnText = '';
+  let heroBtnAction = () => { };
+
+  if (activeTab === 'bom') {
+    const activeBoms = boms?.filter((b: any) => b.is_active).length || 0;
+    heroTitle = 'Manajemen Resep Produksi';
+    heroSubtitle = `Saat ini terdapat ${activeBoms} resep (BOM) aktif di sistem. Pastikan standar komposisi material sesuai sebelum memulai produksi.`;
+    heroBtnText = 'Buat BOM Baru';
+    heroBtnAction = () => setShowCreateBOM(true);
+  } else {
+    // default: workorders
+    const activeWOs = workOrders?.filter((w: any) => w.docstatus === 1 && w.status !== 'Completed').length || 0;
+    heroTitle = 'Halo, Tim Produksi!';
+    heroSubtitle = `Hari ini Anda memiliki ${activeWOs} perintah kerja aktif yang siap diproses. Segera eksekusi agar tidak menumpuk.`;
+    heroBtnText = 'Buat Work Order Baru';
+    heroBtnAction = () => setShowCreateWO(true);
+  }
+
   return (
     <div className="tw-root" style={{ fontFamily: "'Inter', 'Poppins', sans-serif", animation: 'fadeIn 0.4s ease-out' }}>
       <Toast show={toast.show} message={toast.msg} type={toast.type} />
       <ConfirmModal show={confirmModal.show} title={confirmModal.title} desc={confirmModal.desc} confirmText={confirmModal.confirmText} onConfirm={confirmModal.action} onCancel={closeConfirm} />
 
       {isLoading && <div style={{ background: 'white', borderRadius: '16px', padding: '12px', marginBottom: '20px' }}><TableSkeleton rows={6} cols={5} /></div>}
-      
+
       {/* MODALS */}
       {showCreateBOM && <CreateBOMModal items={items} warehouses={warehouses} onClose={() => setShowCreateBOM(false)} onSuccess={() => refetch()} showToast={showToast} />}
-      {showCreateWO && <CreateWorkOrderModal boms={sortedBOMs.filter((b:any)=>b.docstatus===1 || b.is_active)} warehouses={warehouses} onClose={() => setShowCreateWO(false)} onSuccess={() => refetch()} showToast={showToast} />}
+      {showCreateWO && <CreateWorkOrderModal boms={sortedBOMs.filter((b: any) => b.docstatus === 1 || b.is_active)} warehouses={warehouses} onClose={() => setShowCreateWO(false)} onSuccess={() => refetch()} showToast={showToast} />}
       {selectedBOM && <DetailBOMModal bom={selectedBOM} workOrders={sortedWOs} onClose={() => setSelectedBOM(null)} />}
       {selectedWO && <DetailWorkOrderModal wo={selectedWO} onClose={() => setSelectedWO(null)} />}
 
       {/* SELECT QUANTITY MODALS FOR START & FINISH */}
       {startWO && (
-        <SelectQuantityModal 
-          title="Tarik Bahan Baku (Start)" 
-          label="Berapa banyak bahan baku yang ingin ditarik?" 
-          maxQty={startWO.qty - (startWO.material_transferred_for_manufacturing || 0)} 
-          onClose={() => setStartWO(null)} 
-          onSubmit={handleStartConfirm} 
-          isSubmitting={isSubmittingAction} 
+        <SelectQuantityModal
+          title="Tarik Bahan Baku (Start)"
+          label="Berapa banyak bahan baku yang ingin ditarik?"
+          maxQty={startWO.qty - (startWO.material_transferred_for_manufacturing || 0)}
+          onClose={() => setStartWO(null)}
+          onSubmit={handleStartConfirm}
+          isSubmitting={isSubmittingAction}
         />
       )}
       {finishWO && (
-        <SelectQuantityModal 
-          title="Selesaikan Produksi (Finish)" 
-          label="Berapa unit barang jadi yang berhasil dibuat?" 
-          maxQty={finishWO.qty - (finishWO.produced_qty || 0)} 
-          onClose={() => setFinishWO(null)} 
-          onSubmit={handleFinishConfirm} 
-          isSubmitting={isSubmittingAction} 
+        <SelectQuantityModal
+          title="Selesaikan Produksi (Finish)"
+          label="Berapa unit barang jadi yang berhasil dibuat?"
+          maxQty={finishWO.qty - (finishWO.produced_qty || 0)}
+          onClose={() => setFinishWO(null)}
+          onSubmit={handleFinishConfirm}
+          isSubmitting={isSubmittingAction}
         />
       )}
 
       {/* HERO SECTION */}
       <div className="tw-hero-layout">
         <div className="tw-hero-card">
-           <div className="tw-hero-content">
-             <h2 className="tw-hero-title">Halo, Tim Produksi!</h2>
-             <p className="tw-hero-subtitle">Kelola Resep BOM dan perintah kerja secara instan tanpa ribet.</p>
-             <button className="tw-btn-yellow" onClick={() => setShowCreateWO(true)}>Buat Work Order Baru</button>
-           </div>
-           <div className="tw-hero-illustration">
-             <img src="/images/ill-mfg.png" alt="Manufacturing" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /> 
-           </div>
+          <div className="tw-hero-content">
+            <h2 className="tw-hero-title">{heroTitle}</h2>
+            <p className="tw-hero-subtitle">{heroSubtitle}</p>
+            <button className="tw-btn-yellow" onClick={heroBtnAction}>{heroBtnText}</button>
+          </div>
+          <div className="tw-hero-illustration">
+            <img src="/images/ill-mfg.png" alt="Manufacturing" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+          </div>
         </div>
 
         <div className="tw-stats-col">
-           <div className="tw-stat-card">
-              <div>
-                 <p className="tw-stat-label">Resep BOM Aktif</p>
-                 <h3 className="tw-stat-value">{boms?.filter((b:any) => b.is_active).length || 0}</h3>
-              </div>
-              <div className="tw-stat-icon-blue"><Layers size={20} /></div>
-           </div>
-           <div className="tw-stat-card">
-              <div>
-                 <p className="tw-stat-label">WO Sedang Diproses</p>
-                 <h3 className="tw-stat-value">{workOrders?.filter((w:any) => w.docstatus === 1 && w.status === 'In Process').length || 0}</h3>
-              </div>
-              <div className="tw-stat-icon-orange"><Wrench size={20} /></div>
-           </div>
+          <div className="tw-stat-card">
+            <div>
+              <p className="tw-stat-label">Resep BOM Aktif</p>
+              <h3 className="tw-stat-value">{boms?.filter((b: any) => b.is_active).length || 0}</h3>
+            </div>
+            <div className="tw-stat-icon-blue"><Layers size={20} /></div>
+          </div>
+          <div className="tw-stat-card">
+            <div>
+              <p className="tw-stat-label">WO Sedang Diproses</p>
+              <h3 className="tw-stat-value">{workOrders?.filter((w: any) => w.docstatus === 1 && w.status === 'In Process').length || 0}</h3>
+            </div>
+            <div className="tw-stat-icon-orange"><Wrench size={20} /></div>
+          </div>
         </div>
       </div>
 
       {/* TABLE SECTION */}
       <div className="tw-table-wrapper">
-         <div className="tw-table-header">
-            <h3 className="tw-table-title">
-               {activeTab === 'bom' ? 'Bill of Materials (BOM)' : 'Work Orders (WO)'}
-            </h3>
-            <div className="tw-table-tabs" style={{ overflowX: 'auto' }}>
-               <button className={activeTab === 'bom' ? 'active' : ''} onClick={() => setActiveTab('bom')}>Bill of Materials</button>
-               <button className={activeTab === 'workorders' ? 'active' : ''} onClick={() => setActiveTab('workorders')}>Work Orders</button>
-            </div>
-         </div>
-         
-         <div className="tw-table-filters">
-            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', flex: 1, alignItems: 'center' }}>
-                <div style={{ position: 'relative', width: '100%', maxWidth: '250px' }}>
-                  <Search size={14} color="#9CA3AF" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
-                  <input type="text" placeholder="Pencarian data..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="tw-search-input" />
-                </div>
+        <div className="tw-table-header" style={{ marginBottom: '16px' }}>
+          <h3 className="tw-table-title">
+            {activeTab === 'bom' ? 'Bill of Materials (BOM)' : 'Work Orders (WO)'}
+          </h3>
+          {/* TABS MENU DIHAPUS KARENA SUDAH DI SIDEBAR */}
+        </div>
+
+        <div className="tw-table-filters" style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '20px' }}>
+          {/* BARIS 1: Search Bar & Tombol Action (+ Baru) */}
+          <div style={{ display: 'flex', gap: '12px', width: '100%', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+            <div style={{ position: 'relative', flex: '1 1 auto', minWidth: '200px', maxWidth: '400px' }} className="mobile-search-full">
+              <Search size={14} color="#9CA3AF" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
+              <input type="text" placeholder="Pencarian data..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="tw-search-input" />
             </div>
 
-            <div style={{ display: 'flex', gap: '8px' }}>
-              {activeTab === 'bom' && <button className="tw-btn-action" onClick={() => setShowCreateBOM(true)} style={{ background: COLOR_PRIMARY, color: 'white' }}><Plus size={14} /> Baru</button>}
-              {activeTab === 'workorders' && <button className="tw-btn-action" onClick={() => setShowCreateWO(true)} style={{ background: COLOR_PRIMARY, color: 'white' }}><Plus size={14} /> Baru</button>}
+            {/* TOMBOL (+BARU) DI EDIT DISINI (WARNA KUNING) */}
+            <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+              {activeTab === 'bom' && (
+                <button
+                  className="tw-btn-action"
+                  onClick={() => setShowCreateBOM(true)}
+                  style={{ background: COLOR_PRIMARY, color: 'white' }}
+                >
+                  <Plus size={14} /> Baru
+                </button>
+              )}
+              {activeTab === 'workorders' && (
+                <button
+                  className="tw-btn-action"
+                  onClick={() => setShowCreateWO(true)}
+                  style={{ background: COLOR_PRIMARY, color: 'white' }}
+                >
+                  <Plus size={14} /> Baru
+                </button>
+              )}
             </div>
-         </div>
+          </div>
+        </div>
 
-         {!isLoading && (
-           <div style={{ overflowX: 'auto' }}>
-             <table className="twithr-table">
-                <thead>
-                  {activeTab === 'bom' && (
-                    <tr><th style={{ width: '40px', textAlign: 'center' }}>No.</th><th>BOM ID & Target</th><th>Status</th><th>Kuantitas</th><th style={{ width: '100px', textAlign: 'center' }}>Aksi</th></tr>
-                  )}
-                  {activeTab === 'workorders' && (
-                    <tr><th style={{ width: '40px', textAlign: 'center' }}>No.</th><th>WO ID & Waktu</th><th>Status & Progress</th><th>Barang Produksi</th><th>BOM Ref</th><th style={{ textAlign: 'center' }}>Target</th><th style={{ width: '160px', textAlign: 'center' }}>Tindakan</th></tr>
-                  )}
-                </thead>
-                <tbody>
-                   
-                   {/* BOM ROWS */}
-                   {activeTab === 'bom' && filteredBOMs.map((bom: any, index: number) => {
-                      return (
-                        <tr key={bom.name} className="table-row-hover">
-                          <td style={{ textAlign: 'center', fontWeight: 600, color: '#6B7280' }}>{index + 1}</td>
-                          <td>
-                            <div className="tw-avatar-name">
-                               <div className="tw-avatar" style={{ background: '#e0e7ff', color: COLOR_PRIMARY }}>{getAvatar(bom.item)}</div>
-                               <div className="tw-name-col">
-                                  <span className="tw-name">{bom.name}</span>
-                                  <span className="tw-sub">Bahan Jadi: {bom.item}</span>
-                               </div>
-                            </div>
-                          </td>
-                          <td>
-                            <span className={`tw-pill`} style={{ background: bom.is_active ? '#D1FAE5' : '#F3F4F6', color: bom.is_active ? '#059669' : '#4B5563' }}>
-                              {bom.is_active ? 'Active' : 'Inactive'}
-                            </span>
-                          </td>
-                          <td style={{ fontWeight: 800, color: '#111827', fontSize: '13px' }}>{bom.quantity}</td>
-                          <td>
-                            <div className="tw-actions">
-                              <button onClick={() => setSelectedBOM(bom)} className="tw-icon-btn" title="View"><Eye size={16}/></button>
-                              <button onClick={() => handleSmartDelete('BOM', bom.name, bom.docstatus)} className="tw-icon-btn tw-icon-red" title="Hapus"><Trash2 size={16}/></button>
-                            </div>
-                          </td>
-                        </tr>
-                      )
-                   })}
+        {!isLoading && (
+          <div style={{ overflowX: 'auto' }}>
+            <table className="twithr-table">
+              <thead>
+                {activeTab === 'bom' && (
+                  <tr><th style={{ width: '40px', textAlign: 'center' }}>No.</th><th>BOM ID & Target</th><th>Status</th><th>Kuantitas</th><th style={{ width: '100px', textAlign: 'center' }}>Aksi</th></tr>
+                )}
+                {activeTab === 'workorders' && (
+                  <tr><th style={{ width: '40px', textAlign: 'center' }}>No.</th><th>WO ID & Waktu</th><th>Status & Progress</th><th>Barang Produksi</th><th>BOM Ref</th><th style={{ textAlign: 'center' }}>Target</th><th style={{ width: '160px', textAlign: 'center' }}>Tindakan</th></tr>
+                )}
+              </thead>
+              <tbody>
 
-                   {/* WORK ORDER ROWS */}
-                   {activeTab === 'workorders' && filteredWOs.map((wo: any, index: number) => {
-                      let statusBg = '#F3F4F6'; let statusColor = '#4B5563';
-                      
-                      if(wo.status === 'Completed' || wo.produced_qty >= wo.qty) { statusBg = '#D1FAE5'; statusColor = '#059669'; }
-                      else if(wo.status === 'In Process' || wo.produced_qty > 0) { statusBg = '#E0F2FE'; statusColor = '#0284C7'; }
-                      else if(wo.status !== 'Draft') { statusBg = '#FEF3C7'; statusColor = '#D97706'; }
+                {/* BOM ROWS */}
+                {activeTab === 'bom' && filteredBOMs.map((bom: any, index: number) => {
+                  return (
+                    <tr key={bom.name} className="table-row-hover">
+                      <td style={{ textAlign: 'center', fontWeight: 600, color: '#6B7280' }}>{index + 1}</td>
+                      <td>
+                        <div className="tw-avatar-name">
+                          <div className="tw-avatar" style={{ background: '#e0e7ff', color: COLOR_PRIMARY }}>{getAvatar(bom.item)}</div>
+                          <div className="tw-name-col">
+                            <span className="tw-name">{bom.name}</span>
+                            <span className="tw-sub">Bahan Jadi: {bom.item}</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td>
+                        <span className={`tw-pill`} style={{ background: bom.is_active ? '#D1FAE5' : '#F3F4F6', color: bom.is_active ? '#059669' : '#4B5563' }}>
+                          {bom.is_active ? 'Active' : 'Inactive'}
+                        </span>
+                      </td>
+                      <td style={{ fontWeight: 800, color: '#111827', fontSize: '13px' }}>{bom.quantity}</td>
+                      <td>
+                        <div className="tw-actions">
+                          <button onClick={() => setSelectedBOM(bom)} className="tw-icon-btn" title="View"><Eye size={16} /></button>
+                          <button onClick={() => handleSmartDelete('BOM', bom.name, bom.docstatus)} className="tw-icon-btn tw-icon-red" title="Hapus"><Trash2 size={16} /></button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
 
-                      // Kalkulasi batasan Start & Finish agar tombol pintar
-                      const transferredQty = wo.material_transferred_for_manufacturing || 0;
-                      const producedQty = wo.produced_qty || 0;
-                      
-                      // Boleh start kalau bahan yang ditarik masih kurang dari target
-                      const canStart = wo.docstatus === 1 && (transferredQty < wo.qty);
-                      // Boleh finish kalau ada bahan yang udah ditarik (In Process) DAN belum selesai semua
-                      const canFinish = wo.docstatus === 1 && (transferredQty > 0) && (producedQty < wo.qty);
+                {/* WORK ORDER ROWS */}
+                {activeTab === 'workorders' && filteredWOs.map((wo: any, index: number) => {
+                  let statusBg = '#F3F4F6'; let statusColor = '#4B5563';
 
-                      return (
-                        <tr key={wo.name} className="table-row-hover">
-                          <td style={{ textAlign: 'center', fontWeight: 600, color: '#6B7280' }}>{index + 1}</td>
-                          <td>
-                            <div className="tw-name-col">
-                               <span className="tw-name">{wo.name}</span>
-                               {wo.creation && <span className="tw-sub">{formatCreationTime(wo.creation)}</span>}
-                            </div>
-                          </td>
-                          <td>
-                            <div className="tw-dot-status">
-                               <div className="tw-dot" style={{ background: statusColor }}></div>
-                               <div className="tw-name-col">
-                                 <span style={{ fontSize: '12px', color: statusColor, fontWeight: 600 }}>{wo.docstatus === 1 ? wo.status || 'Submitted' : 'Draft'}</span>
-                                 <span className="tw-sub" style={{ fontSize: '10px' }}>Selesai: {producedQty} / {wo.qty}</span>
-                               </div>
-                            </div>
-                          </td>
-                          <td><span style={{ fontWeight: 700, fontSize: '13px', color: '#111827' }}>{wo.production_item}</span></td>
-                          <td><span style={{ fontSize: '12px', color: '#4B5563', fontWeight: 600 }}>{wo.bom_no}</span></td>
-                          <td style={{ textAlign: 'center', fontWeight: 800, fontSize: '14px' }}>{wo.qty}</td>
-                          <td>
-                            <div className="tw-actions" style={{ justifyContent: 'flex-start' }}>
-                              
-                              {canStart && (
-                                <button onClick={() => setStartWO(wo)} className="tw-btn-action" style={{ background: '#1e293b', color: 'white', padding: '6px 12px' }}>
-                                  Start
-                                </button>
-                              )}
+                  if (wo.status === 'Completed' || wo.produced_qty >= wo.qty) { statusBg = '#D1FAE5'; statusColor = '#059669'; }
+                  else if (wo.status === 'In Process' || wo.produced_qty > 0) { statusBg = '#E0F2FE'; statusColor = '#0284C7'; }
+                  else if (wo.status !== 'Draft') { statusBg = '#FEF3C7'; statusColor = '#D97706'; }
 
-                              {canFinish && (
-                                <button onClick={() => setFinishWO(wo)} className="tw-btn-action" style={{ background: COLOR_PRIMARY, color: 'white', padding: '6px 12px' }}>
-                                  Finish
-                                </button>
-                              )}
+                  // Kalkulasi batasan Start & Finish agar tombol pintar
+                  const transferredQty = wo.material_transferred_for_manufacturing || 0;
+                  const producedQty = wo.produced_qty || 0;
 
-                              <button onClick={() => setSelectedWO(wo)} className="tw-icon-btn" title="Rincian"><Eye size={16}/></button>
-                              {(wo.docstatus === 0 || wo.docstatus === 2) && <button onClick={() => handleSmartDelete('Work Order', wo.name, wo.docstatus)} className="tw-icon-btn tw-icon-red" title="Hapus"><Trash2 size={16}/></button>}
-                            </div>
-                          </td>
-                        </tr>
-                      )
-                   })}
+                  // Boleh start kalau bahan yang ditarik masih kurang dari target
+                  const canStart = wo.docstatus === 1 && (transferredQty < wo.qty);
+                  // Boleh finish kalau ada bahan yang udah ditarik (In Process) DAN belum selesai semua
+                  const canFinish = wo.docstatus === 1 && (transferredQty > 0) && (producedQty < wo.qty);
 
-                </tbody>
-             </table>
-             
-             {/* EMPTY STATES */}
-             {activeTab === 'bom' && filteredBOMs.length === 0 && <div style={{ padding: '40px', textAlign: 'center', color: '#9CA3AF', fontSize: '14px' }}>Belum ada Resep BOM yang terdaftar.</div>}
-             {activeTab === 'workorders' && filteredWOs.length === 0 && <div style={{ padding: '40px', textAlign: 'center', color: '#9CA3AF', fontSize: '14px' }}>Belum ada Work Order.</div>}
-           </div>
-         )}
+                  return (
+                    <tr key={wo.name} className="table-row-hover">
+                      <td style={{ textAlign: 'center', fontWeight: 600, color: '#6B7280' }}>{index + 1}</td>
+                      <td>
+                        <div className="tw-name-col">
+                          <span className="tw-name">{wo.name}</span>
+                          {wo.creation && <span className="tw-sub">{formatCreationTime(wo.creation)}</span>}
+                        </div>
+                      </td>
+                      <td>
+                        <div className="tw-dot-status">
+                          <div className="tw-dot" style={{ background: statusColor }}></div>
+                          <div className="tw-name-col">
+                            <span style={{ fontSize: '12px', color: statusColor, fontWeight: 600 }}>{wo.docstatus === 1 ? wo.status || 'Submitted' : 'Draft'}</span>
+                            <span className="tw-sub" style={{ fontSize: '10px' }}>Selesai: {producedQty} / {wo.qty}</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td><span style={{ fontWeight: 700, fontSize: '13px', color: '#111827' }}>{wo.production_item}</span></td>
+                      <td><span style={{ fontSize: '12px', color: '#4B5563', fontWeight: 600 }}>{wo.bom_no}</span></td>
+                      <td style={{ textAlign: 'center', fontWeight: 800, fontSize: '14px' }}>{wo.qty}</td>
+                      <td>
+                        <div className="tw-actions" style={{ justifyContent: 'flex-start' }}>
+
+                          {canStart && (
+                            <button onClick={() => setStartWO(wo)} className="tw-btn-action" style={{ background: '#1e293b', color: 'white', padding: '6px 12px' }}>
+                              Start
+                            </button>
+                          )}
+
+                          {canFinish && (
+                            <button onClick={() => setFinishWO(wo)} className="tw-btn-action" style={{ background: COLOR_PRIMARY, color: 'white', padding: '6px 12px' }}>
+                              Finish
+                            </button>
+                          )}
+
+                          <button onClick={() => setSelectedWO(wo)} className="tw-icon-btn" title="Rincian"><Eye size={16} /></button>
+                          {(wo.docstatus === 0 || wo.docstatus === 2) && <button onClick={() => handleSmartDelete('Work Order', wo.name, wo.docstatus)} className="tw-icon-btn tw-icon-red" title="Hapus"><Trash2 size={16} /></button>}
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+
+              </tbody>
+            </table>
+
+            {/* EMPTY STATES */}
+            {activeTab === 'bom' && filteredBOMs.length === 0 && <div style={{ padding: '40px', textAlign: 'center', color: '#9CA3AF', fontSize: '14px' }}>Belum ada Resep BOM yang terdaftar.</div>}
+            {activeTab === 'workorders' && filteredWOs.length === 0 && <div style={{ padding: '40px', textAlign: 'center', color: '#9CA3AF', fontSize: '14px' }}>Belum ada Work Order.</div>}
+          </div>
+        )}
       </div>
 
       <style>{`
@@ -986,7 +1022,16 @@ function ManufacturingPageContent() {
         .tw-hero-illustration { width: 180px; height: 160px; margin-left: 20px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.1); border-radius: 12px; z-index: 2; }
         .tw-hero-title { font-size: 26px; font-weight: 800; margin: 0 0 8px 0; text-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         .tw-hero-subtitle { font-size: 13px; margin: 0 0 20px 0; max-width: 90%; opacity: 0.9; line-height: 1.5; }
-        .tw-btn-yellow { background: ${COLOR_SECONDARY}; color: #fff; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 700; font-size: 13px; cursor: pointer; transition: opacity 0.2s, transform 0.2s; box-shadow: 0 4px 10px rgba(255, 184, 0, 0.3); }
+        
+        /* CLASS UNTUK TOMBOL KUNING KONSISTEN (Digunakan juga di tombol Baru) */
+      
+        /* Ubah color menjadi #ffffff (putih) */
+        .tw-btn-yellow { background: ${COLOR_SECONDARY}; color: #ffffff; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 700; font-size: 13px; cursor: pointer; transition: opacity 0.2s, transform 0.2s; box-shadow: 0 4px 10px rgba(255, 184, 0, 0.3); }
+
+        /* ... beberapa baris ke bawah ... */
+
+        /* Hapus CSS HOVER TOMBOL KUNING karena tombol filter sudah jadi biru */
+
         .tw-btn-yellow:hover { opacity: 0.9; transform: translateY(-2px); }
         
         .tw-stats-col { flex: 1 1 30%; display: flex; flex-direction: column; gap: 16px; }
@@ -999,13 +1044,10 @@ function ManufacturingPageContent() {
         .tw-table-wrapper { background: white; border-radius: 16px; padding: 24px; box-shadow: 0 4px 20px rgba(0,0,0,0.02); }
         .tw-table-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 16px; }
         .tw-table-title { font-size: 18px; font-weight: 800; color: #111827; margin: 0; }
-        .tw-table-tabs { display: flex; gap: 8px; background: #F3F4F6; padding: 4px; border-radius: 20px; }
-        .tw-table-tabs button { background: transparent; border: none; padding: 6px 16px; font-size: 12px; font-weight: 600; color: #6B7280; border-radius: 16px; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
-        .tw-table-tabs button.active { background: ${COLOR_PRIMARY}; color: white; box-shadow: 0 2px 8px rgba(5, 76, 199, 0.3); }
-
-        .tw-table-filters { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; gap: 12px; flex-wrap: wrap; }
+        
         .tw-search-input { padding: 8px 12px 8px 36px; border: 1px solid #E5E7EB; border-radius: 20px; font-size: 12px; width: 100%; outline: none; transition: border-color 0.2s; background: #F9FAFB; }
         .tw-search-input:focus { border-color: ${COLOR_PRIMARY}; background: white; }
+        
         .tw-btn-action { background: #F3F4F6; border: none; padding: 8px 16px; border-radius: 20px; font-size: 12px; font-weight: 600; color: #374151; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: background 0.2s; }
         .tw-btn-action:hover { opacity: 0.85; }
 
@@ -1015,7 +1057,7 @@ function ManufacturingPageContent() {
         .twithr-table tr:hover td { background: #F8FAFC; }
 
         .tw-avatar-name { display: flex; alignItems: center; gap: 12px; }
-        .tw-avatar { width: 36px; height: 36px; border-radius: 50%; background: #e0f2fe; color: ${COLOR_PRIMARY}; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px; flex-shrink: 0; }
+        .tw-avatar { width: 36px; height: 36px; border-radius: 50%; background: #e0e7ff; color: ${COLOR_PRIMARY}; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px; flex-shrink: 0; }
         .tw-name-col { display: flex; flex-direction: column; }
         .tw-name { font-size: 13px; font-weight: 700; color: #111827; }
         .tw-sub { font-size: 11px; color: #9CA3AF; margin-top: 2px; }
@@ -1043,8 +1085,15 @@ function ManufacturingPageContent() {
         .modern-toast { position: fixed; top: 30px; left: 50%; transform: translate(-50%, -20px); opacity: 0; background: white; padding: 16px 20px; border-radius: 8px; box-shadow: 0 10px 40px rgba(0,0,0,0.1); display: flex; align-items: flex-start; gap: 12px; z-index: 99999; min-width: 320px; max-width: 450px; transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); pointer-events: none; }
         .modern-toast.show { transform: translate(-50%, 0); opacity: 1; }
         
+        /* HOVER UNTUK TOMBOL KUNING DI TABEL FILTER */
+        .tw-btn-action[style*="background: #FFB800"]:hover { background: #E5A100; color: #111827; }
+
         @media (max-width: 768px) { .tw-hero-layout { flex-direction: column; } .tw-hero-card { flex-direction: column; align-items: flex-start; gap: 20px; } .tw-hero-illustration { margin-left: 0; width: 100%; height: 120px; } .tw-stats-col { flex-direction: row; } .modern-toast { width: 90%; min-width: auto; top: 16px; } }
-        @media (max-width: 640px) { .tw-stats-col { flex-direction: column; } .responsive-grid { grid-template-columns: 1fr; } }
+        @media (max-width: 640px) { 
+          .tw-stats-col { flex-direction: column; } 
+          .responsive-grid { grid-template-columns: 1fr; } 
+          .mobile-search-full { max-width: 100% !important; flex: 1 1 100% !important; }
+        }
       `}</style>
     </div>
   );

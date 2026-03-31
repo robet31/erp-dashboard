@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
 import { useManufacturingData } from '@/hooks/useFrappeData';
-import { Loader2, Factory, CheckCircle, Activity, ClipboardCheck, Info, X } from 'lucide-react';
+import { Loader2, Factory, CheckCircle, Activity, ClipboardCheck, Info, X, CheckCircle2 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, AreaChart, Area, Legend
@@ -19,6 +19,17 @@ const formatNumber = (v: any) => {
   const n = Number(v);
   if (!v || isNaN(n)) return '0';
   return new Intl.NumberFormat('en-US').format(n);
+};
+
+const formatCompact = (value: number | string | undefined | any) => {
+  if (!value) return '0';
+  const num = Number(value);
+  if (isNaN(num)) return '0';
+  
+  if (num >= 1000000000) return (num / 1000000000).toFixed(2).replace(/\.?0+$/, '') + ' B';
+  else if (num >= 1000000) return (num / 1000000).toFixed(2).replace(/\.?0+$/, '') + ' M';
+  else if (num >= 1000) return (num / 1000).toFixed(2).replace(/\.?0+$/, '') + ' K';
+  else return new Intl.NumberFormat('id-ID').format(num);
 };
 
 // ── CUSTOM TOOLTIP ALA FRAPPE ──
@@ -124,7 +135,7 @@ export default function ManufacturingAnalyticsPage() {
     const monthNamesShort = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
     // ── 1. PRODUCED QTY (12 BULAN BERGULIR) ──
-    const producedQty12M = [];
+    const producedQty12M: any[] = [];
     for (let i = 11; i >= 0; i--) {
       const d = new Date(currentYear, currentMonthIdx - i, 1);
       producedQty12M.push({ monthStr: `${monthNamesShort[d.getMonth()]} ${d.getFullYear()}`, monthRaw: d.getMonth(), yearRaw: d.getFullYear(), qty: 0 });
@@ -138,7 +149,8 @@ export default function ManufacturingAnalyticsPage() {
     });
 
     // ── 2. COMPLETED OPERATION (6 QUARTER BERGULIR) ──
-    const completedOpQuarters = [];
+    const completedOpQuarters: any[] = [];
+    // const completedOpQuarters = [];
     let currQ = Math.floor(currentMonthIdx / 3) + 1;
     let currY = currentYear;
     for (let i = 5; i >= 0; i--) {
@@ -211,7 +223,7 @@ export default function ManufacturingAnalyticsPage() {
     const downtimeAnalysis = Object.entries(downtimeCounts).map(([name, value], i) => ({ name, value, color: ['#6366f1', '#f43f5e', '#f59e0b', COLOR_SECONDARY][i % 4] }));
 
     // ── 7. WORK ORDER QTY ANALYSIS (BAR 4 BULAN BERGULIR) ──
-    const woQtyTrend = [];
+    const woQtyTrend: any[] = [];
     for (let i = 3; i >= 0; i--) {
       const d = new Date(currentYear, currentMonthIdx - i, 1);
       woQtyTrend.push({ monthStr: `${monthNamesShort[d.getMonth()]} ${d.getFullYear()}`, monthRaw: d.getMonth(), yearRaw: d.getFullYear(), Pending: 0, Completed: 0 });
@@ -236,7 +248,7 @@ export default function ManufacturingAnalyticsPage() {
     });
 
     // ── 8. JOB CARD ANALYSIS (BAR 12 BULAN JAN - DEC TAHUN INI) ──
-    const jcTrend = [];
+    const jcTrend: any[] = [];
     for (let i = 0; i < 12; i++) {
       jcTrend.push({ monthStr: `${monthNamesShort[i]} ${currentYear}`, monthRaw: i, yearRaw: currentYear, Open: 0, Completed: 0 });
     }
@@ -263,24 +275,25 @@ export default function ManufacturingAnalyticsPage() {
 
   if (isLoading) return <div style={{ textAlign: 'center', padding: '60px' }}><Loader2 className="animate-spin" size={32} color={COLOR_PRIMARY} style={{ margin: '0 auto 16px' }} /><p style={{ color: '#6B7280', fontSize: '13px' }}>Memuat analitik manufaktur...</p></div>;
 
-  // COMPONENT UNTUK METRIC KARTU YANG DILENGKAPI TOMBOL INFO
-  const MetricCard = ({ title, value, color, icon, infoText }: any) => (
-    <div className="chart-container" style={{ padding: '20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-      <div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
-          <span style={{ fontSize: '12px', fontWeight: 600, color: '#6B7280' }}>{title}</span>
+  // COMPONENT UNTUK METRIC KARTU YANG DILENGKAPI TOMBOL INFO DAN GRADIENT BIRU
+  const MetricCard = ({ title, value, gradFrom, gradTo, icon, infoText }: any) => (
+    <div className="metric-card" style={{ background: `linear-gradient(135deg, ${gradFrom} 0%, ${gradTo} 100%)` }}>
+      <div className="metric-card-content">
+        <div className="metric-card-header">
+          <span className="metric-title">{title}</span>
           {infoText && (
             <button 
               onClick={() => setInfoData({ show: true, title, text: infoText })}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: '#9ca3af', display: 'flex', alignItems: 'center' }}
+              className="metric-info-btn"
+              title="Lihat Detail Nilai"
             >
               <Info size={14} />
             </button>
           )}
         </div>
-        <div style={{ fontSize: '28px', fontWeight: 800, color: color }}>{value}</div>
+        <div className="metric-value">{value}</div>
       </div>
-      <div style={{ width: '48px', height: '48px', background: `${color}15`, borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: color }}>
+      <div className="metric-icon">
         {icon}
       </div>
     </div>
@@ -290,7 +303,7 @@ export default function ManufacturingAnalyticsPage() {
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
       <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#111827' }}>{title}</h3>
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-        <span style={{ fontSize: '11px', color: '#6B7280', fontWeight: 500 }}>Last synced 15 minutes ago</span>
+        <span style={{ fontSize: '11px', color: '#6B7280', fontWeight: 500 }}>Last synced just now</span>
         {infoText && (
           <button onClick={() => setInfoData({ show: true, title, text: infoText })} style={{ background: '#f3f4f6', border: 'none', borderRadius: '6px', padding: '4px', cursor: 'pointer', color: '#9ca3af', display: 'flex' }}>
             <Info size={16} />
@@ -357,37 +370,49 @@ export default function ManufacturingAnalyticsPage() {
   };
 
   return (
-    <div style={{ animation: 'fadeIn 0.4s ease-out', fontFamily: "'Poppins', sans-serif" }}>
+    <div className="tw-root" style={{ animation: 'fadeIn 0.4s ease-out', fontFamily: "'Poppins', sans-serif" }}>
       
       <InfoModal show={infoData.show} title={infoData.title} text={infoData.text} onClose={() => setInfoData({ ...infoData, show: false })} />
 
-      {/* ROW 1: 4 METRICS CARDS */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '16px' }}>
+      {/* HEADER PAGE */}
+      <div className="page-header-row">
+        <div>
+          <h1 style={{ fontSize: '24px', fontWeight: 800, color: '#111827', margin: '0 0 4px 0' }}>Manufacturing Analytics</h1>
+          <p style={{ fontSize: '13px', color: '#6B7280', margin: 0 }}>Analisis mendalam proses manufaktur dan kualitas produksi.</p>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 600, color: '#10b981', background: '#d1fae5', padding: '6px 12px', borderRadius: '20px' }}>
+          <CheckCircle2 size={14} />
+          <span>Data Real-time</span>
+        </div>
+      </div>
+
+      {/* ROW 1: 4 METRICS CARDS DENGAN GRADASI BIRU */}
+      <div className="metrics-grid-4">
         <MetricCard 
           title="Monthly Total Work Order" 
-          value={data.monthlyTotalWO} 
-          color="#111827" 
+          value={formatCompact(data.monthlyTotalWO)} 
+          gradFrom="#054CC7" gradTo="#0869C8" 
           icon={<Factory size={24} />} 
           infoText="Jumlah keseluruhan Surat Perintah Kerja (Work Order) yang dibuat pada bulan berjalan."
         />
         <MetricCard 
           title="Monthly Completed Work Order" 
-          value={data.monthlyCompletedWO} 
-          color={COLOR_PRIMARY} 
+          value={formatCompact(data.monthlyCompletedWO)} 
+          gradFrom="#0869C8" gradTo="#0C88C9" 
           icon={<CheckCircle size={24} />} 
           infoText="Jumlah Surat Perintah Kerja (Work Order) yang telah berstatus Selesai pada bulan berjalan."
         />
         <MetricCard 
           title="Ongoing Job Card" 
-          value={data.ongoingJobCard} 
-          color={COLOR_SECONDARY} 
+          value={formatCompact(data.ongoingJobCard)} 
+          gradFrom="#0C88C9" gradTo="#11A7CA" 
           icon={<Activity size={24} />} 
           infoText="Jumlah Kartu Tugas (Job Card) yang saat ini sedang dikerjakan (Work In Progress) oleh operator di pabrik."
         />
         <MetricCard 
           title="Monthly Quality Inspection" 
-          value={data.monthlyQualityInspection} 
-          color="#3b82f6" 
+          value={formatCompact(data.monthlyQualityInspection)} 
+          gradFrom="#11A7CA" gradTo="#17C3CC" 
           icon={<ClipboardCheck size={24} />} 
           infoText="Jumlah total Inspeksi Kualitas (Quality Inspection) yang dicatat pada bulan berjalan."
         />
@@ -503,12 +528,55 @@ export default function ManufacturingAnalyticsPage() {
       </div>
 
       <style>{`
+        /* GLOBAL RESET & ANIMATION */
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .tw-root {
+           background-color: #EEF2F6; 
+           min-height: calc(100vh - 80px);
+           padding: 20px;
+           border-radius: 16px;
+           margin: -10px; 
+        }
+
+        .page-header-row {
+           display: flex; 
+           align-items: center; 
+           justify-content: space-between; 
+           margin-bottom: 24px; 
+           flex-wrap: wrap; 
+           gap: 12px;
+        }
+
         .chart-container { background: white; border-radius: 12px; padding: 24px; border: 1px solid #e2e8f0; width: 100%; }
         .no-data-box { height: 260px; display: flex; align-items: center; justify-content: center; color: #9CA3AF; font-size: 13px; background: #f8fafc; border-radius: 8px; }
+
+        /* ── CSS KHUSUS CARD KPI ALA FRAPPE (WARNA GRADASI) ── */
+        .metric-card {
+          border-radius: 16px; border: none; padding: 24px;
+          display: flex; align-items: center; justify-content: space-between;
+          height: 100%; min-height: 100px; box-shadow: 0 4px 20px rgba(0,0,0,0.02);
+          color: white;
+          transition: transform 0.2s;
+        }
+        .metric-card:hover { transform: translateY(-3px); }
+        .metric-card-content { display: flex; flex-direction: column; width: calc(100% - 56px); }
+        .metric-card-header { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+        .metric-title { font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.9); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .metric-info-btn { background: none; border: none; cursor: pointer; padding: 0; color: rgba(255,255,255,0.7); display: flex; align-items: center; flex-shrink: 0; transition: color 0.2s, transform 0.2s; }
+        .metric-info-btn:hover { color: #ffffff; transform: scale(1.1); }
+        .metric-value { font-size: 24px; font-weight: 800; line-height: 1.2; color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .metric-icon { width: 48px; height: 48px; border-radius: 14px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; background: rgba(255,255,255,0.2); }
+
+        /* ── GRID RESPONSIF SEMPURNA ── */
+        .metrics-grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+        
         @media (max-width: 1024px) {
+          .metrics-grid-4 { grid-template-columns: repeat(2, 1fr); }
           .bottom-charts-grid { grid-template-columns: 1fr !important; }
         }
         @media (max-width: 640px) {
+          .metrics-grid-4 { grid-template-columns: 1fr; }
           .mobile-flex-col { flex-direction: column !important; align-items: stretch !important; gap: 12px !important; }
           .chart-container { padding: 16px !important; border-radius: 8px; }
         }

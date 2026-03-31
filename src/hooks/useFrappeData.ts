@@ -201,11 +201,13 @@ export function useSellingData(): SellingData {
 
 // ─── Stock Module Hook ───────────────────────────────────────────────────────
 
+// Tambahkan Company ke interface
 export interface StockData extends BaseState {
   items: Item[];
   warehouses: Warehouse[];
   bins: Bin[];
   stockEntries: StockEntry[];
+  companies: any[]; // ✨ TAMBAHAN BARU
   refetch: () => void;
 }
 
@@ -216,23 +218,27 @@ export function useStockData(): StockData {
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [bins, setBins] = useState<Bin[]>([]);
   const [stockEntries, setStockEntries] = useState<StockEntry[]>([]);
+  const [companies, setCompanies] = useState<any[]>([]); // ✨ TAMBAHAN BARU
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     setError(null);
 
     try {
-      const [it, wh, bn, se] = await Promise.allSettled([
+      // ✨ Tambahkan fetch 'Company' di Promise.allSettled
+      const [it, wh, bn, se, comp] = await Promise.allSettled([
         apiGetList<Item>('Item', { limit: 1000, fields: ['*'] }),
         apiGetList<Warehouse>('Warehouse', { limit: 1000, fields: ['*'] }),
         apiGetList<Bin>('Bin', { limit: 1000, fields: ['*'] }),
         apiGetList<StockEntry>('Stock Entry', { limit: 1000, fields: ['*'] }),
+        apiGetList<any>('Company', { limit: 100, fields: ['name', 'company_name'] }),
       ]);
 
       setItems(it.status === 'fulfilled' ? it.value : []);
       setWarehouses(wh.status === 'fulfilled' ? wh.value : []);
       setBins(bn.status === 'fulfilled' ? bn.value : []);
       setStockEntries(se.status === 'fulfilled' ? se.value.map((s: any) => ({ ...s, items: s.items || [] })) : []);
+      setCompanies(comp.status === 'fulfilled' ? comp.value : []); // ✨ SET STATE COMPANY
 
     } catch (err) {
       console.warn('Failed to fetch stock data:', err);
@@ -240,13 +246,14 @@ export function useStockData(): StockData {
       setWarehouses([]);
       setBins([]);
       setStockEntries([]);
+      setCompanies([]);
     } finally {
       setIsLoading(false);
     }
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
-  return { items, warehouses, bins, stockEntries, isLoading, error, refetch: fetchData };
+  return { items, warehouses, bins, stockEntries, companies, isLoading, error, refetch: fetchData };
 }
 
 // ─── Manufacturing Module Hook ────────────────────────────────────────────────

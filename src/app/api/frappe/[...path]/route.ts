@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+// import { NextRequest, NextResponse } from 'next/server';
+
 // ─── CONFIG KONEKSI FRAPPE ───────────────────────────────────────────────────
-// URL dan Kredensial hardcoded sesuai permintaan
-const FRAPPE_URL = process.env.FRAPPE_URL || 'http://127.0.0.1:8080';
+// Ubah baris ini agar membaca NEXT_PUBLIC_FRAPPE_URL
+const FRAPPE_URL = process.env.NEXT_PUBLIC_FRAPPE_URL || process.env.FRAPPE_URL || 'https://erpnextgcpnew.browniesqu.my.id';
 const API_KEY    = process.env.FRAPPE_API_KEY || '';
 const API_SECRET = process.env.FRAPPE_API_SECRET || '';
 
 // Pastikan Mock mode mati agar selalu menarik data asli
-const USE_MOCK = false; 
+const USE_MOCK = false;
 
 // Timeout bertingkat: 5s connect timeout, fallback 503
 const CONNECT_TIMEOUT_MS = 5_000;   

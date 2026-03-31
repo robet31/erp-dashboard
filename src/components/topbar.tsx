@@ -136,21 +136,21 @@ export function Topbar() {
       </div>
       
       <style>{`
-        .topbar-header { position: sticky; top: 0; z-index: 80; background: white; box-shadow: 0 1px 0 #f1f5f9, 0 2px 8px rgba(0,0,0,0.04); font-family: 'Poppins', sans-serif; }
+.topbar-header { position: sticky; top: 0; z-index: 80; background: white; box-shadow: 0 1px 0 #f1f5f9, 0 2px 8px rgba(0,0,0,0.04); font-family: 'Poppins', sans-serif; }
         
         .topbar-inner { display: flex; align-items: center; padding: 0 20px; height: 70px; } 
-        .topbar-left { display: flex; align-items: center; gap: 14px; flex-shrink: 0; height: 100%; }
-        .hamburger-btn { display: none; width: 36px; height: 36px; background: transparent; border: none; border-radius: 8px; align-items: center; justify-content: center; cursor: pointer; color: #374151; transition: all 0.2s; }
+        .topbar-left { display: flex; align-items: center; gap: 14px; flex-shrink: 1; min-width: 0; height: 100%; } /* Tambah flex-shrink dan min-width */
+        .hamburger-btn { display: none; width: 36px; height: 36px; background: transparent; border: none; border-radius: 8px; align-items: center; justify-content: center; cursor: pointer; color: #374151; transition: all 0.2s; flex-shrink: 0; }
         .hamburger-btn:hover { background: #f3f4f6; color: #054CC7; }
         
-        /* GREETING STYLES UNIK KHUSUS TOPBAR (TIDAK AKAN KONFLIK) */
-        .topbar-greeting-wrapper { display: flex; flex-direction: column; justify-content: center; height: 100%; gap: 1px; }
-        .topbar-greeting-title { font-size: 20px !important; font-weight: 700 !important; color: #111827 !important; margin: 0 !important; line-height: 1.1 !important; letter-spacing: -0.03em !important; } 
-        .topbar-greeting-subtitle { font-size: 12px !important; color: #6b7280 !important; margin: 0 !important; font-weight: 500 !important; letter-spacing: -0.01em !important; }
+        /* GREETING STYLES UNIK KHUSUS TOPBAR */
+        .topbar-greeting-wrapper { display: flex; flex-direction: column; justify-content: center; height: 100%; gap: 1px; overflow: hidden; } /* Tambah overflow hidden */
+        .topbar-greeting-title { font-size: 20px !important; font-weight: 700 !important; color: #111827 !important; margin: 0 !important; line-height: 1.1 !important; letter-spacing: -0.03em !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } /* Tambah ellipsis */
+        .topbar-greeting-subtitle { font-size: 12px !important; color: #6b7280 !important; margin: 0 !important; font-weight: 500 !important; letter-spacing: -0.01em !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
         .topbar-right { display: flex; align-items: center; gap: 12px; flex-shrink: 0; margin-left: auto; height: 100%; }
         
-        .icon-action-btn { position: relative; width: 36px; height: 36px; background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #64748b; transition: all 0.2s; }
+        .icon-action-btn { position: relative; width: 36px; height: 36px; background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #64748b; transition: all 0.2s; flex-shrink: 0; }
         .icon-action-btn:hover { background: #eff6ff; color: #054CC7; border-color: rgba(5,76,199,0.2); }
         .spin-animation { animation: spin 1s linear infinite; color: #054CC7; }
         @keyframes spin { 100% { transform: rotate(360deg); } }
@@ -162,7 +162,7 @@ export function Topbar() {
         .clock-date { font-size: 11px; font-weight: 500; color: #64748b; border-left: 1px solid #e5e7eb; padding-left: 6px; }
         
         .profile-container { position: relative; display: flex; align-items: center; height: 100%; }
-        .profile-btn { display: flex; align-items: center; gap: 10px; background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 8px; padding: 5px 10px 5px 5px; cursor: pointer; transition: all 0.2s; }
+        .profile-btn { display: flex; align-items: center; gap: 10px; background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 8px; padding: 5px 10px 5px 5px; cursor: pointer; transition: all 0.2s; flex-shrink: 0; }
         .profile-btn:hover { background: #eff6ff; border-color: rgba(5,76,199,0.2); }
         .profile-avatar { width: 32px; height: 32px; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: white; font-size: 12px; font-weight: 800; position: relative; flex-shrink: 0; }
         .profile-online-dot { position: absolute; bottom: -2px; right: -2px; width: 8px; height: 8px; background: #10b981; border-radius: 50%; border: 1.5px solid white; }
@@ -185,10 +185,28 @@ export function Topbar() {
         .logout-item { color: #dc2626; }
         .logout-item:hover { background: #fff1f2; color: #b91c1c; }
         
+        /* RESPONSIVE MOBILE FIXES */
         @media (max-width: 768px) { 
           .hamburger-btn { display: flex; } 
           .topbar-clock { display: none; } 
-          .topbar-greeting-title { font-size: 18px !important; }
+          
+          /* Penyesuaian layout agar tidak bentrok */
+          .topbar-inner { padding: 0 16px; }
+          .topbar-left { gap: 10px; width: calc(100% - 100px); }
+          
+          /* Sembunyikan subtitle & kecilkan title */
+          .topbar-greeting-title { font-size: 16px !important; }
+          .topbar-greeting-subtitle { display: none !important; }
+          
+          /* Sembunyikan teks profil, sisakan avatar agar hemat ruang */
+          .profile-info { display: none !important; }
+          .profile-chevron { display: none !important; }
+          .profile-btn { padding: 4px !important; gap: 0 !important; }
+        }
+
+        @media (max-width: 480px) {
+          .topbar-inner { padding: 0 12px; }
+          .topbar-greeting-title { font-size: 15px !important; }
         }
       `}</style>
     </header>
