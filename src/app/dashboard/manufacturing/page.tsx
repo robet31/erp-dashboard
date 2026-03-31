@@ -770,6 +770,16 @@ function ManufacturingPageContent() {
     return name ? name.charAt(0).toUpperCase() : '?';
   };
 
+  // --- DYNAMIC HERO CONTENT BASED ON ACTIVE TAB ---
+  const isBomTab = activeTab === 'bom';
+  const heroTitle = isBomTab ? "Manajemen Resep BOM" : "Halo, Tim Produksi!";
+  const heroSubtitle = isBomTab 
+      ? "Buat dan kelola Bill of Materials (BOM) sebagai panduan dasar perakitan produk." 
+      : "Kelola perintah kerja dan pantau status perakitan secara instan tanpa ribet.";
+  const heroBtnText = isBomTab ? "Buat BOM Baru" : "Buat Work Order Baru";
+  const handleHeroAction = isBomTab ? () => setShowCreateBOM(true) : () => setShowCreateWO(true);
+  const heroImageSrc = isBomTab ? "/images/ill-bom.png" : "/images/ill-wo.png"; // <-- Diubah ke ill-wo.png
+
   return (
     <div className="tw-root" style={{ fontFamily: "'Inter', 'Poppins', sans-serif", animation: 'fadeIn 0.4s ease-out' }}>
       <Toast show={toast.show} message={toast.msg} type={toast.type} />
@@ -809,12 +819,17 @@ function ManufacturingPageContent() {
       <div className="tw-hero-layout">
         <div className="tw-hero-card">
            <div className="tw-hero-content">
-             <h2 className="tw-hero-title">Halo, Tim Produksi!</h2>
-             <p className="tw-hero-subtitle">Kelola Resep BOM dan perintah kerja secara instan tanpa ribet.</p>
-             <button className="tw-btn-yellow" onClick={() => setShowCreateWO(true)}>Buat Work Order Baru</button>
+             <h2 className="tw-hero-title">{heroTitle}</h2>
+             <p className="tw-hero-subtitle">{heroSubtitle}</p>
+             <button className="tw-btn-yellow" onClick={handleHeroAction}>{heroBtnText}</button>
            </div>
            <div className="tw-hero-illustration">
-             <img src="/images/ill-mfg.png" alt="Manufacturing" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /> 
+             <img 
+               src={heroImageSrc} 
+               alt="Illustration" 
+               style={{ width: '100%', height: '100%', objectFit: 'contain' }} 
+               onError={(e) => { e.currentTarget.src = '/images/ill-wo.png'; }} // Fallback ganti agar tidak pakai ill-mfg
+             /> 
            </div>
         </div>
 

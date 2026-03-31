@@ -1,35 +1,57 @@
 'use client';
 
 import React, { useMemo, useState, useEffect } from 'react';
-import { useManufacturingData, useStockData } from '@/hooks/useFrappeData';
-import { Cog, Activity, AlertCircle, FolderOpen, DollarSign, Info, X } from 'lucide-react';
+import Link from 'next/link';
+import { useManufacturingData } from '@/hooks/useFrappeData';
+import { Cog, Activity, AlertCircle, FolderOpen, Target, Info, X, Loader2, CheckCircle2 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 const COLOR_PRIMARY = '#054CC7'; 
-const FIXED_COMPANY = 'PT Artavista';
+const TREND_COLOR_BLUE = '#3b82f6';
+const FIXED_COMPANY = 'Artavista';
 
-const formatUang = (v: any) => {
-  const n = Number(v);
-  if (!v || isNaN(n)) return 'Rp 0';
-  return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n);
+const formatNumber = (value: number | string | undefined | any) => {
+  if (value === undefined || value === null) return '0';
+  const num = Number(value);
+  if (isNaN(num)) return '0';
+  return new Intl.NumberFormat('id-ID').format(num);
 };
 
-const formatNumber = (v: any) => {
-  const n = Number(v);
-  if (!v || isNaN(n)) return '0';
-  return new Intl.NumberFormat('en-US').format(n);
+const formatShortAxis = (num: number) => {
+  if (num === 0) return '0';
+  if (num >= 1000000000) return (num / 1000000000).toFixed(0) + ' B';
+  if (num >= 1000000) return (num / 1000000).toFixed(0) + ' M';
+  if (num >= 1000) return (num / 1000).toFixed(0) + ' K';
+  return num.toString();
+};
+
+const formatCompact = (value: number | string | undefined | any) => {
+  if (!value) return '0';
+  const num = Number(value);
+  if (isNaN(num)) return '0';
+  
+  let formatted = '';
+  if (num >= 1000000000) formatted = (num / 1000000000).toFixed(2).replace(/\.?0+$/, '') + ' B';
+  else if (num >= 1000000) formatted = (num / 1000000).toFixed(2).replace(/\.?0+$/, '') + ' M';
+  else if (num >= 1000) formatted = (num / 1000).toFixed(2).replace(/\.?0+$/, '') + ' K';
+  else formatted = new Intl.NumberFormat('id-ID').format(num);
+
+  return formatted;
 };
 
 // ── CUSTOM TOOLTIP ALA FRAPPE ──
 const FrappeChartTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
     return (
-      <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px 16px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}>
+      <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '12px 16px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}>
         <div style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '8px', letterSpacing: '0.05em' }}>{label}</div>
         {payload.map((entry: any, index: number) => (
           <div key={index} style={{ marginBottom: index !== payload.length - 1 ? '10px' : 0 }}>
-            <div style={{ fontSize: '22px', fontWeight: 800, color: entry.color, lineHeight: 1 }}>{formatNumber(entry.value)}</div>
-            <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 500, marginTop: '4px' }}>{entry.name}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+              <div style={{ width: 10, height: 10, borderRadius: '3px', background: entry.color || TREND_COLOR_BLUE }} />
+              <div style={{ fontSize: '14px', fontWeight: 700, color: '#111827', lineHeight: 1 }}>{formatNumber(entry.value)}</div>
+            </div>
+            <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 500, marginLeft: '16px' }}>{entry.name}</div>
           </div>
         ))}
       </div>
@@ -43,7 +65,7 @@ function InfoModal({ show, title, text, onClose }: { show: boolean, title: strin
   if (!show) return null;
   return (
     <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(4px)', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'fadeIn 0.2s ease-out' }} onClick={onClose}>
-      <div style={{ background: 'white', width: '100%', maxWidth: '420px', borderRadius: '16px', padding: '24px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', margin: '0 16px', animation: 'scaleIn 0.2s ease-out' }} onClick={e => e.stopPropagation()}>
+      <div style={{ background: 'white', width: '100%', maxWidth: '420px', borderRadius: '20px', padding: '24px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', margin: '0 16px', animation: 'scaleIn 0.2s ease-out' }} onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
           <div style={{ width: '48px', height: '48px', background: '#eff6ff', color: COLOR_PRIMARY, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             <Info size={24} />
@@ -54,21 +76,16 @@ function InfoModal({ show, title, text, onClose }: { show: boolean, title: strin
         </div>
         <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#111827', marginBottom: '8px', fontFamily: "'Poppins', sans-serif" }}>{title}</h3>
         <p style={{ fontSize: '13px', color: '#4b5563', lineHeight: 1.6, marginBottom: '24px', fontFamily: "'Poppins', sans-serif" }}>{text}</p>
-        <button onClick={onClose} className="btn-understand" style={{ width: '100%', padding: '12px 16px', background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s', fontFamily: "'Poppins', sans-serif" }}>
+        <button onClick={onClose} className="btn-understand" style={{ width: '100%', padding: '12px 16px', background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: '12px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s', fontFamily: "'Poppins', sans-serif" }}>
           Mengerti
         </button>
       </div>
-      <style>{`
-        @keyframes scaleIn { from { opacity: 0; transform: scale(0.95) translateY(10px); } to { opacity: 1; transform: scale(1) translateY(0); } }
-        .btn-understand:hover { background: #e5e7eb !important; color: #111827 !important; }
-      `}</style>
     </div>
   );
 }
 
 export default function ManufacturingHomePage() {
   const { workOrders, isLoading: isMfgLoading } = useManufacturingData() as any;
-  const { items, isLoading: isStockLoading } = useStockData();
   const [localWOStatus, setLocalWOStatus] = useState<Record<string, string>>({});
   const [infoData, setInfoData] = useState<{show: boolean, title: string, text: string}>({ show: false, title: '', text: '' });
 
@@ -94,14 +111,22 @@ export default function ManufacturingHomePage() {
     );
 
     let totalProducedQty = 0;
-    let manufacturedValue = 0;
+    let targetProductionQty = 0; // METRIK BARU: Menggantikan Value
     
-    wos.filter((wo: any) => wo.docstatus === 1).forEach((wo: any) => {
-      const qty = Number(wo.produced_qty) > 0 ? Number(wo.produced_qty) : (wo.status === 'Completed' ? Number(wo.qty) : 0);
-      if (qty > 0) {
-        totalProducedQty += qty;
-        const itemDetail = items.find((i: any) => i.item_code === wo.production_item);
-        manufacturedValue += qty * (itemDetail?.standard_rate || 0);
+    // Hitung stats
+    wos.forEach((wo: any) => {
+      // 1. Hitung Target Produksi (Seluruh WO kecuali yang dibatalkan / docstatus 2)
+      if (wo.docstatus !== 2) {
+        targetProductionQty += (Number(wo.qty) || 0);
+      }
+
+      // 2. Hitung barang yang sudah diproduksi (WO yang sudah disubmit)
+      const isSubmitted = wo.docstatus === 1 || ['Not Started', 'In Process', 'Completed'].includes(wo.status);
+      if (isSubmitted) {
+        const qty = Number(wo.produced_qty) > 0 ? Number(wo.produced_qty) : (wo.status === 'Completed' ? Number(wo.qty) : 0);
+        if (qty > 0) {
+          totalProducedQty += qty;
+        }
       }
     });
 
@@ -112,9 +137,9 @@ export default function ManufacturingHomePage() {
     const monthNamesShort = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     const currentMonthIdx = new Date().getMonth();
     const currentYear = new Date().getFullYear();
-    const rollingMonths = [];
     
-    // Loop 12 artinya mundur 1 tahun pas (Total 13 titik bulan)
+    const rollingMonths: { monthStr: string; monthRaw: number; yearRaw: number; qty: number }[] = [];
+    
     for (let i = 12; i >= 0; i--) {
       const d = new Date(currentYear, currentMonthIdx - i, 1);
       rollingMonths.push({
@@ -125,10 +150,13 @@ export default function ManufacturingHomePage() {
       });
     }
 
-    wos.filter((wo: any) => wo.docstatus === 1).forEach((wo: any) => {
-      if (!wo.creation) return;
+    wos.forEach((wo: any) => {
+      const isSubmitted = wo.docstatus === 1 || ['Not Started', 'In Process', 'Completed'].includes(wo.status);
+      if (!isSubmitted || !wo.creation) return;
+
       const woDate = new Date(wo.creation);
       const qty = Number(wo.produced_qty) > 0 ? Number(wo.produced_qty) : (wo.status === 'Completed' ? Number(wo.qty) : 0);
+      
       if (qty > 0) {
         const match = rollingMonths.find(m => m.monthRaw === woDate.getMonth() && m.yearRaw === woDate.getFullYear());
         if (match) match.qty += qty;
@@ -138,178 +166,319 @@ export default function ManufacturingHomePage() {
     const producedTrend = rollingMonths.map(m => ({ day: m.monthStr, qty: m.qty }));
 
     return { 
-      totalProducedQty, openWOs, wipWOs, manufacturedValue, producedTrend
+      totalProducedQty, openWOs, wipWOs, targetProductionQty, producedTrend
     };
-  }, [workOrders, items, localWOStatus]);
+  }, [workOrders, localWOStatus]);
 
-  // KONFIGURASI 3 KARTU KPI
-  const STATS = [
-    {
-      label: 'Open Work Orders', 
-      value: formatNumber(stats.openWOs),
-      icon: FolderOpen, color: '#f43f5e', bg: '#ffe4e6',
-      infoText: 'Jumlah keseluruhan Surat Perintah Kerja (Work Order) yang berstatus Draft atau belum dikerjakan.'
-    },
-    {
-      label: 'WIP Work Orders', 
-      value: formatNumber(stats.wipWOs),
-      icon: Activity, color: '#054CC7', bg: '#eff6ff',
-      infoText: 'Jumlah Surat Perintah Kerja yang saat ini sedang dalam proses perakitan di lantai pabrik.'
-    },
-    {
-      label: 'Manufactured Items Value', 
-      value: formatUang(stats.manufacturedValue),
-      icon: DollarSign, color: '#8b5cf6', bg: '#ede9fe',
-      infoText: 'Estimasi total nilai finansial (Rupiah) dari seluruh barang jadi yang berhasil diproduksi.'
-    },
-  ];
+  if (isMfgLoading) return (
+    <div className="tw-root" style={{ textAlign: 'center', padding: '80px 20px' }}>
+      <Loader2 className="animate-spin" size={36} color={COLOR_PRIMARY} style={{ margin: '0 auto 12px' }} />
+      <p style={{ color: '#64748b', fontSize: '13px' }}>Memuat data Manufacturing Dashboard...</p>
+    </div>
+  );
 
-  if (isMfgLoading || isStockLoading) return (
-    <div className="mh-loading">
-      <div className="mh-spinner" />
-      <p>Memuat data produksi...</p>
+  const MetricCard = ({ title, value, gradFrom, gradTo, icon, infoText }: any) => (
+    <div className="metric-card" style={{ background: `linear-gradient(135deg, ${gradFrom} 0%, ${gradTo} 100%)` }}>
+      <div className="metric-card-content">
+        <div className="metric-card-header">
+          <span className="metric-title">{title}</span>
+          {infoText && (
+            <button 
+              onClick={() => setInfoData({ show: true, title, text: infoText })}
+              className="metric-info-btn"
+              title="Lihat Detail Nilai"
+            >
+              <Info size={14} />
+            </button>
+          )}
+        </div>
+        <div className="metric-value">{value}</div>
+      </div>
+      <div className="metric-icon">
+        {icon}
+      </div>
+    </div>
+  );
+
+  const ChartHeader = ({ title, subtitle, infoText }: any) => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
+      <div>
+        <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#1f2937', margin: 0 }}>{title}</h3>
+        {subtitle && <p style={{ fontSize: '12px', color: '#6B7280', margin: '4px 0 0 0' }}>{subtitle}</p>}
+      </div>
+      <div>
+        <button 
+          onClick={() => setInfoData({ show: true, title, text: infoText })} 
+          style={{ background: '#f8fafc', border: 'none', borderRadius: '8px', padding: '6px', cursor: 'pointer', color: '#64748b', transition: 'all 0.2s', display: 'flex', alignItems: 'center' }} 
+          title="Lihat Informasi"
+          onMouseOver={e => e.currentTarget.style.color = COLOR_PRIMARY}
+          onMouseOut={e => e.currentTarget.style.color = '#4b5563'}
+        >
+          <Info size={16} />
+        </button>
+      </div>
     </div>
   );
 
   return (
-    <div className="mh-root">
+    <div className="tw-root" style={{ animation: 'fadeIn 0.4s ease-out', fontFamily: "'Inter', 'Poppins', sans-serif" }}>
       <InfoModal show={infoData.show} title={infoData.title} text={infoData.text} onClose={() => setInfoData({ ...infoData, show: false })} />
 
-      {/* Header */}
-      <div className="mh-header">
+      <div className="page-header-row">
         <div>
-          <h1 className="mh-title">Manufacturing</h1>
-          <p className="mh-subtitle">Monitor produksi <span style={{ color: COLOR_PRIMARY, fontWeight: 700 }}>{FIXED_COMPANY}</span> secara real-time</p>
+          <h1 style={{ fontSize: '24px', fontWeight: 800, color: '#111827', margin: '0 0 4px 0' }}>Manufacturing Dashboard</h1>
+          <p style={{ fontSize: '13px', color: '#6B7280', margin: 0 }}>Monitor produksi <span style={{ color: COLOR_PRIMARY, fontWeight: 700 }}>{FIXED_COMPANY}</span> secara real-time</p>
         </div>
-        <div className="mh-header-badge">
-          <Cog size={14} className="mh-badge-spin" />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 600, color: '#10b981', background: '#d1fae5', padding: '6px 12px', borderRadius: '20px' }}>
+          <CheckCircle2 size={14} />
           <span>Produksi Aktif</span>
         </div>
       </div>
 
-      {/* ── BAGIAN ATAS: CHART PRODUCED QUANTITY ── */}
-      <div className="mh-card mh-chart-card" style={{ marginBottom: '20px' }}>
-        <div className="mh-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <div>
-            <div className="mh-card-title" style={{ fontSize: '16px' }}>Produced Quantity</div>
-            <div className="mh-card-subtitle" style={{ marginBottom: '12px' }}>Last synced 31 minutes ago</div>
-            
-            {/* BIG NUMBER ala Frappe Dashboard Chart */}
-            <div style={{ fontSize: '32px', fontWeight: 800, color: '#111827', marginBottom: '16px', letterSpacing: '-0.5px' }}>
-              {formatNumber(stats.totalProducedQty)}
+      {/* ── ROW 1: WELCOME CARD & ILLUSTRATION ── */}
+      <div className="frappe-welcome-card" style={{ marginBottom: '24px' }}>
+          <div className="sell-welcome-content">
+            <h1 className="sell-welcome-title">Halo, Tim Manufaktur!</h1>
+            <p className="sell-welcome-subtitle">
+              Hari ini Anda memiliki {stats.openWOs} Surat Perintah Kerja (WO) yang siap diproses. 
+              Pantau terus target penyelesaian produksi dan pantau stok gudang.
+            </p>
+            <div style={{ marginTop: '20px' }}>
+              <Link href="/dashboard/manufacturing?tab=work-orders" style={{ textDecoration: 'none' }}>
+                <button className="btn-welcome-yellow">
+                  Buat Work Order Baru
+                </button>
+              </Link>
             </div>
           </div>
-          <button 
-            onClick={() => setInfoData({ show: true, title: 'Produced Quantity', text: 'Menampilkan tren kuantitas barang jadi yang berhasil diproduksi dari bulan yang sama tahun lalu hingga bulan ini (13 Bulan Terakhir).' })}
-            style={{ background: '#f3f4f6', border: 'none', borderRadius: '6px', padding: '6px', cursor: 'pointer', color: '#9ca3af', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-            title="Lihat Informasi"
-          >
-            <Info size={16} />
-          </button>
-        </div>
+          
+          <div className="sell-welcome-ill-wrapper">
+              <div className="sell-welcome-ill-box">
+                <img 
+                  src="/images/ill-manufacturing.png" 
+                  alt="Manufacturing Illustration" 
+                  onError={(e) => { e.currentTarget.src = '/images/ill-mfg.png'; }} // Fallback jika gambar ill-manufacturing.png belum ada
+                />
+              </div>
+          </div>
+      </div>
 
-        {stats.producedTrend.length > 0 ? (
-          <ResponsiveContainer width="100%" height={300}>
-            <AreaChart data={stats.producedTrend} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+      {/* ── ROW 2: Metrics ── */}
+      <div className="metrics-grid-3">
+        <MetricCard 
+          title="Open Work Orders" 
+          value={formatCompact(stats.openWOs)} 
+          gradFrom="#054CC7" gradTo="#0B79C9" 
+          icon={<FolderOpen size={24} />} 
+          infoText={`Total aktual: ${formatNumber(stats.openWOs)} pesanan.\nJumlah keseluruhan Surat Perintah Kerja (Work Order) yang berstatus Draft atau belum dikerjakan.`} 
+        />
+        <MetricCard 
+          title="WIP Work Orders" 
+          value={formatCompact(stats.wipWOs)} 
+          gradFrom="#0B79C9" gradTo="#11A5CB" 
+          icon={<Activity size={24} />} 
+          infoText={`Total aktual: ${formatNumber(stats.wipWOs)} pesanan.\nJumlah Surat Perintah Kerja yang saat ini sedang dalam proses perakitan di lantai pabrik.`} 
+        />
+        <MetricCard 
+          title="Target Production" 
+          value={formatCompact(stats.targetProductionQty)} 
+          gradFrom="#11A5CB" gradTo="#17C3CC" 
+          icon={<Target size={24} />} 
+          infoText={`Total aktual: ${formatNumber(stats.targetProductionQty)} Unit.\nAkumulasi total kuantitas barang yang ditargetkan untuk diproduksi dari seluruh Work Order (termasuk Draft & WIP).`} 
+        />
+      </div>
+
+      {/* ── ROW 3: Chart Produced Quantity ── */}
+      <div className="chart-container" style={{ marginBottom: '16px' }}>
+        <ChartHeader 
+          title="Produced Quantity Trends" 
+          subtitle="Last synced just now" 
+          infoText="Grafik ini menampilkan tren kuantitas barang jadi yang berhasil diproduksi dari bulan yang sama tahun lalu hingga bulan ini (13 Bulan Terakhir)." 
+        />
+        
+        {stats.producedTrend.some(m => m.qty > 0) ? (
+          <ResponsiveContainer width="100%" height={360}>
+            <AreaChart data={stats.producedTrend} margin={{ top: 20, right: 20, left: 0, bottom: 0 }}>
               <defs>
-                <linearGradient id="gradMfg" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={COLOR_PRIMARY} stopOpacity={0.25} />
-                  <stop offset="95%" stopColor={COLOR_PRIMARY} stopOpacity={0} />
+                <linearGradient id="gradProdHome" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor={TREND_COLOR_BLUE} stopOpacity={0.15} />
+                  <stop offset="95%" stopColor={TREND_COLOR_BLUE} stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-              <XAxis dataKey="day" tick={{ fontSize: 11, fill: '#64748b', fontFamily: 'Poppins' }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: '#64748b', fontFamily: 'Poppins' }} axisLine={false} tickLine={false} />
-              <Tooltip content={<FrappeChartTooltip />} cursor={{ fill: '#f3f4f6' }} />
-              <Area type="monotone" dataKey="qty" name="Produced Quantity" stroke={COLOR_PRIMARY} strokeWidth={2.5} fill="url(#gradMfg)" activeDot={{ r: 5, fill: COLOR_PRIMARY }} />
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+              <XAxis dataKey="day" interval={0} tick={{ fontSize: 11, fill: '#6B7280', fontFamily: 'Poppins' }} axisLine={false} tickLine={false} dy={10} />
+              <YAxis width={60} tickFormatter={(v) => formatShortAxis(v)} tick={{ fontSize: 11, fill: '#6B7280', fontFamily: 'Poppins' }} axisLine={false} tickLine={false} />
+              <Tooltip content={<FrappeChartTooltip />} cursor={{ stroke: '#e2e8e0', strokeWidth: 1, strokeDasharray: '4 4' }} />
+              <Area type="monotone" dataKey="qty" name="Produced Quantity" stroke={TREND_COLOR_BLUE} strokeWidth={3} fill="url(#gradProdHome)" activeDot={{ r: 6, fill: TREND_COLOR_BLUE, stroke: 'white', strokeWidth: 2 }} />
             </AreaChart>
           </ResponsiveContainer>
         ) : (
-          <div className="mh-empty" style={{ height: '300px' }}>
-            <AlertCircle size={28} color="#d1d5db" />
-            <p>Belum ada data produksi</p>
+          <div className="no-data-placeholder">
+            <AlertCircle size={32} color="#d1d5db" style={{ marginBottom: '8px' }} />
+            <p>Belum ada data produksi (Kuantitas masih 0)</p>
           </div>
         )}
       </div>
 
-      {/* ── BAGIAN BAWAH: 3 STATS CARDS ── */}
-      <div className="mh-stats-grid">
-        {STATS.map((s, i) => {
-          const Icon = s.icon;
-          return (
-            <div key={i} className="mh-stat-card" style={{ animationDelay: `${i * 70}ms` }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <div className="mh-stat-label" style={{ marginBottom: 0 }}>{s.label}</div>
-                  <button 
-                    onClick={() => setInfoData({ show: true, title: s.label, text: s.infoText })}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: '#9ca3af', display: 'flex', alignItems: 'center' }}
-                  >
-                    <Info size={14} />
-                  </button>
-                </div>
-                <div className="mh-stat-icon-wrap" style={{ background: s.bg }}>
-                  <Icon size={18} color={s.color} />
-                </div>
-              </div>
-              <div className="mh-stat-value" style={{ marginBottom: '14px' }}>{s.value}</div>
-              <div className="mh-stat-trend">Last synced just now</div>
-            </div>
-          );
-        })}
-      </div>
-
       <style>{`
-        @keyframes fadeSlideUp {
-          from { opacity: 0; transform: translateY(12px); }
-          to   { opacity: 1; transform: translateY(0); }
+        .tw-root {
+           background-color: #EEF2F6; 
+           min-height: calc(100vh - 80px);
+           padding: 20px;
+           border-radius: 16px;
+           margin: -10px; 
         }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        @keyframes spinBadge { to { transform: rotate(360deg); } }
-
-        .mh-root { font-family: 'Poppins', sans-serif; animation: fadeSlideUp 0.4s ease-out; }
-
-        .mh-loading { text-align: center; padding: 80px 20px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
-        .mh-spinner { width: 36px; height: 36px; border: 3px solid #e2e8f0; border-top-color: ${COLOR_PRIMARY}; border-radius: 50%; animation: spin 0.8s linear infinite; }
-        .mh-loading p { font-size: 13px; color: #64748b; }
-
-        .mh-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px; flex-wrap: wrap; gap: 12px; }
-        .mh-title { font-size: 22px; font-weight: 800; color: #0f172a; }
-        .mh-subtitle { font-size: 13px; color: #64748b; margin-top: 2px; }
-        .mh-header-badge { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: ${COLOR_PRIMARY}; background: #eff6ff; border: 1px solid #bfdbfe; padding: 6px 12px; border-radius: 20px; }
-        .mh-badge-spin { animation: spinBadge 3s linear infinite; }
-
-        .mh-stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 20px; }
-
-        .mh-stat-card {
-          background: white;
-          border-radius: 12px;
-          padding: 20px;
-          border: 1px solid #e2e8f0;
-          animation: fadeSlideUp 0.4s ease-out both;
-          transition: transform 0.2s, box-shadow 0.2s;
-        }
-        .mh-stat-card:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.05); }
-        .mh-stat-icon-wrap { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; }
-        .mh-stat-label { font-size: 14px; font-weight: 600; color: #4b5563; }
-        .mh-stat-value { font-size: 28px; font-weight: 800; color: #111827; line-height: 1.1; }
-        .mh-stat-trend { font-size: 11px; font-weight: 500; color: #94a3b8; display: block; border-top: 1px solid #f1f5f9; padding-top: 10px; }
-
-        .mh-card {
-          background: white;
-          border-radius: 12px;
-          padding: 24px;
-          border: 1px solid #e2e8f0;
-          width: 100%;
+        
+        .page-header-row {
+           display: flex; 
+           align-items: center; 
+           justify-content: space-between; 
+           margin-bottom: 24px; 
+           flex-wrap: wrap; 
+           gap: 12px;
         }
 
-        .mh-card-title { font-size: 16px; font-weight: 700; color: #0f172a; }
-        .mh-card-subtitle { font-size: 12px; color: #64748b; margin-top: 2px; }
+        /* ── CSS KHUSUS CARD WELCOME ── */
+        .frappe-welcome-card {
+            background: linear-gradient(135deg, #054CC7 0%, #17C3CC 100%);
+            border-radius: 16px;
+            padding: 32px 40px;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 10px 30px rgba(5, 76, 199, 0.2);
+            min-height: 160px;
+        }
 
-        .mh-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 40px; color: #94a3b8; font-size: 13px; background: #f8fafc; border-radius: 8px; }
+        .sell-welcome-content {
+            position: relative;
+            z-index: 2;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
 
-        @media (max-width: 1100px) { .mh-stats-grid { grid-template-columns: repeat(2, 1fr); } }
-        @media (max-width: 768px) { .mh-stats-grid { grid-template-columns: 1fr; } }
+        .sell-welcome-title {
+            font-size: 28px;
+            font-weight: 800;
+            color: #ffffff;
+            margin: 0 0 8px 0;
+            letter-spacing: -0.02em;
+        }
+
+        .sell-welcome-subtitle {
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.9);
+            margin: 0;
+            line-height: 1.5;
+            max-width: 85%;
+        }
+
+        .btn-welcome-yellow {
+            background: #FFB800;
+            color: #ffffff;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 4px 12px rgba(255, 184, 0, 0.3);
+        }
+        
+        .btn-welcome-yellow:hover {
+            transform: translateY(-2px);
+            background: #F5A623;
+        }
+
+        .sell-welcome-ill-wrapper {
+            flex-shrink: 0;
+            margin-left: 20px;
+            z-index: 2;
+        }
+
+        .sell-welcome-ill-box {
+            width: 150px;
+            height: 150px;
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        .sell-welcome-ill-box img {
+            position: absolute;
+            width: 125%; 
+            height: 125%;
+            object-fit: contain;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        /* ── CSS KHUSUS CARD KOTAK ── */
+        .chart-container { background: white; border-radius: 16px; padding: 24px; width: 100%; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.02); border: none; margin-bottom: 20px; }
+        .no-data-placeholder { height: 260px; display: flex; align-items: center; justify-content: center; color: #9ca3af; font-size: 13px; background: #f8fafc; border-radius: 12px; font-weight: 500; flex-direction: column; }
+        
+        /* ── CSS KHUSUS CARD KPI ALA FRAPPE (WARNA GRADASI) ── */
+        .metric-card {
+          background: white; border-radius: 16px; border: none; padding: 24px;
+          display: flex; align-items: center; justify-content: space-between;
+          height: 100%; min-height: 100px; box-shadow: 0 4px 20px rgba(0,0,0,0.02);
+          color: white;
+          transition: transform 0.2s;
+        }
+        .metric-card:hover { transform: translateY(-3px); }
+        .metric-card-content { display: flex; flex-direction: column; width: calc(100% - 56px); }
+        .metric-card-header { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+        .metric-title { font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.9); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .metric-info-btn { background: none; border: none; cursor: pointer; padding: 0; color: rgba(255,255,255,0.7); display: flex; align-items: center; flex-shrink: 0; transition: color 0.2s, transform 0.2s; }
+        .metric-info-btn:hover { color: #ffffff; transform: scale(1.1); }
+        .metric-value { font-size: 24px; font-weight: 800; line-height: 1.2; color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .metric-icon { width: 48px; height: 48px; border-radius: 14px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; background: rgba(255,255,255,0.2); }
+
+        /* ── GRID RESPONSIF SEMPURNA ── */
+        .metrics-grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 16px; }
+        
+        @media (max-width: 1024px) {
+          .metrics-grid-3 { grid-template-columns: repeat(2, 1fr); }
+        }
+        
+        @media (max-width: 640px) {
+          .metrics-grid-3 { grid-template-columns: 1fr; }
+          .chart-container { padding: 16px !important; border-radius: 12px; }
+          
+          /* Penyesuaian Welcome Card untuk Mobile */
+          .frappe-welcome-card { 
+            flex-direction: column; 
+            align-items: flex-start; 
+            padding: 24px; 
+            gap: 20px; 
+            height: auto;
+          }
+          .sell-welcome-subtitle { max-width: 100%; }
+          .sell-welcome-ill-wrapper { 
+            width: 100%; 
+            display: flex; 
+            justify-content: flex-end; 
+            margin-left: 0; 
+            margin-top: 10px; 
+          }
+          .sell-welcome-ill-box { width: 120px; height: 120px; }
+          
+          .sell-welcome-ill-box img {
+             width: 125%;
+             height: 125%;
+             top: 50%;
+             left: 50%;
+             transform: translate(-50%, -50%);
+          }
+        }
       `}</style>
     </div>
   );

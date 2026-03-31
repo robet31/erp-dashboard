@@ -2,35 +2,34 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
 import { useManufacturingData } from '@/hooks/useFrappeData';
-import { Loader2, Factory, CheckCircle, Activity, ClipboardCheck, Info, X } from 'lucide-react';
+import { Loader2, Factory, CheckCircle, Clock, PackageOpen, Info, X, AlertCircle } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, AreaChart, Area, Legend
 } from 'recharts';
 
 const COLOR_PRIMARY = '#054CC7';
-const COLOR_SECONDARY = '#17C3CC';
-
-// Warna Khas Frappe untuk Status
-const PIE_COLORS = ['#94a3b8', '#3b82f6', '#f59e0b', '#17C3CC', '#8b5cf6', '#10b981']; 
-const AGE_COLORS = ['#3b82f6', '#f59e0b', '#f43f5e', '#64748b'];
+const TREND_COLOR_BLUE = '#3b82f6';
 
 const formatNumber = (v: any) => {
   const n = Number(v);
   if (!v || isNaN(n)) return '0';
-  return new Intl.NumberFormat('en-US').format(n);
+  return new Intl.NumberFormat('id-ID').format(n);
 };
 
 // ── CUSTOM TOOLTIP ALA FRAPPE ──
 const FrappeChartTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
     return (
-      <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px 16px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}>
+      <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '12px 16px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}>
         <div style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '8px', letterSpacing: '0.05em' }}>{label}</div>
         {payload.map((entry: any, index: number) => (
           <div key={index} style={{ marginBottom: index !== payload.length - 1 ? '10px' : 0 }}>
-            <div style={{ fontSize: '22px', fontWeight: 800, color: entry.color, lineHeight: 1 }}>{formatNumber(entry.value)}</div>
-            <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 500, marginTop: '4px' }}>{entry.name}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+              <div style={{ width: 10, height: 10, borderRadius: '3px', background: entry.color || TREND_COLOR_BLUE }} />
+              <div style={{ fontSize: '14px', fontWeight: 700, color: '#111827', lineHeight: 1 }}>{formatNumber(entry.value)}</div>
+            </div>
+            <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 500, marginLeft: '16px' }}>{entry.name}</div>
           </div>
         ))}
       </div>
@@ -43,7 +42,7 @@ const FrappePieTooltip = ({ active, payload }: any) => {
   if (active && payload && payload.length) {
     const data = payload[0];
     return (
-      <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px 16px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}>
+      <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '12px 16px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}>
         <div style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '6px', letterSpacing: '0.05em' }}>{data.name}</div>
         <div style={{ fontSize: '22px', fontWeight: 800, color: data.payload.fill, lineHeight: 1 }}>{formatNumber(data.value)}</div>
       </div>
@@ -52,25 +51,26 @@ const FrappePieTooltip = ({ active, payload }: any) => {
   return null;
 };
 
+// ── MODAL INFORMASI ──
 function InfoModal({ show, title, text, onClose }: { show: boolean, title: string, text: string, onClose: () => void }) {
   if (!show) return null;
   return (
     <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(4px)', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'fadeIn 0.2s ease-out' }} onClick={onClose}>
-      <div style={{ background: 'white', width: '100%', maxWidth: '420px', borderRadius: '16px', padding: '24px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', margin: '0 16px', animation: 'scaleIn 0.2s ease-out' }} onClick={e => e.stopPropagation()}>
+      <div style={{ background: 'white', width: '100%', maxWidth: '420px', borderRadius: '20px', padding: '24px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', margin: '0 16px', animation: 'scaleIn 0.2s ease-out' }} onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
           <div style={{ width: '48px', height: '48px', background: '#eff6ff', color: COLOR_PRIMARY, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Info size={24} /></div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', padding: '4px' }}><X size={20} /></button>
         </div>
         <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#111827', marginBottom: '8px', fontFamily: "'Poppins', sans-serif" }}>{title}</h3>
         <p style={{ fontSize: '13px', color: '#4b5563', lineHeight: 1.6, marginBottom: '24px', fontFamily: "'Poppins', sans-serif" }}>{text}</p>
-        <button onClick={onClose} className="btn-understand" style={{ width: '100%', padding: '12px 16px', background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s', fontFamily: "'Poppins', sans-serif" }}>Mengerti</button>
+        <button onClick={onClose} className="btn-understand" style={{ width: '100%', padding: '12px 16px', background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: '12px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s', fontFamily: "'Poppins', sans-serif" }}>Mengerti</button>
       </div>
     </div>
   );
 }
 
 export default function ManufacturingAnalyticsPage() {
-  const { workOrders, jobCards, qualityInspections, downtimeEntries, isLoading } = useManufacturingData() as any;
+  const { workOrders, isLoading } = useManufacturingData() as any;
   const [localWOStatus, setLocalWOStatus] = useState<Record<string, string>>({});
   const [infoData, setInfoData] = useState<{show: boolean, title: string, text: string}>({ show: false, title: '', text: '' });
 
@@ -81,9 +81,6 @@ export default function ManufacturingAnalyticsPage() {
 
   const data = useMemo(() => {
     const safeWOs = workOrders || [];
-    const safeJobCards = jobCards || [];
-    const safeQIs = qualityInspections || [];
-    const safeDowntimes = downtimeEntries || [];
 
     const now = new Date();
     const currentMonthIdx = now.getMonth();
@@ -99,11 +96,18 @@ export default function ManufacturingAnalyticsPage() {
         };
     });
 
-    const wosValid = allWOs.filter((wo: any) => wo.docstatus === 1);
-
     // ── METRIK 4 KARTU ──
-    let monthlyTotalWO = 0; let monthlyCompletedWO = 0;
-    wosValid.forEach((wo: any) => {
+    let monthlyTotalWO = 0; 
+    let monthlyCompletedWO = 0;
+    let inProcessWOs = 0;
+    let pendingWOs = 0;
+
+    allWOs.forEach((wo: any) => {
+      // Metrik In Process & Pending (Draft/Not Started) dari total keseluruhan data
+      if (wo.status === 'In Process') inProcessWOs++;
+      if (wo.status === 'Draft' || wo.status === 'Not Started') pendingWOs++;
+      
+      // Metrik Bulanan
       if (wo.creation) {
         const d = new Date(wo.creation);
         if (d.getMonth() === currentMonthIdx && d.getFullYear() === currentYear) {
@@ -112,50 +116,46 @@ export default function ManufacturingAnalyticsPage() {
         }
       }
     });
-    const ongoingJobCard = safeJobCards.filter((jc: any) => jc.docstatus === 1 && jc.status === 'Work In Progress').length;
-    let monthlyQualityInspection = 0;
-    safeQIs.filter((qi: any) => qi.docstatus === 1).forEach((qi: any) => {
-      if (qi.creation) {
-        const d = new Date(qi.creation);
-        if (d.getMonth() === currentMonthIdx && d.getFullYear() === currentYear) { monthlyQualityInspection++; }
-      }
-    });
 
     const monthNamesShort = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
     // ── 1. PRODUCED QTY (12 BULAN BERGULIR) ──
-    const producedQty12M = [];
+    // Mengambil dari SEMUA WO agar grafik terisi, kalau produced=0 kita fallback ke target qty agar tren tetap ada
+    const producedQty12M: { monthStr: string; monthRaw: number; yearRaw: number; qty: number }[] = [];
     for (let i = 11; i >= 0; i--) {
       const d = new Date(currentYear, currentMonthIdx - i, 1);
       producedQty12M.push({ monthStr: `${monthNamesShort[d.getMonth()]} ${d.getFullYear()}`, monthRaw: d.getMonth(), yearRaw: d.getFullYear(), qty: 0 });
     }
-    wosValid.forEach((wo: any) => {
-      if (wo.creation) {
+    allWOs.forEach((wo: any) => {
+      if (wo.creation && wo.docstatus !== 2) { // Abaikan yang Cancelled
         const d = new Date(wo.creation);
         const match = producedQty12M.find((m: any) => m.monthRaw === d.getMonth() && m.yearRaw === d.getFullYear());
-        if (match) match.qty += (Number(wo.produced_qty) || 0);
+        if (match) {
+          const qty = Number(wo.produced_qty) > 0 ? Number(wo.produced_qty) : (Number(wo.qty) || 0);
+          match.qty += qty;
+        }
       }
     });
 
-    // ── 2. COMPLETED OPERATION (6 QUARTER BERGULIR) ──
-    const completedOpQuarters = [];
+    // ── 2. QUARTERLY WORK ORDERS (6 QUARTER BERGULIR) ──
+    const quarterlyWOs: { monthStr: string; qRaw: number; yearRaw: number; total: number }[] = [];
     let currQ = Math.floor(currentMonthIdx / 3) + 1;
     let currY = currentYear;
     for (let i = 5; i >= 0; i--) {
       let q = currQ - i; let y = currY;
       while (q <= 0) { q += 4; y -= 1; }
-      completedOpQuarters.push({ monthStr: `Quarter ${q} ${y}`, qRaw: q, yearRaw: y, total: 0 });
+      quarterlyWOs.push({ monthStr: `Quarter ${q} ${y}`, qRaw: q, yearRaw: y, total: 0 });
     }
-    wosValid.forEach((wo: any) => {
-      if (wo.creation && wo.status === 'Completed') {
+    allWOs.forEach((wo: any) => {
+      if (wo.creation && wo.docstatus !== 2) {
         const d = new Date(wo.creation);
         const wq = Math.floor(d.getMonth() / 3) + 1;
-        const matchOp = completedOpQuarters.find((m: any) => m.qRaw === wq && m.yearRaw === d.getFullYear());
+        const matchOp = quarterlyWOs.find((m: any) => m.qRaw === wq && m.yearRaw === d.getFullYear());
         if (matchOp) matchOp.total += 1;
       }
     });
 
-    // ── 3. WORK ORDER ANALYSIS (DATA FRAPPE STYLE) ──
+    // ── 3. WORK ORDER STATUS DISTRIBUTION (PIE CHART) ──
     const woAnalysisData = [
       { name: 'Draft', value: 0, color: '#94a3b8' },
       { name: 'Submitted', value: 0, color: '#3b82f6' },
@@ -174,7 +174,7 @@ export default function ManufacturingAnalyticsPage() {
       else woAnalysisData[5].value += 1; // Rest
     });
 
-    // ── 4. PENDING WORK ORDER (DATA FRAPPE STYLE) ──
+    // ── 4. PENDING WORK ORDER AGEING (PIE CHART) ──
     const pendingWOsData = [
       { name: '0-30 Days', value: 0, color: '#3b82f6' },
       { name: '30-60 Days', value: 0, color: '#f59e0b' },
@@ -182,7 +182,7 @@ export default function ManufacturingAnalyticsPage() {
       { name: '90 Above', value: 0, color: '#64748b' },
     ];
     allWOs.forEach((wo: any) => {
-      if (wo.status !== 'Completed') {
+      if (wo.status !== 'Completed' && wo.docstatus !== 2) {
         const days = Math.floor((now.getTime() - new Date(wo.creation || now).getTime()) / 86400000);
         if (days <= 30) pendingWOsData[0].value++;
         else if (days <= 60) pendingWOsData[1].value++;
@@ -191,40 +191,21 @@ export default function ManufacturingAnalyticsPage() {
       }
     });
 
-    // ── 5. QUALITY INSPECTION ANALYSIS ──
-    const qiAnalysisData = [
-      { name: 'Rejected', value: 0, color: '#ef4444' },
-      { name: 'Accepted', value: 0, color: '#10b981' }
-    ];
-    safeQIs.filter((qi: any) => qi.docstatus === 1).forEach((qi: any) => {
-      const isReject = qi.status === 'Rejected';
-      if (isReject) qiAnalysisData[0].value++;
-      else qiAnalysisData[1].value++;
-    });
-
-    // ── 6. DOWNTIME ANALYSIS ──
-    const downtimeCounts: Record<string, number> = {};
-    safeDowntimes.filter((dt: any) => dt.docstatus === 1).forEach((dt: any) => {
-        const reason = dt.downtime_reason || 'Machine Error';
-        downtimeCounts[reason] = (downtimeCounts[reason] || 0) + (Number(dt.downtime_minutes) || 1);
-    });
-    const downtimeAnalysis = Object.entries(downtimeCounts).map(([name, value], i) => ({ name, value, color: ['#6366f1', '#f43f5e', '#f59e0b', COLOR_SECONDARY][i % 4] }));
-
-    // ── 7. WORK ORDER QTY ANALYSIS (BAR 4 BULAN BERGULIR) ──
-    const woQtyTrend = [];
-    for (let i = 3; i >= 0; i--) {
+    // ── 5. WORK ORDER QTY ANALYSIS (BAR 6 BULAN BERGULIR) ──
+    const woQtyTrend: { monthStr: string; monthRaw: number; yearRaw: number; Pending: number; Completed: number }[] = [];
+    for (let i = 5; i >= 0; i--) {
       const d = new Date(currentYear, currentMonthIdx - i, 1);
       woQtyTrend.push({ monthStr: `${monthNamesShort[d.getMonth()]} ${d.getFullYear()}`, monthRaw: d.getMonth(), yearRaw: d.getFullYear(), Pending: 0, Completed: 0 });
     }
     allWOs.forEach((wo: any) => {
-      if (!wo.creation) return;
+      if (!wo.creation || wo.docstatus === 2) return;
       const d = new Date(wo.creation);
       const match = woQtyTrend.find((m: any) => m.monthRaw === d.getMonth() && m.yearRaw === d.getFullYear());
       if (match) {
         const produced = Number(wo.produced_qty) || 0;
         const total = Number(wo.qty) || 0;
         
-        if (wo.docstatus === 0 || wo.status === 'Draft') {
+        if (wo.docstatus === 0 || wo.status === 'Draft' || wo.status === 'Not Started') {
             match.Pending += total;
         } else if (wo.status === 'Completed') {
             match.Completed += total;
@@ -235,52 +216,51 @@ export default function ManufacturingAnalyticsPage() {
       }
     });
 
-    // ── 8. JOB CARD ANALYSIS (BAR 12 BULAN JAN - DEC TAHUN INI) ──
-    const jcTrend = [];
-    for (let i = 0; i < 12; i++) {
-      jcTrend.push({ monthStr: `${monthNamesShort[i]} ${currentYear}`, monthRaw: i, yearRaw: currentYear, Open: 0, Completed: 0 });
-    }
-    const simulatedJobCards: any[] = [];
+    // ── 6. TOP 5 MANUFACTURED ITEMS (PENGGANTI JOB CARD/DOWNTIME) ──
+    const itemMap: Record<string, number> = {};
     allWOs.forEach((wo: any) => {
-      const isLocallySubmitted = wo.docstatus === 1 || ['Not Started', 'In Process', 'Completed'].includes(localWOStatus[wo.name]);
-      if(isLocallySubmitted) simulatedJobCards.push({ status: wo.status === 'Completed' ? 'Completed' : 'Open', creation: wo.creation });
-    });
-    simulatedJobCards.forEach((jc: any) => {
-      if (!jc.creation) return;
-      const d = new Date(jc.creation);
-      const match = jcTrend.find((m: any) => m.monthRaw === d.getMonth() && m.yearRaw === d.getFullYear());
-      if (match) {
-        if (jc.status === 'Completed') match.Completed += 1;
-        else match.Open += 1;
+      if(wo.docstatus !== 2 && wo.production_item) {
+        const itemName = wo.item_name || wo.production_item;
+        itemMap[itemName] = (itemMap[itemName] || 0) + (Number(wo.qty) || 0);
       }
     });
+    const topItems = Object.entries(itemMap)
+      .map(([name, qty]) => ({ name, qty }))
+      .sort((a, b) => b.qty - a.qty)
+      .slice(0, 5);
 
     return { 
-      monthlyTotalWO, monthlyCompletedWO, ongoingJobCard, monthlyQualityInspection,
-      producedQty12M, completedOpQuarters, woAnalysisData, pendingWOsData, qiAnalysisData, downtimeAnalysis, woQtyTrend, jcTrend
+      monthlyTotalWO, monthlyCompletedWO, inProcessWOs, pendingWOs,
+      producedQty12M, quarterlyWOs, woAnalysisData, pendingWOsData, woQtyTrend, topItems
     };
-  }, [workOrders, jobCards, qualityInspections, downtimeEntries, localWOStatus]);
+  }, [workOrders, localWOStatus]);
 
-  if (isLoading) return <div style={{ textAlign: 'center', padding: '60px' }}><Loader2 className="animate-spin" size={32} color={COLOR_PRIMARY} style={{ margin: '0 auto 16px' }} /><p style={{ color: '#6B7280', fontSize: '13px' }}>Memuat analitik manufaktur...</p></div>;
+  if (isLoading) return (
+    <div className="tw-root" style={{ textAlign: 'center', padding: '80px 20px' }}>
+      <Loader2 className="animate-spin" size={36} color={COLOR_PRIMARY} style={{ margin: '0 auto 12px' }} />
+      <p style={{ color: '#64748b', fontSize: '13px' }}>Memuat analitik manufaktur...</p>
+    </div>
+  );
 
-  // COMPONENT UNTUK METRIC KARTU YANG DILENGKAPI TOMBOL INFO
-  const MetricCard = ({ title, value, color, icon, infoText }: any) => (
-    <div className="chart-container" style={{ padding: '20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-      <div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
-          <span style={{ fontSize: '12px', fontWeight: 600, color: '#6B7280' }}>{title}</span>
+  // COMPONENT UNTUK METRIC KARTU YANG DILENGKAPI TOMBOL INFO (GAYA SELLING/GRADIENT)
+  const MetricCard = ({ title, value, gradFrom, gradTo, icon, infoText }: any) => (
+    <div className="metric-card" style={{ background: `linear-gradient(135deg, ${gradFrom} 0%, ${gradTo} 100%)` }}>
+      <div className="metric-card-content">
+        <div className="metric-card-header">
+          <span className="metric-title">{title}</span>
           {infoText && (
             <button 
               onClick={() => setInfoData({ show: true, title, text: infoText })}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: '#9ca3af', display: 'flex', alignItems: 'center' }}
+              className="metric-info-btn"
+              title="Lihat Detail Nilai"
             >
               <Info size={14} />
             </button>
           )}
         </div>
-        <div style={{ fontSize: '28px', fontWeight: 800, color: color }}>{value}</div>
+        <div className="metric-value">{value}</div>
       </div>
-      <div style={{ width: '48px', height: '48px', background: `${color}15`, borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: color }}>
+      <div className="metric-icon">
         {icon}
       </div>
     </div>
@@ -288,11 +268,15 @@ export default function ManufacturingAnalyticsPage() {
 
   const ChartHeader = ({ title, infoText }: { title: string, infoText?: string }) => (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
-      <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#111827' }}>{title}</h3>
+      <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#111827', margin: 0 }}>{title}</h3>
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-        <span style={{ fontSize: '11px', color: '#6B7280', fontWeight: 500 }}>Last synced 15 minutes ago</span>
+        <span style={{ fontSize: '11px', color: '#6B7280', fontWeight: 500 }}>Last synced just now</span>
         {infoText && (
-          <button onClick={() => setInfoData({ show: true, title, text: infoText })} style={{ background: '#f3f4f6', border: 'none', borderRadius: '6px', padding: '4px', cursor: 'pointer', color: '#9ca3af', display: 'flex' }}>
+          <button 
+            onClick={() => setInfoData({ show: true, title, text: infoText })} 
+            style={{ background: '#f8fafc', border: 'none', borderRadius: '8px', padding: '6px', cursor: 'pointer', color: '#64748b', transition: 'all 0.2s', display: 'flex', alignItems: 'center' }} 
+            title="Lihat Informasi"
+          >
             <Info size={16} />
           </button>
         )}
@@ -357,47 +341,55 @@ export default function ManufacturingAnalyticsPage() {
   };
 
   return (
-    <div style={{ animation: 'fadeIn 0.4s ease-out', fontFamily: "'Poppins', sans-serif" }}>
+    <div className="tw-root" style={{ animation: 'fadeIn 0.4s ease-out', fontFamily: "'Poppins', sans-serif" }}>
       
       <InfoModal show={infoData.show} title={infoData.title} text={infoData.text} onClose={() => setInfoData({ ...infoData, show: false })} />
 
-      {/* ROW 1: 4 METRICS CARDS */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '16px' }}>
+      {/* HEADER PAGE */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
+        <div>
+          <h1 style={{ fontSize: '24px', fontWeight: 800, color: '#111827', margin: '0 0 4px 0' }}>Analytics Center</h1>
+          <p style={{ fontSize: '13px', color: '#6B7280', margin: 0 }}>Analisis mendalam performa manufaktur & operasional</p>
+        </div>
+      </div>
+
+      {/* ROW 1: 4 METRICS CARDS (UI GRADASI) */}
+      <div className="metrics-grid">
         <MetricCard 
-          title="Monthly Total Work Order" 
-          value={data.monthlyTotalWO} 
-          color="#111827" 
+          title="Total Work Orders (Bulan Ini)" 
+          value={formatNumber(data.monthlyTotalWO)} 
+          gradFrom="#054CC7" gradTo="#0B79C9" 
           icon={<Factory size={24} />} 
           infoText="Jumlah keseluruhan Surat Perintah Kerja (Work Order) yang dibuat pada bulan berjalan."
         />
         <MetricCard 
-          title="Monthly Completed Work Order" 
-          value={data.monthlyCompletedWO} 
-          color={COLOR_PRIMARY} 
+          title="Completed Work Orders" 
+          value={formatNumber(data.monthlyCompletedWO)} 
+          gradFrom="#0B79C9" gradTo="#11A5CB" 
           icon={<CheckCircle size={24} />} 
           infoText="Jumlah Surat Perintah Kerja (Work Order) yang telah berstatus Selesai pada bulan berjalan."
         />
         <MetricCard 
-          title="Ongoing Job Card" 
-          value={data.ongoingJobCard} 
-          color={COLOR_SECONDARY} 
-          icon={<Activity size={24} />} 
-          infoText="Jumlah Kartu Tugas (Job Card) yang saat ini sedang dikerjakan (Work In Progress) oleh operator di pabrik."
+          title="In Process Work Orders" 
+          value={formatNumber(data.inProcessWOs)} 
+          gradFrom="#11A5CB" gradTo="#17C3CC" 
+          icon={<Clock size={24} />} 
+          infoText="Total Work Order yang saat ini sedang dalam status In Process (sedang dirakit di lantai pabrik)."
         />
         <MetricCard 
-          title="Monthly Quality Inspection" 
-          value={data.monthlyQualityInspection} 
-          color="#3b82f6" 
-          icon={<ClipboardCheck size={24} />} 
-          infoText="Jumlah total Inspeksi Kualitas (Quality Inspection) yang dicatat pada bulan berjalan."
+          title="Pending Work Orders" 
+          value={formatNumber(data.pendingWOs)} 
+          gradFrom="#17C3CC" gradTo="#2dd4bf" 
+          icon={<PackageOpen size={24} />} 
+          infoText="Jumlah Work Order yang masih tertunda (berstatus Draft atau Not Started)."
         />
       </div>
 
       {/* ROW 2: 2 AREA CHARTS (12 MONTHS TREN & QUARTER) */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '16px', marginBottom: '16px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '20px', marginBottom: '20px' }}>
         <div className="chart-container">
-          <ChartHeader title="Produced Quantity" infoText="Total kuantitas barang yang diproduksi (12 Bulan)" />
-          <ResponsiveContainer width="100%" height={250}>
+          <ChartHeader title="Produced Quantity Trend" infoText="Total kuantitas barang yang diproyeksikan/diproduksi dalam 12 Bulan terakhir." />
+          <ResponsiveContainer width="100%" height={280}>
             <AreaChart data={data.producedQty12M} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
               <defs>
                 <linearGradient id="colorProd" x1="0" y1="0" x2="0" y2="1">
@@ -406,111 +398,150 @@ export default function ManufacturingAnalyticsPage() {
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-              <XAxis dataKey="monthStr" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+              <XAxis dataKey="monthStr" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} dy={10} />
               <YAxis tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
               <Tooltip content={<FrappeChartTooltip />} cursor={{ fill: '#f3f4f6' }} />
-              <Area type="monotone" dataKey="qty" name="Produced Quantity" stroke={COLOR_PRIMARY} strokeWidth={2} fill="url(#colorProd)" activeDot={{ r: 5, fill: COLOR_PRIMARY }} />
+              <Area type="monotone" dataKey="qty" name="Produced/Target Qty" stroke={COLOR_PRIMARY} strokeWidth={3} fill="url(#colorProd)" activeDot={{ r: 6, fill: COLOR_PRIMARY, stroke: 'white', strokeWidth: 2 }} />
             </AreaChart>
           </ResponsiveContainer>
         </div>
 
         <div className="chart-container">
-          <ChartHeader title="Completed Operation" infoText="Jumlah total Surat Perintah yang berstatus Selesai per Kuartal (Quarter)." />
-          <ResponsiveContainer width="100%" height={250}>
-            <AreaChart data={data.completedOpQuarters} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+          <ChartHeader title="Quarterly Work Orders" infoText="Jumlah total Surat Perintah (Work Order) yang dibuat per Kuartal (Quarter)." />
+          <ResponsiveContainer width="100%" height={280}>
+            <AreaChart data={data.quarterlyWOs} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
               <defs>
                 <linearGradient id="colorOp" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={COLOR_SECONDARY} stopOpacity={0.2} />
-                  <stop offset="95%" stopColor={COLOR_SECONDARY} stopOpacity={0} />
+                  <stop offset="5%" stopColor="#17C3CC" stopOpacity={0.2} />
+                  <stop offset="95%" stopColor="#17C3CC" stopOpacity={0} />
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-              <XAxis dataKey="monthStr" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+              <XAxis dataKey="monthStr" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} dy={10} />
               <YAxis tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
               <Tooltip content={<FrappeChartTooltip />} cursor={{ fill: '#f3f4f6' }} />
-              <Area type="monotone" dataKey="total" name="Completed Operation" stroke={COLOR_SECONDARY} strokeWidth={2} fill="url(#colorOp)" activeDot={{ r: 5, fill: COLOR_SECONDARY }} />
+              <Area type="monotone" dataKey="total" name="Total WOs" stroke="#17C3CC" strokeWidth={3} fill="url(#colorOp)" activeDot={{ r: 6, fill: '#17C3CC', stroke: 'white', strokeWidth: 2 }} />
             </AreaChart>
           </ResponsiveContainer>
         </div>
       </div>
 
-      {/* ROW 3: WORK ORDER ANALYSIS & QUALITY INSPECTION */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '16px', marginBottom: '16px' }}>
-        <FrappePieChart data={data.woAnalysisData} title="Work Order Analysis" infoText="Distribusi berdasarkan Status Work Order" />
-        <FrappePieChart data={data.qiAnalysisData} title="Quality Inspection Analysis" infoText="Tingkat Kelulusan Quality Control." />
+      {/* ROW 3: PIE CHARTS (WO ANALYSIS & AGEING) */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px', marginBottom: '20px' }}>
+        <FrappePieChart data={data.woAnalysisData} title="Work Order Status Analysis" infoText="Distribusi keseluruhan berdasarkan Status Work Order." />
+        <FrappePieChart data={data.pendingWOsData} title="Pending Work Order (Ageing)" infoText="Analisis umur Work Order yang belum diselesaikan (Ageing Analysis)." />
       </div>
 
-      {/* ROW 4: PENDING WO (AGEING) & DOWNTIME */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '16px', marginBottom: '16px' }}>
-        <FrappePieChart data={data.pendingWOsData} title="Pending Work Order" infoText="Analisis umur Work Order yang belum diselesaikan (Ageing Analysis)." />
+      {/* ROW 4: BAR CHARTS (QTY TREND & TOP ITEMS) */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }} className="bottom-charts-grid">
         
-        {/* Downtime (Gunakan Pie Biasa Karena Datanya Dinamis) */}
+        {/* Work Order Qty Analysis (Bar Chart 6 Bulan) */}
         <div className="chart-container">
-          <ChartHeader title="Last Month Downtime Analysis" infoText="Analisis alasan pemberhentian mesin bulan lalu" />
-          {data.downtimeAnalysis.length > 0 ? (
-            <ResponsiveContainer width="100%" height={260}>
-              <PieChart>
-                <Pie data={data.downtimeAnalysis} cx="50%" cy="50%" innerRadius={60} outerRadius={85} paddingAngle={2} dataKey="value">
-                  {data.downtimeAnalysis.map((entry, i) => <Cell key={i} fill={entry.color} />)}
-                </Pie>
-                <Tooltip content={<FrappePieTooltip />} />
-                <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
-              </PieChart>
-            </ResponsiveContainer>
-          ) : (<div className="no-data-box">Tidak ada catatan Downtime Mesin</div>)}
-        </div>
-      </div>
-
-      {/* ROW 5: WORK ORDER QTY ANALYSIS & JOB CARD ANALYSIS (BAR CHART BULANAN) */}
-      <div className="bottom-charts-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-        
-        {/* Work Order Qty Analysis (Bar Chart 4 Bulan) */}
-        <div className="chart-container">
-          <ChartHeader title="Work Order Qty Analysis" infoText="Membandingkan Pending Qty dan Completed Qty secara berdampingan dalam 4 bulan terakhir." />
+          <ChartHeader title="Work Order Qty Analysis (6 Bulan)" infoText="Membandingkan Pending Qty dan Completed Qty secara berdampingan dalam 6 bulan terakhir." />
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={data.woQtyTrend} margin={{ top: 20, right: 10, left: -20, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-              <XAxis dataKey="monthStr" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+              <XAxis dataKey="monthStr" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} dy={10} />
               <YAxis tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
               <Tooltip content={<FrappeChartTooltip />} cursor={{ fill: '#f8fafc' }} />
               <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px', paddingBottom: '10px' }} />
               
-              {/* Sesuai Frappe: Pending (Abu-abu), Completed (Biru) */}
-              <Bar dataKey="Pending" name="Pending" fill="#cbd5e1" radius={[4, 4, 0, 0]} barSize={22} />
-              <Bar dataKey="Completed" name="Completed" fill={COLOR_PRIMARY} radius={[4, 4, 0, 0]} barSize={22} />
+              <Bar dataKey="Pending" name="Pending Qty" fill="#cbd5e1" radius={[4, 4, 0, 0]} barSize={22} />
+              <Bar dataKey="Completed" name="Completed Qty" fill={COLOR_PRIMARY} radius={[4, 4, 0, 0]} barSize={22} />
             </BarChart>
           </ResponsiveContainer>
         </div>
 
-        {/* Job Card Analysis (Bar Chart 12 Bulan: Jan - Des Tahun Ini) */}
+        {/* Top 5 Manufactured Items (Bar Chart Pengganti Job Card) */}
         <div className="chart-container">
-          <ChartHeader title="Job Card Analysis" infoText="Membandingkan status Kartu Tugas (Open vs Completed) bulan Januari - Desember tahun ini." />
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={data.jcTrend} margin={{ top: 20, right: 10, left: -20, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-              <XAxis dataKey="monthStr" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} angle={-45} textAnchor="end" height={50} />
-              <YAxis tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
-              <Tooltip content={<FrappeChartTooltip />} cursor={{ fill: '#f8fafc' }} />
-              <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px', paddingBottom: '10px' }} />
-              
-              {/* Sesuai Frappe: Open (Abu-abu), Completed (Biru) */}
-              <Bar dataKey="Open" name="Open" fill="#cbd5e1" radius={[2, 2, 0, 0]} barSize={12} />
-              <Bar dataKey="Completed" name="Completed" fill={COLOR_PRIMARY} radius={[2, 2, 0, 0]} barSize={12} />
-            </BarChart>
-          </ResponsiveContainer>
+          <ChartHeader title="Top 5 Items to Manufacture" infoText="5 Barang dengan target produksi (Quantity) tertinggi berdasarkan seluruh Work Order." />
+          {data.topItems.length > 0 ? (
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart layout="vertical" data={data.topItems} margin={{ top: 20, right: 20, left: 10, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f1f5f9" />
+                <XAxis type="number" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                <YAxis dataKey="name" type="category" tick={{ fontSize: 10, fill: '#475569' }} width={100} axisLine={false} tickLine={false} />
+                <Tooltip content={<FrappeChartTooltip />} cursor={{ fill: '#f8fafc' }} />
+                
+                <Bar dataKey="qty" name="Target Quantity" fill="#17C3CC" radius={[0, 4, 4, 0]} barSize={20} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="no-data-box">
+              <AlertCircle size={32} color="#d1d5db" style={{ marginBottom: '8px' }} />
+              <p style={{ margin: 0 }}>Belum ada data barang untuk diproduksi</p>
+            </div>
+          )}
         </div>
 
       </div>
 
       <style>{`
-        .chart-container { background: white; border-radius: 12px; padding: 24px; border: 1px solid #e2e8f0; width: 100%; }
-        .no-data-box { height: 260px; display: flex; align-items: center; justify-content: center; color: #9CA3AF; font-size: 13px; background: #f8fafc; border-radius: 8px; }
+        .tw-root {
+           background-color: #EEF2F6; 
+           min-height: calc(100vh - 80px);
+           padding: 24px;
+           border-radius: 16px;
+           box-sizing: border-box;
+           width: 100%;
+        }
+
+        .chart-container { 
+          background: white; 
+          border-radius: 16px; 
+          padding: 24px; 
+          border: none; 
+          width: 100%; 
+          box-shadow: 0 4px 20px rgba(0,0,0,0.02); 
+          box-sizing: border-box;
+        }
+        
+        .no-data-box { 
+          height: 260px; 
+          display: flex; 
+          flex-direction: column; 
+          align-items: center; 
+          justify-content: center; 
+          color: #9CA3AF; 
+          font-size: 13px; 
+          background: #f8fafc; 
+          border-radius: 12px; 
+          font-weight: 500; 
+        }
+        
+        /* ── CSS KHUSUS CARD KPI (GRADASI) ── */
+        /* Menggunakan auto-fit agar bisa menyesuaikan ukuran layar tanpa meluap */
+        .metrics-grid { 
+          display: grid; 
+          grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); 
+          gap: 16px; 
+          margin-bottom: 24px; 
+          width: 100%;
+          box-sizing: border-box;
+        }
+        
+        .metric-card {
+          background: white; border-radius: 16px; border: none; padding: 24px;
+          display: flex; align-items: center; justify-content: space-between;
+          height: 100%; min-height: 100px; box-shadow: 0 4px 20px rgba(0,0,0,0.02);
+          color: white;
+          transition: transform 0.2s;
+          box-sizing: border-box;
+        }
+        .metric-card:hover { transform: translateY(-3px); }
+        .metric-card-content { display: flex; flex-direction: column; width: calc(100% - 56px); }
+        .metric-card-header { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+        .metric-title { font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.9); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .metric-info-btn { background: none; border: none; cursor: pointer; padding: 0; color: rgba(255,255,255,0.7); display: flex; align-items: center; flex-shrink: 0; transition: color 0.2s, transform 0.2s; }
+        .metric-info-btn:hover { color: #ffffff; transform: scale(1.1); }
+        .metric-value { font-size: 24px; font-weight: 800; line-height: 1.2; color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .metric-icon { width: 48px; height: 48px; border-radius: 14px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; background: rgba(255,255,255,0.2); }
+
         @media (max-width: 1024px) {
           .bottom-charts-grid { grid-template-columns: 1fr !important; }
         }
         @media (max-width: 640px) {
-          .mobile-flex-col { flex-direction: column !important; align-items: stretch !important; gap: 12px !important; }
-          .chart-container { padding: 16px !important; border-radius: 8px; }
+          .chart-container { padding: 16px !important; border-radius: 12px; }
         }
       `}</style>
     </div>
