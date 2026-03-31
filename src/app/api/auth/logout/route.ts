@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-const FRAPPE_URL = process.env.NEXT_PUBLIC_FRAPPE_URL || 'http://34.101.192.135:8080';
+const FRAPPE_URL = process.env.FRAPPE_URL || 'http://34.101.192.135:8080';
 
 export async function POST() {
   try {
