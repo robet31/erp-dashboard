@@ -85,8 +85,9 @@ const FrappeChartTooltip = ({ active, payload, label, isCurrency = false }: any)
 function InfoModal({ show, title, text, onClose }: { show: boolean, title: string, text: string, onClose: () => void }) {
   if (!show) return null;
   return (
-    <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(4px)', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'fadeIn 0.2s ease-out' }} onClick={onClose}>
-      <div style={{ background: 'white', width: '100%', maxWidth: '420px', borderRadius: '20px', padding: '24px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', margin: '0 16px', animation: 'scaleIn 0.2s ease-out' }} onClick={e => e.stopPropagation()}>
+    <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(4px)', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', animation: 'fadeIn 0.2s ease-out' }} onClick={onClose}>
+      {/* Ditambahkan maxHeight dan overflowY agar bisa di-scroll di layar HP kecil */}
+      <div style={{ background: 'white', width: '100%', maxWidth: '420px', maxHeight: '90vh', overflowY: 'auto', borderRadius: '20px', padding: '24px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', animation: 'scaleIn 0.2s ease-out' }} onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
           <div style={{ width: '48px', height: '48px', background: '#eff6ff', color: COLOR_PRIMARY, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             <Info size={24} />
@@ -96,7 +97,7 @@ function InfoModal({ show, title, text, onClose }: { show: boolean, title: strin
           </button>
         </div>
         <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#111827', marginBottom: '8px', fontFamily: "'Poppins', sans-serif" }}>{title}</h3>
-        <p style={{ fontSize: '13px', color: '#4b5563', lineHeight: 1.6, marginBottom: '24px', fontFamily: "'Poppins', sans-serif" }}>{text}</p>
+        <p style={{ fontSize: '13px', color: '#4b5563', lineHeight: 1.6, marginBottom: '24px', fontFamily: "'Poppins', sans-serif", whiteSpace: 'pre-line' }}>{text}</p>
         <button onClick={onClose} className="btn-understand" style={{ width: '100%', padding: '12px 16px', background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: '12px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s', fontFamily: "'Poppins', sans-serif" }}>
           Mengerti
         </button>
@@ -203,10 +204,10 @@ export default function SellingHomePage() {
 
       <div className="page-header-row">
         <div>
-          <h1 style={{ fontSize: '24px', fontWeight: 800, color: '#111827', margin: '0 0 4px 0' }}>Selling Dashboard</h1>
-          <p style={{ fontSize: '13px', color: '#6B7280', margin: 0 }}>Ringkasan performa penjualan Anda hari ini.</p>
+          <h1 className="page-title">Selling Dashboard</h1>
+          <p className="page-subtitle">Ringkasan performa penjualan Anda hari ini.</p>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 600, color: '#10b981', background: '#d1fae5', padding: '6px 12px', borderRadius: '20px' }}>
+        <div className="realtime-badge">
           <CheckCircle2 size={14} />
           <span>Data Real-time</span>
         </div>
@@ -220,8 +221,8 @@ export default function SellingHomePage() {
               Hari ini Anda memiliki {stats.totalSalesOrders} pesanan aktif yang siap diproses. 
               Terus pantau target penjualan dan manajemen faktur harian.
             </p>
-            <div style={{ marginTop: '20px' }}>
-              <Link href="/dashboard/selling?tab=orders" style={{ textDecoration: 'none' }}>
+            <div className="sell-welcome-action">
+              <Link href="/dashboard/selling?tab=orders" style={{ textDecoration: 'none', width: '100%' }}>
                 <button className="btn-welcome-yellow">
                   Buat Pesanan Baru
                 </button>
@@ -270,25 +271,27 @@ export default function SellingHomePage() {
         />
         
         {stats.monthlyRevenue.some(m => m.revenue > 0) ? (
-          <ResponsiveContainer width="100%" height={360}>
-            <AreaChart data={stats.monthlyRevenue} margin={{ top: 20, right: 20, left: 0, bottom: 0 }}>
-              <defs>
-                <linearGradient id="gradRevHome" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={TREND_COLOR_BLUE} stopOpacity={0.15} />
-                  <stop offset="95%" stopColor={TREND_COLOR_BLUE} stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-              <XAxis dataKey="month" interval={0} tick={{ fontSize: 11, fill: '#6B7280', fontFamily: 'Poppins' }} axisLine={false} tickLine={false} dy={10} />
-              <YAxis width={60} tickFormatter={(v) => formatShortAxis(v)} tick={{ fontSize: 11, fill: '#6B7280', fontFamily: 'Poppins' }} axisLine={false} tickLine={false} />
-              <Tooltip content={<FrappeChartTooltip isCurrency={true} />} cursor={{ stroke: '#e2e8e0', strokeWidth: 1, strokeDasharray: '4 4' }} />
-              <Area type="monotone" dataKey="revenue" name="Total Sales Revenue" stroke={TREND_COLOR_BLUE} strokeWidth={3} fill="url(#gradRevHome)" activeDot={{ r: 6, fill: TREND_COLOR_BLUE, stroke: 'white', strokeWidth: 2 }} />
-            </AreaChart>
-          </ResponsiveContainer>
+          <div className="responsive-chart-wrapper">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={stats.monthlyRevenue} margin={{ top: 20, right: 10, left: -20, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="gradRevHome" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={TREND_COLOR_BLUE} stopOpacity={0.15} />
+                    <stop offset="95%" stopColor={TREND_COLOR_BLUE} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                <XAxis dataKey="month" interval="preserveStartEnd" tick={{ fontSize: 11, fill: '#6B7280', fontFamily: 'Poppins' }} axisLine={false} tickLine={false} dy={10} />
+                <YAxis width={60} tickFormatter={(v) => formatShortAxis(v)} tick={{ fontSize: 11, fill: '#6B7280', fontFamily: 'Poppins' }} axisLine={false} tickLine={false} />
+                <Tooltip content={<FrappeChartTooltip isCurrency={true} />} cursor={{ stroke: '#e2e8e0', strokeWidth: 1, strokeDasharray: '4 4' }} />
+                <Area type="monotone" dataKey="revenue" name="Total Sales Revenue" stroke={TREND_COLOR_BLUE} strokeWidth={3} fill="url(#gradRevHome)" activeDot={{ r: 5, fill: TREND_COLOR_BLUE, stroke: 'white', strokeWidth: 2 }} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
         ) : (
           <div className="no-data-placeholder">
             <AlertCircle size={32} color="#d1d5db" style={{ marginBottom: '8px' }} />
-            <p>Belum ada data pendapatan (Belum ada pesanan disahkan)</p>
+            <p>Belum ada data pendapatan</p>
           </div>
         )}
       </div>
@@ -300,6 +303,7 @@ export default function SellingHomePage() {
            padding: 20px;
            border-radius: 16px;
            margin: -10px; 
+           overflow-x: hidden; /* Mencegah scroll menyamping */
         }
         
         .page-header-row {
@@ -309,6 +313,15 @@ export default function SellingHomePage() {
            margin-bottom: 24px; 
            flex-wrap: wrap; 
            gap: 12px;
+        }
+
+        .page-title { font-size: 24px; font-weight: 800; color: #111827; margin: 0 0 4px 0; }
+        .page-subtitle { font-size: 13px; color: #6B7280; margin: 0; }
+        
+        .realtime-badge {
+           display: flex; align-items: center; gap: 6px; 
+           font-size: 12px; font-weight: 600; color: #10b981; 
+           background: #d1fae5; padding: 6px 12px; border-radius: 20px;
         }
 
         /* ── CSS KHUSUS CARD WELCOME ── */
@@ -349,6 +362,11 @@ export default function SellingHomePage() {
             max-width: 85%;
         }
 
+        .sell-welcome-action {
+            margin-top: 20px;
+            display: flex;
+        }
+
         .btn-welcome-yellow {
             background: #FFB800;
             color: #ffffff;
@@ -360,6 +378,7 @@ export default function SellingHomePage() {
             cursor: pointer;
             transition: all 0.2s;
             box-shadow: 0 4px 12px rgba(255, 184, 0, 0.3);
+            white-space: nowrap;
         }
         
         .btn-welcome-yellow:hover {
@@ -373,7 +392,6 @@ export default function SellingHomePage() {
             z-index: 2;
         }
 
-        /* Kotak Background Ilustrasi */
         .sell-welcome-ill-box {
             width: 150px;
             height: 150px;
@@ -385,22 +403,28 @@ export default function SellingHomePage() {
             position: relative;
         }
 
-        /* PERBAIKAN DI SINI */
         .sell-welcome-ill-box img {
             position: absolute;
-            width: 125%; /* Dikecilkan sedikit dari 140% agar tetap proporsional */
+            width: 125%;
             height: 125%;
             object-fit: contain;
             top: 50%;
             left: 50%;
-            transform: translate(-50%, -50%); /* Membuat gambar 100% presisi di tengah kotak */
+            transform: translate(-50%, -50%);
         }
 
         /* ── CSS KHUSUS CARD KOTAK ── */
         .chart-container { background: white; border-radius: 16px; padding: 24px; width: 100%; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.02); border: none; margin-bottom: 20px; }
+        
+        /* Wrapper untuk chart Recharts agar tinggi bisa diatur responsive */
+        .responsive-chart-wrapper {
+            width: 100%;
+            height: 360px;
+        }
+        
         .no-data-placeholder { height: 260px; display: flex; align-items: center; justify-content: center; color: #9ca3af; font-size: 13px; background: #f8fafc; border-radius: 12px; font-weight: 500; flex-direction: column; }
         
-        /* ── CSS KHUSUS CARD KPI ALA FRAPPE (WARNA GRADASI) ── */
+        /* ── CSS KHUSUS CARD KPI ALA FRAPPE ── */
         .metric-card {
           background: white; border-radius: 16px; border: none; padding: 24px;
           display: flex; align-items: center; justify-content: space-between;
@@ -424,19 +448,52 @@ export default function SellingHomePage() {
           .metrics-grid-3 { grid-template-columns: repeat(2, 1fr); }
         }
         
+        /* MEDIA QUERY UNTUK MOBILE */
         @media (max-width: 640px) {
+          .tw-root { 
+            padding: 12px; 
+            margin: 0; 
+            border-radius: 0; 
+          }
+          
+          .page-header-row {
+            flex-direction: column;
+            align-items: flex-start;
+          }
+          .page-title { font-size: 20px; }
+          .page-subtitle { font-size: 12px; }
+
           .metrics-grid-3 { grid-template-columns: 1fr; }
+          
+          /* Penyesuaian metrik card */
+          .metric-card { padding: 20px; }
+          .metric-value { font-size: 20px; }
+          
+          /* Penyesuaian Chart */
           .chart-container { padding: 16px !important; border-radius: 12px; }
+          .responsive-chart-wrapper { height: 260px; } /* Chart lebih pendek di HP */
           
           /* Penyesuaian Welcome Card untuk Mobile */
           .frappe-welcome-card { 
             flex-direction: column; 
             align-items: flex-start; 
             padding: 24px; 
-            gap: 20px; 
+            gap: 16px; 
             height: auto;
           }
-          .sell-welcome-subtitle { max-width: 100%; }
+          
+          .sell-welcome-title { font-size: 22px; }
+          .sell-welcome-subtitle { max-width: 100%; font-size: 13px; }
+          
+          .sell-welcome-action { 
+            width: 100%; 
+            margin-top: 12px; 
+          }
+          .btn-welcome-yellow { 
+            width: 100%; 
+            text-align: center; 
+          }
+          
           .sell-welcome-ill-wrapper { 
             width: 100%; 
             display: flex; 
@@ -444,16 +501,7 @@ export default function SellingHomePage() {
             margin-left: 0; 
             margin-top: 10px; 
           }
-          .sell-welcome-ill-box { width: 120px; height: 120px; }
-          
-          /* PERBAIKAN DI MOBILE SINI JUGA */
-          .sell-welcome-ill-box img {
-             width: 125%;
-             height: 125%;
-             top: 50%;
-             left: 50%;
-             transform: translate(-50%, -50%);
-          }
+          .sell-welcome-ill-box { width: 100px; height: 100px; }
         }
       `}</style>
     </div>

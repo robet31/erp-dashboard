@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p 20261",
     "build": "next build",
-    "start": "next start",
+    "start": "next start -p 20261",
     "lint": "eslint",
     "db:setup": "prisma db push && prisma db seed"
   },
