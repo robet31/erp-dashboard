@@ -56,7 +56,7 @@ function InfoModal({ show, title, text, onClose }: { show: boolean, title: strin
   if (!show) return null;
   return (
     <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(4px)', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'fadeIn 0.2s ease-out' }} onClick={onClose}>
-      <div style={{ background: 'white', width: '100%', maxWidth: '420px', borderRadius: '20px', padding: '24px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', margin: '0 16px', animation: 'scaleIn 0.2s ease-out' }} onClick={e => e.stopPropagation()}>
+      <div style={{ background: 'white', width: '100%', maxWidth: '420px', borderRadius: '20px', padding: '24px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', margin: '0 16px', animation: 'scaleIn 0.2s ease-out', maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
           <div style={{ width: '48px', height: '48px', background: '#eff6ff', color: COLOR_PRIMARY, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Info size={24} /></div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', padding: '4px' }}><X size={20} /></button>
@@ -120,14 +120,13 @@ export default function ManufacturingAnalyticsPage() {
     const monthNamesShort = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
     // ── 1. PRODUCED QTY (12 BULAN BERGULIR) ──
-    // Mengambil dari SEMUA WO agar grafik terisi, kalau produced=0 kita fallback ke target qty agar tren tetap ada
     const producedQty12M: { monthStr: string; monthRaw: number; yearRaw: number; qty: number }[] = [];
     for (let i = 11; i >= 0; i--) {
       const d = new Date(currentYear, currentMonthIdx - i, 1);
       producedQty12M.push({ monthStr: `${monthNamesShort[d.getMonth()]} ${d.getFullYear()}`, monthRaw: d.getMonth(), yearRaw: d.getFullYear(), qty: 0 });
     }
     allWOs.forEach((wo: any) => {
-      if (wo.creation && wo.docstatus !== 2) { // Abaikan yang Cancelled
+      if (wo.creation && wo.docstatus !== 2) { 
         const d = new Date(wo.creation);
         const match = producedQty12M.find((m: any) => m.monthRaw === d.getMonth() && m.yearRaw === d.getFullYear());
         if (match) {
@@ -171,7 +170,7 @@ export default function ManufacturingAnalyticsPage() {
       
       const target = woAnalysisData.find(x => x.name === s);
       if (target) target.value += 1;
-      else woAnalysisData[5].value += 1; // Rest
+      else woAnalysisData[5].value += 1; 
     });
 
     // ── 4. PENDING WORK ORDER AGEING (PIE CHART) ──
@@ -294,8 +293,8 @@ export default function ManufacturingAnalyticsPage() {
     return (
       <div className="chart-container">
         <ChartHeader title={title} infoText={infoText} />
-        <div style={{ display: 'flex', alignItems: 'center', height: '260px' }}>
-          <ResponsiveContainer width="50%" height="100%">
+        <div className="pie-chart-wrapper">
+          <ResponsiveContainer width="100%" height="100%" className="pie-chart-graphic">
             <PieChart>
               {total === 0 ? (
                 <Pie data={[{value: 1, color: '#f1f5f9'}]} cx="50%" cy="50%" innerRadius={65} outerRadius={85} dataKey="value" isAnimationActive={false}>
@@ -310,7 +309,7 @@ export default function ManufacturingAnalyticsPage() {
             </PieChart>
           </ResponsiveContainer>
 
-          <div style={{ flex: 1, paddingLeft: '16px' }}>
+          <div className="pie-chart-legend">
             <div style={{ fontSize: '11px', fontWeight: 800, color: '#475569', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               {activeItem.name}: <span style={{ color: '#111827' }}>{activePercent}%</span>
             </div>
@@ -386,11 +385,11 @@ export default function ManufacturingAnalyticsPage() {
       </div>
 
       {/* ROW 2: 2 AREA CHARTS (12 MONTHS TREN & QUARTER) */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '20px', marginBottom: '20px' }}>
+      <div className="area-charts-grid">
         <div className="chart-container">
           <ChartHeader title="Produced Quantity Trend" infoText="Total kuantitas barang yang diproyeksikan/diproduksi dalam 12 Bulan terakhir." />
-          <ResponsiveContainer width="100%" height={280}>
-            <AreaChart data={data.producedQty12M} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+          <ResponsiveContainer width="100%" height={320}>
+            <AreaChart data={data.producedQty12M} margin={{ top: 10, right: 20, left: -20, bottom: 40 }}>
               <defs>
                 <linearGradient id="colorProd" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor={COLOR_PRIMARY} stopOpacity={0.2} />
@@ -398,7 +397,17 @@ export default function ManufacturingAnalyticsPage() {
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-              <XAxis dataKey="monthStr" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} dy={10} />
+              {/* PERBAIKAN SUMBU X (Memutar Text 45 Derajat untuk Mobile) */}
+              <XAxis 
+                dataKey="monthStr" 
+                interval="preserveStartEnd" 
+                angle={-45} 
+                textAnchor="end" 
+                height={60} 
+                tick={{ fontSize: 10, fill: '#64748b' }} 
+                axisLine={false} 
+                tickLine={false} 
+              />
               <YAxis tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
               <Tooltip content={<FrappeChartTooltip />} cursor={{ fill: '#f3f4f6' }} />
               <Area type="monotone" dataKey="qty" name="Produced/Target Qty" stroke={COLOR_PRIMARY} strokeWidth={3} fill="url(#colorProd)" activeDot={{ r: 6, fill: COLOR_PRIMARY, stroke: 'white', strokeWidth: 2 }} />
@@ -408,8 +417,8 @@ export default function ManufacturingAnalyticsPage() {
 
         <div className="chart-container">
           <ChartHeader title="Quarterly Work Orders" infoText="Jumlah total Surat Perintah (Work Order) yang dibuat per Kuartal (Quarter)." />
-          <ResponsiveContainer width="100%" height={280}>
-            <AreaChart data={data.quarterlyWOs} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+          <ResponsiveContainer width="100%" height={320}>
+            <AreaChart data={data.quarterlyWOs} margin={{ top: 10, right: 20, left: -20, bottom: 40 }}>
               <defs>
                 <linearGradient id="colorOp" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#17C3CC" stopOpacity={0.2} />
@@ -417,7 +426,16 @@ export default function ManufacturingAnalyticsPage() {
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-              <XAxis dataKey="monthStr" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} dy={10} />
+              <XAxis 
+                dataKey="monthStr" 
+                interval="preserveStartEnd" 
+                angle={-45} 
+                textAnchor="end" 
+                height={60} 
+                tick={{ fontSize: 10, fill: '#64748b' }} 
+                axisLine={false} 
+                tickLine={false} 
+              />
               <YAxis tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
               <Tooltip content={<FrappeChartTooltip />} cursor={{ fill: '#f3f4f6' }} />
               <Area type="monotone" dataKey="total" name="Total WOs" stroke="#17C3CC" strokeWidth={3} fill="url(#colorOp)" activeDot={{ r: 6, fill: '#17C3CC', stroke: 'white', strokeWidth: 2 }} />
@@ -427,21 +445,30 @@ export default function ManufacturingAnalyticsPage() {
       </div>
 
       {/* ROW 3: PIE CHARTS (WO ANALYSIS & AGEING) */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px', marginBottom: '20px' }}>
+      <div className="pie-charts-grid">
         <FrappePieChart data={data.woAnalysisData} title="Work Order Status Analysis" infoText="Distribusi keseluruhan berdasarkan Status Work Order." />
         <FrappePieChart data={data.pendingWOsData} title="Pending Work Order (Ageing)" infoText="Analisis umur Work Order yang belum diselesaikan (Ageing Analysis)." />
       </div>
 
       {/* ROW 4: BAR CHARTS (QTY TREND & TOP ITEMS) */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }} className="bottom-charts-grid">
+      <div className="bottom-charts-grid">
         
         {/* Work Order Qty Analysis (Bar Chart 6 Bulan) */}
         <div className="chart-container">
           <ChartHeader title="Work Order Qty Analysis (6 Bulan)" infoText="Membandingkan Pending Qty dan Completed Qty secara berdampingan dalam 6 bulan terakhir." />
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={data.woQtyTrend} margin={{ top: 20, right: 10, left: -20, bottom: 0 }}>
+          <ResponsiveContainer width="100%" height={320}>
+            <BarChart data={data.woQtyTrend} margin={{ top: 20, right: 10, left: -20, bottom: 40 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-              <XAxis dataKey="monthStr" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} dy={10} />
+              <XAxis 
+                dataKey="monthStr" 
+                interval="preserveStartEnd" 
+                angle={-45} 
+                textAnchor="end" 
+                height={60} 
+                tick={{ fontSize: 10, fill: '#64748b' }} 
+                axisLine={false} 
+                tickLine={false} 
+              />
               <YAxis tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
               <Tooltip content={<FrappeChartTooltip />} cursor={{ fill: '#f8fafc' }} />
               <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px', paddingBottom: '10px' }} />
@@ -456,11 +483,12 @@ export default function ManufacturingAnalyticsPage() {
         <div className="chart-container">
           <ChartHeader title="Top 5 Items to Manufacture" infoText="5 Barang dengan target produksi (Quantity) tertinggi berdasarkan seluruh Work Order." />
           {data.topItems.length > 0 ? (
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width="100%" height={320}>
               <BarChart layout="vertical" data={data.topItems} margin={{ top: 20, right: 20, left: 10, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f1f5f9" />
                 <XAxis type="number" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                <YAxis dataKey="name" type="category" tick={{ fontSize: 10, fill: '#475569' }} width={100} axisLine={false} tickLine={false} />
+                {/* Agar nama Item tidak terpotong, kita perbesar lebar sumbu Y (width={110}) dan kurangi fontSize */}
+                <YAxis dataKey="name" type="category" tick={{ fontSize: 10, fill: '#475569' }} width={110} axisLine={false} tickLine={false} />
                 <Tooltip content={<FrappeChartTooltip />} cursor={{ fill: '#f8fafc' }} />
                 
                 <Bar dataKey="qty" name="Target Quantity" fill="#17C3CC" radius={[0, 4, 4, 0]} barSize={20} />
@@ -484,6 +512,7 @@ export default function ManufacturingAnalyticsPage() {
            border-radius: 16px;
            box-sizing: border-box;
            width: 100%;
+           overflow-x: hidden;
         }
 
         .chart-container { 
@@ -510,7 +539,6 @@ export default function ManufacturingAnalyticsPage() {
         }
         
         /* ── CSS KHUSUS CARD KPI (GRADASI) ── */
-        /* Menggunakan auto-fit agar bisa menyesuaikan ukuran layar tanpa meluap */
         .metrics-grid { 
           display: grid; 
           grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); 
@@ -537,11 +565,31 @@ export default function ManufacturingAnalyticsPage() {
         .metric-value { font-size: 24px; font-weight: 800; line-height: 1.2; color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .metric-icon { width: 48px; height: 48px; border-radius: 14px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; background: rgba(255,255,255,0.2); }
 
-        @media (max-width: 1024px) {
-          .bottom-charts-grid { grid-template-columns: 1fr !important; }
+        /* GRID UNTUK CHART AREA & BOTTOM */
+        .area-charts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 20px; margin-bottom: 20px; }
+        .pie-charts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; margin-bottom: 20px; }
+        .bottom-charts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 20px; margin-bottom: 20px; }
+
+        /* Pie Chart Layout */
+        .pie-chart-wrapper {
+          display: flex; 
+          align-items: center; 
+          height: 260px; 
+          flex-wrap: wrap; 
         }
+        .pie-chart-graphic { flex: 1; min-width: 150px; }
+        .pie-chart-legend { flex: 1; padding-left: 16px; min-width: 150px; }
+
+        @media (max-width: 1024px) {
+          .bottom-charts-grid, .area-charts-grid { grid-template-columns: 1fr; }
+        }
+        
         @media (max-width: 640px) {
+          .tw-root { padding: 12px; margin: 0; border-radius: 0; }
           .chart-container { padding: 16px !important; border-radius: 12px; }
+          .pie-chart-wrapper { flex-direction: column; height: auto; gap: 20px; }
+          .pie-chart-graphic { height: 220px !important; width: 100% !important; }
+          .pie-chart-legend { padding-left: 0; width: 100%; }
         }
       `}</style>
     </div>

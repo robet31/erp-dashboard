@@ -1293,72 +1293,74 @@ function SellingPageContent() {
          </div>
          
          <div className="tw-table-filters">
-            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', flex: 1, alignItems: 'center' }}>
+            <div className="tw-filter-inputs-wrapper" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', flex: 1, alignItems: 'center', minWidth: 0 }}>
                 <div style={{ position: 'relative', width: '100%', maxWidth: '250px' }}>
                   <Search size={14} color="#9CA3AF" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
                   <input type="text" placeholder="Pencarian data..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="tw-search-input" />
                 </div>
 
-                {activeTab === 'orders' && (
-                  <>
-                    <div style={{ display: 'flex', gap: '6px', overflowX: 'auto' }}>
-                        {STATUS_FILTERS.map((f) => (
-                        <button key={f} className={`filter-pill ${statusFilter === f ? 'active' : ''}`} onClick={() => setStatusFilter(f)}>
-                            {f === 'Semua' ? 'Semua' : getStatusLabel(f)}
-                        </button>
-                        ))}
+                <div className="tw-filter-selects-wrapper" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center', flex: 1, minWidth: 0 }}>
+                  {activeTab === 'orders' && (
+                    <>
+                      <div className="tw-status-pills" style={{ display: 'flex', gap: '6px' }}>
+                          {STATUS_FILTERS.map((f) => (
+                          <button key={f} className={`filter-pill ${statusFilter === f ? 'active' : ''}`} onClick={() => setStatusFilter(f)}>
+                              {f === 'Semua' ? 'Semua' : getStatusLabel(f)}
+                          </button>
+                          ))}
+                      </div>
+                      <div className="tw-sort-selects" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <Filter size={14} color="#9CA3AF" />
+                          <select className="tw-select-input" value={orderSortField} onChange={e => setOrderSortField(e.target.value)}>
+                              <option value="creation">Paling Baru</option>
+                              <option value="customer_name">Customer Name</option>
+                              <option value="grand_total">Grand Total</option>
+                              <option value="delivery_date">Delivery Date</option>
+                          </select>
+                          <select className="tw-select-input" value={orderSortOrder} onChange={e => setOrderSortOrder(e.target.value as any)}>
+                              <option value="desc">Desc</option><option value="asc">Asc</option>
+                          </select>
+                      </div>
+                    </>
+                  )}
+                  
+                  {activeTab === 'customers' && (
+                    <div className="tw-sort-selects" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Filter size={14} color="#9CA3AF" />
+                      <select className="tw-select-input" value={customerSortField} onChange={e => setCustomerSortField(e.target.value)}>
+                          <option value="creation">Paling Baru</option>
+                          <option value="name">ID / Name</option>
+                          <option value="customer_name">Customer Name</option>
+                          <option value="customer_group">Customer Group</option>
+                          <option value="territory">Territory</option>
+                      </select>
+                      <select className="tw-select-input" value={customerSortOrder} onChange={e => setCustomerSortOrder(e.target.value as any)}>
+                          <option value="desc">Desc</option><option value="asc">Asc</option>
+                      </select>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <Filter size={14} color="#9CA3AF" />
-                        <select className="tw-select-input" value={orderSortField} onChange={e => setOrderSortField(e.target.value)}>
-                            <option value="creation">Paling Baru</option>
-                            <option value="customer_name">Customer Name</option>
-                            <option value="grand_total">Grand Total</option>
-                            <option value="delivery_date">Delivery Date</option>
-                        </select>
-                        <select className="tw-select-input" value={orderSortOrder} onChange={e => setOrderSortOrder(e.target.value as any)}>
-                            <option value="desc">Desc</option><option value="asc">Asc</option>
-                        </select>
-                    </div>
-                  </>
-                )}
-                
-                {activeTab === 'customers' && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Filter size={14} color="#9CA3AF" />
-                    <select className="tw-select-input" value={customerSortField} onChange={e => setCustomerSortField(e.target.value)}>
-                        <option value="creation">Paling Baru</option>
-                        <option value="name">ID / Name</option>
-                        <option value="customer_name">Customer Name</option>
-                        <option value="customer_group">Customer Group</option>
-                        <option value="territory">Territory</option>
-                    </select>
-                    <select className="tw-select-input" value={customerSortOrder} onChange={e => setCustomerSortOrder(e.target.value as any)}>
-                        <option value="desc">Desc</option><option value="asc">Asc</option>
-                    </select>
-                  </div>
-                )}
+                  )}
 
-                {activeTab === 'invoices' && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Filter size={14} color="#9CA3AF" />
-                    <select className="tw-select-input" value={invoiceSortField} onChange={e => setInvoiceSortField(e.target.value)}>
-                        <option value="creation">Paling Baru</option>
-                        <option value="posting_date">Posting Date</option>
-                        <option value="due_date">Due Date</option>
-                        <option value="grand_total">Grand Total</option>
-                    </select>
-                    <select className="tw-select-input" value={invoiceSortOrder} onChange={e => setInvoiceSortOrder(e.target.value as any)}>
-                        <option value="desc">Desc</option><option value="asc">Asc</option>
-                    </select>
-                  </div>
-                )}
+                  {activeTab === 'invoices' && (
+                    <div className="tw-sort-selects" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Filter size={14} color="#9CA3AF" />
+                      <select className="tw-select-input" value={invoiceSortField} onChange={e => setInvoiceSortField(e.target.value)}>
+                          <option value="creation">Paling Baru</option>
+                          <option value="posting_date">Posting Date</option>
+                          <option value="due_date">Due Date</option>
+                          <option value="grand_total">Grand Total</option>
+                      </select>
+                      <select className="tw-select-input" value={invoiceSortOrder} onChange={e => setInvoiceSortOrder(e.target.value as any)}>
+                          <option value="desc">Desc</option><option value="asc">Asc</option>
+                      </select>
+                    </div>
+                  )}
+                </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '8px' }}>
-              {activeTab === 'orders' && <button className="tw-btn-action" onClick={() => setShowCreateModal(true)}><Plus size={14} /> Baru</button>}
-              {activeTab === 'customers' && <button className="tw-btn-action" onClick={() => setShowCreateCustomerModal(true)}><Plus size={14} /> Baru</button>}
-              {activeTab === 'invoices' && <button className="tw-btn-action" onClick={() => setShowCreateInvoiceModal(true)}><Plus size={14} /> Baru</button>}
+            <div className="tw-filter-actions-wrapper" style={{ display: 'flex', gap: '8px' }}>
+              {activeTab === 'orders' && <button className="tw-btn-action" onClick={() => setShowCreateModal(true)} style={{ background: COLOR_PRIMARY, color: 'white' }}><Plus size={14} /> Baru</button>}
+              {activeTab === 'customers' && <button className="tw-btn-action" onClick={() => setShowCreateCustomerModal(true)} style={{ background: COLOR_PRIMARY, color: 'white' }}><Plus size={14} /> Baru</button>}
+              {activeTab === 'invoices' && <button className="tw-btn-action" onClick={() => setShowCreateInvoiceModal(true)} style={{ background: COLOR_PRIMARY, color: 'white' }}><Plus size={14} /> Baru</button>}
             </div>
          </div>
 
@@ -1661,6 +1663,7 @@ function SellingPageContent() {
            border-radius: 16px;
            cursor: pointer;
            transition: all 0.2s;
+           white-space: nowrap;
         }
         .tw-table-tabs button.active {
            background: ${COLOR_PRIMARY};
@@ -1703,6 +1706,15 @@ function SellingPageContent() {
         .filter-pill:hover { background: #e2e8f0; color: #334155; }
         .filter-pill.active { background: #e0f2fe; border-color: ${COLOR_PRIMARY}; color: ${COLOR_PRIMARY}; }
 
+        .tw-status-pills {
+           max-width: 100%;
+           overflow-x: auto;
+           -webkit-overflow-scrolling: touch;
+        }
+        .tw-status-pills::-webkit-scrollbar {
+           display: none;
+        }
+
         .tw-btn-action {
            background: #F3F4F6;
            border: none;
@@ -1717,7 +1729,7 @@ function SellingPageContent() {
            gap: 6px;
            transition: background 0.2s;
         }
-        .tw-btn-action:hover { background: #E5E7EB; }
+        .tw-btn-action:hover { background: #E5E7EB; opacity: 0.9; }
 
         /* TABLE STYLING */
         .twithr-table {
@@ -1807,6 +1819,19 @@ function SellingPageContent() {
         @media (max-width: 640px) {
           .tw-stats-col { flex-direction: column; }
           .responsive-grid, .responsive-grid-3 { grid-template-columns: 1fr; }
+
+          /* Solusi Responsif Filter Mobile */
+          .tw-table-filters { flex-direction: column; align-items: stretch; gap: 12px; }
+          .tw-filter-inputs-wrapper { flex-direction: column; align-items: stretch !important; gap: 10px; width: 100%; }
+          .tw-filter-inputs-wrapper > div:first-child { max-width: 100% !important; width: 100%; }
+          
+          .tw-filter-selects-wrapper { flex-direction: column; align-items: stretch !important; gap: 10px; width: 100%; min-width: 0; }
+          .tw-status-pills { width: 100%; white-space: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
+          .tw-sort-selects { width: 100%; flex-wrap: wrap; }
+          .tw-sort-selects select { flex: 1 1 40%; }
+          
+          .tw-filter-actions-wrapper { width: 100%; }
+          .tw-filter-actions-wrapper button { width: 100%; justify-content: center; }
         }
       `}</style>
     </div>

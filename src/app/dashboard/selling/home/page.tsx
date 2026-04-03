@@ -303,7 +303,7 @@ export default function SellingHomePage() {
            padding: 20px;
            border-radius: 16px;
            margin: -10px; 
-           overflow-x: hidden; /* Mencegah scroll menyamping */
+           overflow-x: hidden; 
         }
         
         .page-header-row {
@@ -378,6 +378,9 @@ export default function SellingHomePage() {
             cursor: pointer;
             transition: all 0.2s;
             box-shadow: 0 4px 12px rgba(255, 184, 0, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
             white-space: nowrap;
         }
         
@@ -386,10 +389,14 @@ export default function SellingHomePage() {
             background: #F5A623;
         }
 
+        /* UBAHAN AGAR GAMBAR SELALU DI TENGAH (FLEX CENTER) */
         .sell-welcome-ill-wrapper {
             flex-shrink: 0;
             margin-left: 20px;
             z-index: 2;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .sell-welcome-ill-box {
@@ -416,7 +423,6 @@ export default function SellingHomePage() {
         /* ── CSS KHUSUS CARD KOTAK ── */
         .chart-container { background: white; border-radius: 16px; padding: 24px; width: 100%; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.02); border: none; margin-bottom: 20px; }
         
-        /* Wrapper untuk chart Recharts agar tinggi bisa diatur responsive */
         .responsive-chart-wrapper {
             width: 100%;
             height: 360px;
@@ -438,7 +444,7 @@ export default function SellingHomePage() {
         .metric-title { font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.9); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .metric-info-btn { background: none; border: none; cursor: pointer; padding: 0; color: rgba(255,255,255,0.7); display: flex; align-items: center; flex-shrink: 0; transition: color 0.2s, transform 0.2s; }
         .metric-info-btn:hover { color: #ffffff; transform: scale(1.1); }
-        .metric-value { font-size: 24px; font-weight: 800; line-height: 1.2; color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .metric-value { font-size: 28px; font-weight: 800; line-height: 1.2; color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .metric-icon { width: 48px; height: 48px; border-radius: 14px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; background: rgba(255,255,255,0.2); }
 
         /* ── GRID RESPONSIF SEMPURNA ── */
@@ -448,7 +454,7 @@ export default function SellingHomePage() {
           .metrics-grid-3 { grid-template-columns: repeat(2, 1fr); }
         }
         
-        /* MEDIA QUERY UNTUK MOBILE */
+        /* ── FIX: MEDIA QUERY UNTUK MOBILE (MENCEGAH GAMBAR LARI KE KANAN BAWAH) ── */
         @media (max-width: 640px) {
           .tw-root { 
             padding: 12px; 
@@ -465,43 +471,61 @@ export default function SellingHomePage() {
 
           .metrics-grid-3 { grid-template-columns: 1fr; }
           
-          /* Penyesuaian metrik card */
           .metric-card { padding: 20px; }
-          .metric-value { font-size: 20px; }
+          .metric-value { font-size: 24px; }
           
-          /* Penyesuaian Chart */
           .chart-container { padding: 16px !important; border-radius: 12px; }
-          .responsive-chart-wrapper { height: 260px; } /* Chart lebih pendek di HP */
+          .responsive-chart-wrapper { height: 260px; } 
           
-          /* Penyesuaian Welcome Card untuk Mobile */
+          /* MEMPERBAIKI KOTAK GAMBAR DAN TEXT AGAR RATA KIRI */
           .frappe-welcome-card { 
             flex-direction: column; 
-            align-items: flex-start; 
+            align-items: flex-start; /* Teks Rata Kiri */
+            text-align: left; /* Teks Rata Kiri */
             padding: 24px; 
-            gap: 16px; 
+            gap: 20px; 
             height: auto;
+          }
+
+          .sell-welcome-content {
+            align-items: flex-start; /* Teks Rata Kiri */
+            width: 100%;
           }
           
           .sell-welcome-title { font-size: 22px; }
-          .sell-welcome-subtitle { max-width: 100%; font-size: 13px; }
+          .sell-welcome-subtitle { max-width: 100%; font-size: 13px; margin-bottom: 0px; }
           
           .sell-welcome-action { 
             width: 100%; 
-            margin-top: 12px; 
+            margin-top: 20px; 
+            display: flex;
+            justify-content: flex-start; /* Tombol Rata Kiri */
           }
+          
           .btn-welcome-yellow { 
-            width: 100%; 
-            text-align: center; 
+            width: auto; /* Tombol tidak full width */
+            padding: 10px 20px;
           }
           
           .sell-welcome-ill-wrapper { 
             width: 100%; 
             display: flex; 
-            justify-content: flex-end; 
             margin-left: 0; 
-            margin-top: 10px; 
+            margin-top: 8px; 
           }
-          .sell-welcome-ill-box { width: 100px; height: 100px; }
+          
+          /* KOTAK BACKGROUND GAMBAR MENJADI PERSEGI PANJANG (FULL WIDTH) */
+          .sell-welcome-ill-box { 
+            width: 100%; 
+            height: 130px; 
+            border-radius: 16px;
+          }
+
+          .sell-welcome-ill-box img {
+            height: 125%; /* Gambar sedikit membesar (menonjol) dari kotaknya */
+            width: auto;
+            max-width: 100%;
+          }
         }
       `}</style>
     </div>

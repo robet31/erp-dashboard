@@ -7,15 +7,15 @@ import { useAvatar } from '@/providers/avatar-provider';
 import { getRoleConfig } from '@/config/rbac';
 import {
   Home, PieChart, Users, ShoppingCart, Receipt, Package, Warehouse,
-  ArrowRightLeft, Truck, Layers, Cog, Wrench, X, LayoutDashboard,
-  LogOut, ChevronLeft, ChevronRight, Clock, Wifi, WifiOff
+  ArrowRightLeft, Truck, Layers, Cog, X, LayoutDashboard,
+  LogOut, ChevronLeft, ChevronRight, Clock, Wifi, WifiOff, ShieldAlert
 } from 'lucide-react';
 import { getInitials, shortenName } from '@/lib/utils';
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useState, useMemo } from 'react';
 import { useSidebar } from '@/app/dashboard/layout';
 
-type NavItem = { href: string; label: string; icon: React.ReactNode; module: 'dashboard' | 'selling' | 'stock' | 'manufacturing' | 'users'; tabId?: string; };
-type NavGroup = { title: string; emoji: string; items: NavItem[]; requiredModule: 'selling' | 'stock' | 'manufacturing' | 'admin'; color: string; };
+type NavItem = { href: string; label: string; icon: React.ReactNode; module: string; tabId?: string; };
+type NavGroup = { title: string; emoji: string; items: NavItem[]; requiredModule: string; color: string; };
 
 const NAV_GROUPS: NavGroup[] = [
   {
@@ -46,7 +46,12 @@ const NAV_GROUPS: NavGroup[] = [
       { href: '/dashboard/manufacturing/analytics', label: 'Dashboard', icon: <PieChart size={17} />, module: 'manufacturing' },
       { href: '/dashboard/manufacturing', tabId: 'bom', label: 'BOM', icon: <Layers size={17} />, module: 'manufacturing' },
       { href: '/dashboard/manufacturing', tabId: 'workorders', label: 'Work Order', icon: <Cog size={17} />, module: 'manufacturing' },
-      // { href: '/dashboard/manufacturing', tabId: 'jobcards', label: 'Job Card', icon: <Wrench size={17} />, module: 'manufacturing' },
+    ]
+  },
+  {
+    title: 'Administrator', emoji: '🛡️', color: '#dc2626', requiredModule: 'admin',
+    items: [
+      { href: '/dashboard/users', label: 'Kelola User', icon: <ShieldAlert size={17} />, module: 'admin' },
     ]
   }
 ];
@@ -82,15 +87,35 @@ function SidebarContent() {
 
   const roleConfig = getRoleConfig(user.role);
   const initials = getInitials(user.full_name);
+  const userRole = user.role.toLowerCase();
+  const isSuperAdmin = userRole === 'administrator' || userRole === 'admin';
+
+  const sortedNavGroups = useMemo(() => {
+    const groups = [...NAV_GROUPS]; 
+    if (isSuperAdmin) {
+      groups.sort((a, b) => {
+        if (a.requiredModule === 'admin') return -1;
+        if (b.requiredModule === 'admin') return 1;
+        return 0;
+      });
+    }
+    return groups;
+  }, [isSuperAdmin]);
+
 
   const isActive = (href: string, tabId?: string) => {
     if (tabId) {
-      if (pathname === href && !currentTab && tabId === 'customers') return true;
-      if (pathname === href && !currentTab && tabId === 'stockentry' && href.includes('stock')) return true;
-      if (pathname === href && !currentTab && tabId === 'bom' && href.includes('manufacturing')) return true;
-      return pathname === href && currentTab === tabId;
+      if (pathname === href) {
+        if (currentTab === tabId) return true;
+        if (!currentTab) {
+          if (tabId === 'customers' && href.includes('selling')) return true;
+          if (tabId === 'stockentry' && href.includes('stock')) return true;
+          if (tabId === 'bom' && href.includes('manufacturing')) return true;
+        }
+      }
+      return false;
     }
-    return pathname === href;
+    return pathname === href && !currentTab;
   };
 
   const dayNames = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
@@ -100,14 +125,11 @@ function SidebarContent() {
   const timeStr = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   const secondsPct = (now.getSeconds() / 59) * 100;
 
-  // --- KONTEN DINAMIS BERDASARKAN ROLE ---
   let cardTitle = "Artavista ERP";
   let cardDesc = "Sistem tersinkronisasi secara penuh.";
   let illSrc = "/images/ill-default.png"; 
 
-  const userRole = user.role.toLowerCase();
-  
-  if (userRole === 'administrator' || userRole === 'admin') {
+  if (isSuperAdmin) {
       cardTitle = "Administrator";
       cardDesc = "Kendali penuh atas seluruh modul operasional.";
       illSrc = "/humans1.png"; 
@@ -129,7 +151,6 @@ function SidebarContent() {
     <>
       <aside className={`main-sidebar ${isOpen ? 'is-open' : ''} ${isMinimized ? 'is-minimized' : ''}`}>
         
-        {/* Header Lurus & Presisi (Sejajar dengan Topbar 70px) */}
         <div className="sidebar-header">
           <div className="sidebar-logo-wrap">
             <img src="/logo.png" alt="Artavista ERP" className="sidebar-main-logo" />
@@ -137,12 +158,10 @@ function SidebarContent() {
           <button onClick={closeSidebar} className="close-sidebar-btn"><X size={18} /></button>
         </div>
 
-        {/* Minimize Toggle Button - Presisi di tengah Header */}
         <button className="minimize-btn" onClick={toggleMinimize} title={isMinimized ? 'Perluas sidebar' : 'Minimize sidebar'}>
           {isMinimized ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
         </button>
 
-        {/* Live Clock Widget */}
         {!isMinimized && (
           <div className="sidebar-clock">
             <div className="clock-top">
@@ -161,51 +180,53 @@ function SidebarContent() {
           </div>
         )}
 
-        {/* Navigation */}
         <nav className="sidebar-nav">
-          {NAV_GROUPS.map((group, groupIdx) => {
-            if (!canAccess(group.requiredModule as any)) return null;
-            return (
-              <div key={groupIdx} className="nav-group">
-                {!isMinimized && (
-                  <div className="nav-group-title" style={{ '--group-color': group.color } as React.CSSProperties}>
-                    <span className="nav-group-emoji">{group.emoji}</span>
-                    {group.title}
+          <div className="nav-groups-wrapper">
+            {sortedNavGroups.map((group, groupIdx) => {
+              const hasAccess = (group.requiredModule === 'admin' && isSuperAdmin) || canAccess(group.requiredModule as any);
+              if (!hasAccess) return null;
+
+              return (
+                <div key={groupIdx} className="nav-group">
+                  {!isMinimized && (
+                    <div className="nav-group-title" style={{ '--group-color': group.color } as React.CSSProperties}>
+                      <span className="nav-group-emoji">{group.emoji}</span>
+                      {group.title}
+                    </div>
+                  )}
+                  {isMinimized && (
+                    <div className="nav-group-divider" style={{ background: group.color }} title={group.title} />
+                  )}
+                  <div className="nav-items">
+                    {group.items.map((item) => {
+                      const active = isActive(item.href, item.tabId);
+                      const fullHref = item.tabId ? `${item.href}?tab=${item.tabId}` : item.href;
+                      return (
+                        <Link
+                          key={item.label}
+                          href={fullHref}
+                          className={`nav-item ${active ? 'active' : ''}`}
+                          onMouseEnter={() => setHoveredItem(item.label)}
+                          onMouseLeave={() => setHoveredItem(null)}
+                          title={isMinimized ? item.label : undefined}
+                          style={{ '--item-color': group.color } as React.CSSProperties}
+                        >
+                          <span className="nav-icon">{item.icon}</span>
+                          {!isMinimized && <span className="nav-label">{item.label}</span>}
+                          {active && !isMinimized && <div className="active-indicator" style={{ background: group.color }} />}
+                          {isMinimized && hoveredItem === item.label && (
+                            <div className="tooltip-label">{item.label}</div>
+                          )}
+                        </Link>
+                      );
+                    })}
                   </div>
-                )}
-                {isMinimized && (
-                  <div className="nav-group-divider" style={{ background: group.color }} title={group.title} />
-                )}
-                <div className="nav-items">
-                  {group.items.map((item) => {
-                    const active = isActive(item.href, item.tabId);
-                    const fullHref = item.tabId ? `${item.href}?tab=${item.tabId}` : item.href;
-                    return (
-                      <Link
-                        key={item.label}
-                        href={fullHref}
-                        className={`nav-item ${active ? 'active' : ''}`}
-                        onMouseEnter={() => setHoveredItem(item.label)}
-                        onMouseLeave={() => setHoveredItem(null)}
-                        title={isMinimized ? item.label : undefined}
-                        style={{ '--item-color': group.color } as React.CSSProperties}
-                      >
-                        <span className="nav-icon">{item.icon}</span>
-                        {!isMinimized && <span className="nav-label">{item.label}</span>}
-                        {active && !isMinimized && <div className="active-indicator" style={{ background: group.color }} />}
-                        {isMinimized && hoveredItem === item.label && (
-                          <div className="tooltip-label">{item.label}</div>
-                        )}
-                      </Link>
-                    );
-                  })}
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </nav>
 
-        {/* BOTTOM ERP SYSTEM INFO CARD */}
         {!isMinimized && (
           <div className="sidebar-promo-card">
             <div className="promo-illustration">
@@ -218,7 +239,6 @@ function SidebarContent() {
           </div>
         )}
 
-        {/* Footer - User Profile */}
         <div className="sidebar-footer">
           <Link href="/dashboard/profile" className="user-profile-mini" title={isMinimized ? `${user.full_name} - ${roleConfig.label}` : undefined} style={{ textDecoration: 'none' }}>
             <div className="user-avatar" style={{ background: roleConfig.color, overflow: 'hidden', padding: 0 }}>
@@ -246,452 +266,109 @@ function SidebarContent() {
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap');
 
         .main-sidebar {
-          width: 260px;
-          min-width: 260px;
-          height: 100vh;
-          background: #ffffff;
-          display: flex;
-          flex-direction: column;
-          font-family: 'Poppins', sans-serif;
-          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-          z-index: 90;
-          position: relative;
+          width: 260px; min-width: 260px; height: 100vh; background: #ffffff;
+          display: flex; flex-direction: column; font-family: 'Poppins', sans-serif;
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); z-index: 90; position: relative;
           border-right: 1px solid #f1f5f9;
+          /* overflow: hidden; -> Dihapus agar arrow tidak kepotong */
         }
 
-        .main-sidebar.is-minimized {
-          width: 72px;
-          min-width: 72px;
-        }
+        .main-sidebar.is-minimized { width: 72px; min-width: 72px; }
 
-        /* ── HEADER & BRANDING LURUS PRESISI ── */
         .sidebar-header {
-          padding: 0 20px; /* Kiri Kanan presisi dengan topbar dan konten */
-          height: 70px;    /* Fix sama dengan tinggi Topbar */
-          display: flex;
-          align-items: center; /* Rata tengah vertikal */
-          justify-content: space-between;
-          border-bottom: 1px solid transparent; 
+          padding: 0 20px; height: 70px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid transparent; flex-shrink: 0;
         }
-
-        .sidebar-logo-wrap {
-          display: flex;
-          align-items: center;
-          width: 100%;
-        }
-
-        .sidebar-main-logo {
-          height: auto; 
-          max-height: 36px; /* Tinggi logo proporsional */
-          width: auto; 
-          max-width: 100%; 
-          object-fit: contain; 
-          object-position: left center; 
-          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-
-        /* Trik saat di-minimize agar hanya icon kiri terlihat rapi */
-        .main-sidebar.is-minimized .sidebar-main-logo {
-          width: 32px;
-          height: 32px;
-          object-fit: cover; 
-          object-position: left center; 
-        }
-
-        /* Posisi Minimize Berada di TENGAH garis potong Header */
+        .sidebar-logo-wrap { display: flex; align-items: center; width: 100%; }
+        .sidebar-main-logo { height: auto; max-height: 36px; width: auto; max-width: 100%; object-fit: contain; object-position: left center; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        .main-sidebar.is-minimized .sidebar-main-logo { width: 32px; height: 32px; object-fit: cover; object-position: left center; }
+        
         .minimize-btn {
-          position: absolute;
-          right: -12px;
-          top: 35px; /* Setengah dari height Header 70px */
-          transform: translateY(-50%);
-          width: 24px;
-          height: 24px;
-          border-radius: 50%;
-          background: white;
-          border: 1.5px solid #e5e7eb;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          cursor: pointer;
-          z-index: 10;
-          color: #6b7280;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-          transition: all 0.2s;
+          position: absolute; right: -12px; top: 35px; transform: translateY(-50%); width: 24px; height: 24px; border-radius: 50%; background: white;
+          border: 1.5px solid #e5e7eb; display: flex; align-items: center; justify-content: center; cursor: pointer; 
+          z-index: 999; /* Dinaikkan agar menembus layer lain */
+          color: #6b7280; box-shadow: 0 2px 8px rgba(0,0,0,0.05); transition: all 0.2s;
         }
+        .minimize-btn:hover { background: #eff6ff; color: #054CC7; transform: translateY(-50%) scale(1.1); }
 
-        .minimize-btn:hover {
-          background: #eff6ff;
-          color: #054CC7;
-          transform: translateY(-50%) scale(1.1);
-        }
-
-        /* ── CLOCK WIDGET (Top) ── */
-        .sidebar-clock {
-          margin: 4px 16px 12px;
-          padding: 12px 14px;
-          background: linear-gradient(135deg, #eff6ff 0%, #e0f7ff 100%);
-          border: 1px solid #bfdbfe;
-          border-radius: 12px;
-        }
-
-        .clock-top {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          margin-bottom: 4px;
-        }
-
-        .clock-icon-wrap {
-          width: 22px;
-          height: 22px;
-          border-radius: 6px;
-          background: linear-gradient(135deg, #054CC7, #17C3CC);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: white;
-          flex-shrink: 0;
-        }
-
-        .clock-time {
-          font-size: 17px;
-          font-weight: 800;
-          color: #054CC7;
-          letter-spacing: 0.04em;
-          font-variant-numeric: tabular-nums;
-          flex: 1;
-        }
-
-        .online-dot {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 3px 5px;
-          border-radius: 6px;
-          font-size: 10px;
-          font-weight: 600;
-        }
+        .sidebar-clock { margin: 4px 16px 12px; padding: 12px 14px; background: linear-gradient(135deg, #eff6ff 0%, #e0f7ff 100%); border: 1px solid #bfdbfe; border-radius: 12px; flex-shrink: 0; }
+        .clock-top { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+        .clock-icon-wrap { width: 22px; height: 22px; border-radius: 6px; background: linear-gradient(135deg, #054CC7, #17C3CC); display: flex; align-items: center; justify-content: center; color: white; flex-shrink: 0; }
+        .clock-time { font-size: 17px; font-weight: 800; color: #054CC7; letter-spacing: 0.04em; font-variant-numeric: tabular-nums; flex: 1; }
+        .online-dot { display: flex; align-items: center; justify-content: center; padding: 3px 5px; border-radius: 6px; font-size: 10px; font-weight: 600; }
         .online-dot.online { background: rgba(16,185,129,0.12); color: #10b981; }
         .online-dot.offline { background: rgba(239,68,68,0.12); color: #ef4444; }
+        .clock-date { font-size: 10px; color: #64748b; font-weight: 500; letter-spacing: 0.03em; }
+        .clock-progress-bar { margin-top: 8px; height: 3px; background: rgba(5,76,199,0.1); border-radius: 99px; overflow: hidden; }
+        .clock-progress-fill { height: 100%; background: linear-gradient(90deg, #054CC7, #17C3CC); border-radius: 99px; transition: width 1s linear; }
 
-        .clock-date {
-          font-size: 10px;
-          color: #64748b;
-          font-weight: 500;
-          letter-spacing: 0.03em;
-        }
-
-        .clock-progress-bar {
-          margin-top: 8px;
-          height: 3px;
-          background: rgba(5,76,199,0.1);
-          border-radius: 99px;
-          overflow: hidden;
-        }
-
-        .clock-progress-fill {
-          height: 100%;
-          background: linear-gradient(90deg, #054CC7, #17C3CC);
-          border-radius: 99px;
-          transition: width 1s linear;
-        }
-
-        /* ── NAVIGATION ── */
-        .sidebar-nav {
-          flex: 1;
-          padding: 8px 12px;
-          overflow-y: auto;
-          overflow-x: hidden;
-          scrollbar-width: none;
+        .sidebar-nav { 
+          flex: 1; 
+          padding: 8px 12px; 
+          overflow-y: auto; 
+          overflow-x: hidden; 
+          scrollbar-width: none; 
+          display: flex; 
+          flex-direction: column; 
+          min-height: 0; 
         }
         .sidebar-nav::-webkit-scrollbar { display: none; }
-
-        .nav-group { margin-bottom: 8px; }
-
-        .nav-group-title {
-          font-size: 10px;
-          color: #9ca3af;
-          font-weight: 700;
-          padding: 12px 10px 8px;
-          text-transform: uppercase;
-          letter-spacing: 0.1em;
-          display: flex;
-          align-items: center;
-          gap: 6px;
-        }
-
-        .nav-group-emoji { font-size: 13px; }
-
-        .nav-group-divider {
-          height: 2px;
-          border-radius: 1px;
-          margin: 12px 8px 8px;
-          opacity: 0.3;
-        }
-
-        .nav-items {
-          display: flex;
-          flex-direction: column;
-          gap: 4px;
-        }
-
-        .nav-item {
-          display: flex;
-          align-items: center;
-          color: #64748b;
-          background: transparent;
-          font-weight: 500;
-          position: relative;
-          text-decoration: none;
-          padding: 10px 12px;
-          border-radius: 10px;
-          transition: all 0.2s ease;
-          white-space: nowrap;
-        }
-
-        .nav-item:hover {
-          background: #f8fafc;
-          color: #054CC7;
-        }
-
-        .nav-item:hover .nav-icon { color: var(--item-color, #054CC7); }
-
-        .nav-item.active {
-          background: #eff6ff;
-          color: #054CC7;
-          font-weight: 700;
-        }
-
-        .nav-item.active .nav-icon { color: var(--item-color, #17C3CC); }
-
-        .nav-icon {
-          color: #94a3b8;
-          margin-right: 12px;
-          flex-shrink: 0;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          transition: color 0.2s;
-        }
-
-        .main-sidebar.is-minimized .nav-icon { margin-right: 0; }
-
-        .nav-label {
-          flex: 1;
-          font-size: 13px;
-        }
-
-        .active-indicator {
-          position: absolute;
-          right: 0;
-          top: 50%;
-          transform: translateY(-50%);
-          width: 4px;
-          height: 20px;
-          border-radius: 4px 0 0 4px;
-        }
-
-        /* Tooltip for minimized */
-        .tooltip-label {
-          position: absolute;
-          left: calc(100% + 12px);
-          top: 50%;
-          transform: translateY(-50%);
-          background: #1e293b;
-          color: white;
-          font-size: 12px;
-          font-weight: 600;
-          padding: 6px 12px;
-          border-radius: 8px;
-          white-space: nowrap;
-          pointer-events: none;
-          z-index: 200;
-          box-shadow: 0 4px 20px rgba(0,0,0,0.2);
-        }
-
-        .tooltip-label::before {
-          content: '';
-          position: absolute;
-          left: -4px;
-          top: 50%;
-          transform: translateY(-50%);
-          border: 4px solid transparent;
-          border-right-color: #1e293b;
-        }
-
-        /* ── NEW BOTTOM CARD ── */
-        .sidebar-promo-card {
-          margin: 0 16px 16px 16px;
-          background: linear-gradient(135deg, #054CC7 0%, #17C3CC 100%);
-          border-radius: 16px;
-          padding: 16px;
-          color: white;
-          position: relative;
-          overflow: hidden;
-          box-shadow: 0 8px 20px rgba(5,76,199,0.2);
-          display: flex; 
-          justify-content: flex-end; 
-          min-height: 120px; 
-        }
-
-        .promo-illustration {
-          position: absolute;
-          left: -20px; 
-          bottom: -15px; 
-          width: 140px;
-          height: 140px;
-          z-index: 1;
-        }
-
-        .promo-illustration img {
-          width: 100%;
-          height: 100%;
-          object-fit: contain;
-          object-position: bottom left;
-          opacity: 0.95;
-        }
         
-        .promo-content-right {
-          position: relative;
-          z-index: 2;
-          display: flex;
-          flex-direction: column;
-          align-items: flex-end; 
-          text-align: right;
-          width: 65%; 
-        }
+        .nav-groups-wrapper { display: flex; flex-direction: column; }
+        
+        .nav-group { margin-bottom: 8px; }
+        .nav-group-title { font-size: 10px; color: #9ca3af; font-weight: 700; padding: 12px 10px 8px; text-transform: uppercase; letter-spacing: 0.1em; display: flex; align-items: center; gap: 6px; }
+        .nav-group-emoji { font-size: 13px; }
+        .nav-group-divider { height: 2px; border-radius: 1px; margin: 12px 8px 8px; opacity: 0.3; }
+        .nav-items { display: flex; flex-direction: column; gap: 4px; }
+        .nav-item { display: flex; align-items: center; color: #64748b; background: transparent; font-weight: 500; position: relative; text-decoration: none; padding: 10px 12px; border-radius: 10px; transition: all 0.2s ease; white-space: nowrap; }
+        
+        .nav-item:hover { background: #f1f5f9; color: #0f172a; } 
+        .nav-item:hover .nav-icon { color: var(--item-color, #054CC7); opacity: 0.7; }
+        
+        .nav-item.active { background: #eff6ff; color: #054CC7; font-weight: 700; }
+        .nav-item.active .nav-icon { color: var(--item-color, #17C3CC); opacity: 1; }
+        
+        .nav-icon { color: #94a3b8; margin-right: 12px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; transition: color 0.2s; }
+        .main-sidebar.is-minimized .nav-icon { margin-right: 0; }
+        .nav-label { flex: 1; font-size: 13px; }
+        .active-indicator { position: absolute; right: 0; top: 50%; transform: translateY(-50%); width: 4px; height: 20px; border-radius: 4px 0 0 4px; }
 
-        .sidebar-promo-card h4 {
-          margin: 0 0 6px 0;
-          font-size: 15px;
-          font-weight: 800;
-          color: white;
-          line-height: 1.2;
-          text-shadow: 0 1px 2px rgba(0,0,0,0.1);
-        }
+        .tooltip-label { position: absolute; left: calc(100% + 12px); top: 50%; transform: translateY(-50%); background: #1e293b; color: white; font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 8px; white-space: nowrap; pointer-events: none; z-index: 200; box-shadow: 0 4px 20px rgba(0,0,0,0.2); }
+        .tooltip-label::before { content: ''; position: absolute; left: -4px; top: 50%; transform: translateY(-50%); border: 4px solid transparent; border-right-color: #1e293b; }
 
-        .sidebar-promo-card p {
-          margin: 0 0 12px 0;
-          font-size: 11px;
-          opacity: 0.9;
-          line-height: 1.4;
-          color: white;
+        .sidebar-promo-card { 
+            margin: 8px 16px 16px 16px; 
+            background: linear-gradient(135deg, #054CC7 0%, #17C3CC 100%); 
+            border-radius: 16px; 
+            padding: 16px; 
+            color: white; 
+            position: relative; 
+            overflow: hidden; 
+            box-shadow: 0 8px 20px rgba(5,76,199,0.2); 
+            display: flex; 
+            justify-content: flex-end; 
+            min-height: 120px; 
+            flex-shrink: 0; 
         }
+        .promo-illustration { position: absolute; left: -20px; bottom: -15px; width: 140px; height: 140px; z-index: 1; }
+        .promo-illustration img { width: 100%; height: 100%; object-fit: contain; object-position: bottom left; opacity: 0.95; }
+        .promo-content-right { position: relative; z-index: 2; display: flex; flex-direction: column; align-items: flex-end; text-align: right; width: 65%; }
+        .sidebar-promo-card h4 { margin: 0 0 6px 0; font-size: 15px; font-weight: 800; color: white; line-height: 1.2; text-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+        .sidebar-promo-card p { margin: 0 0 12px 0; font-size: 11px; opacity: 0.9; line-height: 1.4; color: white; }
 
-        /* ── FOOTER ── */
-        .sidebar-footer {
-          padding: 16px 16px;
-          border-top: 1px solid #f1f5f9;
-          background: #ffffff;
-          display: flex;
-          align-items: center;
-          gap: 10px;
-        }
+        .sidebar-footer { padding: 16px 16px; border-top: 1px solid #f1f5f9; background: #ffffff; display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+        .user-profile-mini { flex: 1; display: flex; align-items: center; gap: 12px; min-width: 0; overflow: hidden; }
+        .user-avatar { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: white; font-size: 13px; font-weight: 800; flex-shrink: 0; position: relative; }
+        .avatar-status { position: absolute; bottom: -2px; right: -2px; width: 12px; height: 12px; background: #10b981; border-radius: 50%; border: 2px solid white; }
+        .user-details { flex: 1; min-width: 0; overflow: hidden; }
+        .user-name { font-size: 13px; font-weight: 700; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .user-role { font-size: 11px; font-weight: 600; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .logout-btn { width: 36px; height: 36px; border-radius: 10px; background: #fef2f2; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #ef4444; transition: all 0.2s; flex-shrink: 0; border: none; }
+        .logout-btn:hover { background: #fecaca; color: #b91c1c; }
+        .close-sidebar-btn { display: none; width: 32px; height: 32px; align-items: center; justify-content: center; flex-shrink: 0; background: #f1f5f9; border-radius: 8px; border: none; cursor: pointer; color: #475569; }
 
-        .user-profile-mini {
-          flex: 1;
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          min-width: 0;
-          overflow: hidden;
-        }
-
-        .user-avatar {
-          width: 40px;
-          height: 40px;
-          border-radius: 12px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: white;
-          font-size: 13px;
-          font-weight: 800;
-          flex-shrink: 0;
-          position: relative;
-        }
-
-        .avatar-status {
-          position: absolute;
-          bottom: -2px;
-          right: -2px;
-          width: 12px;
-          height: 12px;
-          background: #10b981;
-          border-radius: 50%;
-          border: 2px solid white;
-        }
-
-        .user-details {
-          flex: 1;
-          min-width: 0;
-          overflow: hidden;
-        }
-
-        .user-name {
-          font-size: 13px;
-          font-weight: 700;
-          color: #1e293b;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-
-        .user-role {
-          font-size: 11px;
-          font-weight: 600;
-          margin-top: 2px;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-
-        .logout-btn {
-          width: 36px;
-          height: 36px;
-          border-radius: 10px;
-          background: #fef2f2;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          cursor: pointer;
-          color: #ef4444;
-          transition: all 0.2s;
-          flex-shrink: 0;
-          border: none;
-        }
-
-        .logout-btn:hover {
-          background: #fecaca;
-          color: #b91c1c;
-        }
-
-        .close-sidebar-btn {
-          display: none;
-          width: 32px;
-          height: 32px;
-          align-items: center;
-          justify-content: center;
-          flex-shrink: 0;
-          background: #f1f5f9;
-          border-radius: 8px;
-          border: none;
-          cursor: pointer;
-          color: #475569;
-        }
-
-        /* ── MOBILE ── */
         @media (max-width: 768px) {
-          .main-sidebar {
-            position: fixed;
-            left: 0; top: 0;
-            width: 280px !important;
-            min-width: 280px !important;
-            height: 100vh;
-            transform: translateX(-100%);
-            z-index: 90;
-            box-shadow: 4px 0 40px rgba(0,0,0,0.2);
-          }
+          .main-sidebar { position: fixed; left: 0; top: 0; width: 280px !important; min-width: 280px !important; height: 100vh; transform: translateX(-100%); z-index: 90; box-shadow: 4px 0 40px rgba(0,0,0,0.2); }
           .main-sidebar.is-open { transform: translateX(0); }
           .main-sidebar.is-minimized { width: 280px !important; min-width: 280px !important; }
           .sidebar-header { padding: 0 16px; height: 70px; justify-content: space-between; }

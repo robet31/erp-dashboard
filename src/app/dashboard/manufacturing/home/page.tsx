@@ -65,7 +65,7 @@ function InfoModal({ show, title, text, onClose }: { show: boolean, title: strin
   if (!show) return null;
   return (
     <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(4px)', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'fadeIn 0.2s ease-out' }} onClick={onClose}>
-      <div style={{ background: 'white', width: '100%', maxWidth: '420px', borderRadius: '20px', padding: '24px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', margin: '0 16px', animation: 'scaleIn 0.2s ease-out' }} onClick={e => e.stopPropagation()}>
+      <div style={{ background: 'white', width: '100%', maxWidth: '420px', borderRadius: '20px', padding: '24px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', margin: '0 16px', animation: 'scaleIn 0.2s ease-out', maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
           <div style={{ width: '48px', height: '48px', background: '#eff6ff', color: COLOR_PRIMARY, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             <Info size={24} />
@@ -111,16 +111,14 @@ export default function ManufacturingHomePage() {
     );
 
     let totalProducedQty = 0;
-    let targetProductionQty = 0; // METRIK BARU: Menggantikan Value
+    let targetProductionQty = 0; 
     
     // Hitung stats
     wos.forEach((wo: any) => {
-      // 1. Hitung Target Produksi (Seluruh WO kecuali yang dibatalkan / docstatus 2)
       if (wo.docstatus !== 2) {
         targetProductionQty += (Number(wo.qty) || 0);
       }
 
-      // 2. Hitung barang yang sudah diproduksi (WO yang sudah disubmit)
       const isSubmitted = wo.docstatus === 1 || ['Not Started', 'In Process', 'Completed'].includes(wo.status);
       if (isSubmitted) {
         const qty = Number(wo.produced_qty) > 0 ? Number(wo.produced_qty) : (wo.status === 'Completed' ? Number(wo.qty) : 0);
@@ -237,14 +235,14 @@ export default function ManufacturingHomePage() {
 
       {/* ── ROW 1: WELCOME CARD & ILLUSTRATION ── */}
       <div className="frappe-welcome-card" style={{ marginBottom: '24px' }}>
-          <div className="sell-welcome-content">
-            <h1 className="sell-welcome-title">Halo, Tim Manufaktur!</h1>
-            <p className="sell-welcome-subtitle">
+          <div className="welcome-content">
+            <h1 className="welcome-title">Halo, Tim Manufaktur!</h1>
+            <p className="welcome-subtitle">
               Hari ini Anda memiliki {stats.openWOs} Surat Perintah Kerja (WO) yang siap diproses. 
               Pantau terus target penyelesaian produksi dan pantau stok gudang.
             </p>
-            <div style={{ marginTop: '20px' }}>
-              <Link href="/dashboard/manufacturing?tab=work-orders" style={{ textDecoration: 'none' }}>
+            <div className="welcome-action">
+              <Link href="/dashboard/manufacturing?tab=work-orders" style={{ textDecoration: 'none', width: '100%' }}>
                 <button className="btn-welcome-yellow">
                   Buat Work Order Baru
                 </button>
@@ -252,12 +250,12 @@ export default function ManufacturingHomePage() {
             </div>
           </div>
           
-          <div className="sell-welcome-ill-wrapper">
-              <div className="sell-welcome-ill-box">
+          <div className="welcome-ill-wrapper">
+              <div className="welcome-ill-box">
                 <img 
                   src="/images/ill-manufacturing.png" 
                   alt="Manufacturing Illustration" 
-                  onError={(e) => { e.currentTarget.src = '/images/ill-mfg.png'; }} // Fallback jika gambar ill-manufacturing.png belum ada
+                  onError={(e) => { e.currentTarget.src = '/images/ill-mfg.png'; }} 
                 />
               </div>
           </div>
@@ -298,7 +296,7 @@ export default function ManufacturingHomePage() {
         
         {stats.producedTrend.some(m => m.qty > 0) ? (
           <ResponsiveContainer width="100%" height={360}>
-            <AreaChart data={stats.producedTrend} margin={{ top: 20, right: 20, left: 0, bottom: 0 }}>
+            <AreaChart data={stats.producedTrend} margin={{ top: 20, right: 20, left: -10, bottom: 40 }}>
               <defs>
                 <linearGradient id="gradProdHome" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor={TREND_COLOR_BLUE} stopOpacity={0.15} />
@@ -306,7 +304,17 @@ export default function ManufacturingHomePage() {
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-              <XAxis dataKey="day" interval={0} tick={{ fontSize: 11, fill: '#6B7280', fontFamily: 'Poppins' }} axisLine={false} tickLine={false} dy={10} />
+              {/* PERBAIKAN RESPONSIVE SUMBU X (XAxis) */}
+              <XAxis 
+                dataKey="day" 
+                interval="preserveStartEnd" 
+                angle={-45} 
+                textAnchor="end" 
+                height={60} 
+                tick={{ fontSize: 10, fill: '#6B7280', fontFamily: 'Poppins' }} 
+                axisLine={false} 
+                tickLine={false} 
+              />
               <YAxis width={60} tickFormatter={(v) => formatShortAxis(v)} tick={{ fontSize: 11, fill: '#6B7280', fontFamily: 'Poppins' }} axisLine={false} tickLine={false} />
               <Tooltip content={<FrappeChartTooltip />} cursor={{ stroke: '#e2e8e0', strokeWidth: 1, strokeDasharray: '4 4' }} />
               <Area type="monotone" dataKey="qty" name="Produced Quantity" stroke={TREND_COLOR_BLUE} strokeWidth={3} fill="url(#gradProdHome)" activeDot={{ r: 6, fill: TREND_COLOR_BLUE, stroke: 'white', strokeWidth: 2 }} />
@@ -327,6 +335,7 @@ export default function ManufacturingHomePage() {
            padding: 20px;
            border-radius: 16px;
            margin: -10px; 
+           overflow-x: hidden;
         }
         
         .page-header-row {
@@ -352,7 +361,7 @@ export default function ManufacturingHomePage() {
             min-height: 160px;
         }
 
-        .sell-welcome-content {
+        .welcome-content {
             position: relative;
             z-index: 2;
             flex: 1;
@@ -360,7 +369,7 @@ export default function ManufacturingHomePage() {
             flex-direction: column;
         }
 
-        .sell-welcome-title {
+        .welcome-title {
             font-size: 28px;
             font-weight: 800;
             color: #ffffff;
@@ -368,12 +377,17 @@ export default function ManufacturingHomePage() {
             letter-spacing: -0.02em;
         }
 
-        .sell-welcome-subtitle {
+        .welcome-subtitle {
             font-size: 14px;
             color: rgba(255, 255, 255, 0.9);
             margin: 0;
             line-height: 1.5;
             max-width: 85%;
+        }
+
+        .welcome-action {
+            margin-top: 20px;
+            display: flex;
         }
 
         .btn-welcome-yellow {
@@ -387,6 +401,10 @@ export default function ManufacturingHomePage() {
             cursor: pointer;
             transition: all 0.2s;
             box-shadow: 0 4px 12px rgba(255, 184, 0, 0.3);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            white-space: nowrap;
         }
         
         .btn-welcome-yellow:hover {
@@ -394,13 +412,17 @@ export default function ManufacturingHomePage() {
             background: #F5A623;
         }
 
-        .sell-welcome-ill-wrapper {
+        /* GAMBAR DI TENGAH (FLEX CENTER) */
+        .welcome-ill-wrapper {
             flex-shrink: 0;
             margin-left: 20px;
             z-index: 2;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
-        .sell-welcome-ill-box {
+        .welcome-ill-box {
             width: 150px;
             height: 150px;
             background: rgba(255, 255, 255, 0.15);
@@ -411,7 +433,7 @@ export default function ManufacturingHomePage() {
             position: relative;
         }
 
-        .sell-welcome-ill-box img {
+        .welcome-ill-box img {
             position: absolute;
             width: 125%; 
             height: 125%;
@@ -449,7 +471,19 @@ export default function ManufacturingHomePage() {
           .metrics-grid-3 { grid-template-columns: repeat(2, 1fr); }
         }
         
+        /* ── FIX: MEDIA QUERY UNTUK MOBILE ── */
         @media (max-width: 640px) {
+          .tw-root { 
+            padding: 12px; 
+            margin: 0; 
+            border-radius: 0; 
+          }
+          
+          .page-header-row {
+            flex-direction: column;
+            align-items: flex-start;
+          }
+
           .metrics-grid-3 { grid-template-columns: 1fr; }
           .chart-container { padding: 16px !important; border-radius: 12px; }
           
@@ -457,26 +491,49 @@ export default function ManufacturingHomePage() {
           .frappe-welcome-card { 
             flex-direction: column; 
             align-items: flex-start; 
+            text-align: left; 
             padding: 24px; 
             gap: 20px; 
             height: auto;
           }
-          .sell-welcome-subtitle { max-width: 100%; }
-          .sell-welcome-ill-wrapper { 
+
+          .welcome-content {
+            align-items: flex-start; 
+            width: 100%;
+          }
+          
+          .welcome-subtitle { max-width: 100%; margin-bottom: 0px; }
+          
+          .welcome-action { 
+            width: 100%; 
+            margin-top: 20px; 
+            display: flex;
+            justify-content: flex-start; 
+          }
+          
+          .btn-welcome-yellow { 
+            width: auto; 
+            padding: 10px 20px;
+          }
+
+          .welcome-ill-wrapper { 
             width: 100%; 
             display: flex; 
-            justify-content: flex-end; 
+            justify-content: center; 
             margin-left: 0; 
-            margin-top: 10px; 
+            margin-top: 8px; 
           }
-          .sell-welcome-ill-box { width: 120px; height: 120px; }
           
-          .sell-welcome-ill-box img {
-             width: 125%;
+          .welcome-ill-box { 
+            width: 100%; 
+            height: 130px; 
+            border-radius: 16px;
+          }
+          
+          .welcome-ill-box img {
              height: 125%;
-             top: 50%;
-             left: 50%;
-             transform: translate(-50%, -50%);
+             width: auto;
+             max-width: 100%;
           }
         }
       `}</style>

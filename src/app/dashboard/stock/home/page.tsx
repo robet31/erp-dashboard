@@ -202,8 +202,8 @@ export default function StockHomePage() {
               Hari ini Anda memantau {stats.totalActiveItems} jenis produk yang tersebar. 
               Terus awasi mutasi barang masuk dan keluar untuk memastikan tidak ada stok fisik yang minus.
             </p>
-            <div style={{ marginTop: '20px' }}>
-              <Link href="/dashboard/stock?tab=stockentry" style={{ textDecoration: 'none' }}>
+            <div className="welcome-action">
+              <Link href="/dashboard/stock?tab=stockentry" style={{ textDecoration: 'none', width: '100%' }}>
                 <button className="btn-welcome-yellow">
                   Buat Mutasi Baru
                 </button>
@@ -276,6 +276,7 @@ export default function StockHomePage() {
            padding: 20px;
            border-radius: 16px;
            margin: -10px; 
+           overflow-x: hidden; 
         }
 
         .page-header-row {
@@ -325,6 +326,11 @@ export default function StockHomePage() {
             max-width: 85%;
         }
 
+        .welcome-action {
+            margin-top: 20px;
+            display: flex;
+        }
+
         .btn-welcome-yellow {
             background: #FFB800;
             color: #ffffff;
@@ -336,6 +342,10 @@ export default function StockHomePage() {
             cursor: pointer;
             transition: all 0.2s;
             box-shadow: 0 4px 12px rgba(255, 184, 0, 0.3);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            white-space: nowrap;
         }
         
         .btn-welcome-yellow:hover {
@@ -343,13 +353,16 @@ export default function StockHomePage() {
             background: #F5A623;
         }
 
+        /* GAMBAR DI TENGAH (FLEX CENTER) */
         .welcome-ill-wrapper {
             flex-shrink: 0;
             margin-left: 20px;
             z-index: 2;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
-        /* Kotak Background Ilustrasi */
         .welcome-ill-box {
             width: 150px;
             height: 150px;
@@ -361,16 +374,14 @@ export default function StockHomePage() {
             position: relative;
         }
 
-        /* PERBAIKAN PRESISI GAMBAR (Center Alignment) */
         .welcome-ill-box img {
             position: absolute;
+            width: 125%; 
+            height: 125%;
+            object-fit: contain;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            width: 120%; /* Sedikit lebih besar dari kotak, namun proporsional */
-            height: auto;
-            max-height: 140%;
-            object-fit: contain;
         }
 
         /* ── CSS KHUSUS CARD KOTAK ── */
@@ -401,32 +412,71 @@ export default function StockHomePage() {
           .metrics-grid-3 { grid-template-columns: repeat(2, 1fr); }
         }
         
+        /* ── FIX: MEDIA QUERY UNTUK MOBILE ── */
         @media (max-width: 640px) {
+          .tw-root { 
+            padding: 12px; 
+            margin: 0; 
+            border-radius: 0; 
+          }
+          
+          .page-header-row {
+            flex-direction: column;
+            align-items: flex-start;
+          }
+
           .metrics-grid-3 { grid-template-columns: 1fr; }
           .chart-container { padding: 16px !important; border-radius: 12px; }
           
           /* Penyesuaian Welcome Card untuk Mobile */
           .frappe-welcome-card { 
             flex-direction: column; 
-            align-items: flex-start; 
+            align-items: flex-start; /* Teks Rata Kiri */
+            text-align: left; /* Teks Rata Kiri */
             padding: 24px; 
             gap: 20px; 
             height: auto;
           }
-          .welcome-subtitle { max-width: 100%; }
+
+          .welcome-content {
+            align-items: flex-start; /* Teks Rata Kiri */
+            width: 100%;
+          }
+          
+          .welcome-subtitle { max-width: 100%; margin-bottom: 0px; }
+          
+          .welcome-action { 
+            width: 100%; 
+            margin-top: 20px; 
+            display: flex;
+            justify-content: flex-start; /* Tombol Rata Kiri */
+          }
+          
+          .btn-welcome-yellow { 
+            width: auto; /* Tombol tidak full width */
+            padding: 10px 20px;
+          }
+
           .welcome-ill-wrapper { 
             width: 100%; 
             display: flex; 
-            justify-content: flex-end; 
+            justify-content: center; /* MEMAKSA GAMBAR KE TENGAH PRESISI */
             margin-left: 0; 
-            margin-top: 10px; 
+            margin-top: 8px; 
           }
-          .welcome-ill-box { width: 120px; height: 120px; }
+          
+          /* KOTAK BACKGROUND GAMBAR MENJADI PERSEGI PANJANG (FULL WIDTH) */
+          .welcome-ill-box { 
+            width: 100%; 
+            height: 130px; 
+            border-radius: 16px;
+          }
           
           /* Penyesuaian Presisi Gambar Mobile */
           .welcome-ill-box img {
-             width: 110%;
-             max-height: 120%;
+             height: 125%;
+             width: auto;
+             max-width: 100%;
           }
         }
       `}</style>
